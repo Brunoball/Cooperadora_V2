@@ -4,7 +4,11 @@ import { cuotasApi } from "../api/cuotasApi";
 const emptyCatalogs = {
   categorias: [],
   medios_pago: [],
+  alumnos: [],
   socios: [],
+  anios_lectivos: [],
+  divisiones: [],
+  cobradores: [],
   anios: [],
   meses: [],
 };
@@ -17,16 +21,9 @@ const initialResponse = {
 };
 
 export function useCuotas(filtros = {}) {
-  const listQuery = useMemo(
-    () => JSON.stringify({ ...filtros, incluir_catalogos: 0 }),
-    [filtros],
-  );
+  const listQuery = useMemo(() => JSON.stringify(filtros), [filtros]);
   const catalogQuery = useMemo(
-    () =>
-      JSON.stringify({
-        anio: filtros.anio || "",
-        mes: filtros.mes || "",
-      }),
+    () => JSON.stringify({ anio: filtros.anio || "", mes: filtros.mes || "" }),
     [filtros.anio, filtros.mes],
   );
   const requestId = useRef(0);
@@ -66,7 +63,7 @@ export function useCuotas(filtros = {}) {
     try {
       const result = await cuotasApi.catalogos(JSON.parse(catalogQuery));
       if (currentRequest === catalogRequestId.current) {
-        setCatalogos(result.catalogos || emptyCatalogs);
+        setCatalogos({ ...emptyCatalogs, ...(result.catalogos || {}) });
       }
       return result;
     } catch (err) {

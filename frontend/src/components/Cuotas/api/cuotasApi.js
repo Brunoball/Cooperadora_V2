@@ -6,13 +6,13 @@ export const cuotasApi = {
   catalogos: (params) => apiGet("cuotas_catalogos", params),
   contextoPago: (params) => apiGet("cuotas_contexto_pago", params),
   contextosPago: (params) => apiGet("cuotas_contextos_pago", params),
+  comprobante: (params) => apiGet("cuotas_comprobante", params),
+  buscarPagoEliminar: (payload) =>
+    apiPost("cuotas_buscar_pago_eliminar", payload),
   registrarPago: (payload) => apiPost("cuotas_registrar_pago", payload),
-  registrarInscripcion: (payload) => apiPost("cuotas_registrar_inscripcion", payload),
-  condonarInscripcion: (payload) => apiPost("cuotas_condonar_inscripcion", payload),
-  eliminarInscripcion: (idInscripcion) =>
-    apiPost("cuotas_eliminar_inscripcion", { id_inscripcion: idInscripcion }),
   registrarPagos: (payload) => apiPost("cuotas_registrar_pagos", payload),
   condonarPago: (payload) => apiPost("cuotas_condonar_pago", payload),
-  eliminarPago: (idPago) =>
-    apiPost("cuotas_eliminar_pago", { id_pago: idPago }),
+  eliminarPago: (payload) => apiPost("cuotas_eliminar_pago", payload),
+  actualizarMatricula: (monto) =>
+    apiPost("cuotas_actualizar_matricula", { monto }),
 };

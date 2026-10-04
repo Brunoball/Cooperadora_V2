@@ -1,635 +1,565 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../core/domain.php';
 require_once __DIR__ . '/cuotas_schema.php';
 
 abstract class CuotasSoporte
 {
-    protected const MAX_PAGOS_LOTE = 5000;
+    protected const MES_ANUAL = 13;
+    protected const MES_MATRICULA = 14;
+    protected const MES_MITAD_1 = 15;
+    protected const MES_MITAD_2 = 16;
+    protected const MESES_ESCOLARES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    protected const MESES_MITAD_1 = [3, 4, 5, 6, 7];
+    protected const MESES_MITAD_2 = [8, 9, 10, 11, 12];
+    protected const PORCENTAJE_COBRADOR = 15.0;
+    protected const DESCRIPCION_COBRADOR = 'COBRADOR';
 
     protected static function validarEsquema(PDO $db): void
     {
         ensure_cuotas_schema($db);
     }
 
-    protected static function archivoSociosEliminadosDisponible(PDO $db): bool
-    {
-        try {
-            $db->query('SELECT 1 FROM socios_eliminados LIMIT 0');
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    protected static function filtroSociosOperativos(PDO $db, string $alias = 's'): string
-    {
-        if (!self::archivoSociosEliminadosDisponible($db)) return '1 = 1';
-        if (!preg_match('/^[A-Za-z0-9_]+$/D', $alias)) $alias = 's';
-        return "NOT EXISTS (
-                    SELECT 1
-                    FROM socios_eliminados se_arch
-                    WHERE se_arch.id_socio = {$alias}.id_socio
-                )";
-    }
-
-    protected static function socioEliminado(PDO $db, int $partnerId): bool
-    {
-        if (!self::archivoSociosEliminadosDisponible($db)) return false;
-        $statement = $db->prepare('SELECT 1 FROM socios_eliminados WHERE id_socio = ? LIMIT 1');
-        $statement->execute([$partnerId]);
-        return (bool)$statement->fetchColumn();
-    }
-
     protected static function validarAnio(mixed $value): int
     {
-        $year = filter_var($value, FILTER_VALIDATE_INT, [
-            'options' => ['min_range' => 2000, 'max_range' => (int)date('Y') + 1],
-        ]);
-        if ($year === false) api_error('El año seleccionado no es válido.', 'PERIODO_INVALIDO');
+        $year = filter_var($value, FILTER_VALIDATE_INT);
+        if ($year === false || $year < 2000 || $year > 2100) {
+            api_error('El año aplicado no es válido.', 'VALIDATION_ERROR');
+        }
         return (int)$year;
+    }
+
+    protected static function fechaPago(mixed $value): string
+    {
+        return valid_date($value, 'pago') ?? date('Y-m-d');
     }
 
     protected static function idOpcional(mixed $value, string $label): ?int
     {
-        if ($value === null || trim((string)$value) === '') return null;
+        if ($value === null || $value === '') return null;
         return positive_id($value, $label);
     }
 
-    protected static function periodo(PDO $db, mixed $value, bool $soloActivo = true): array
+    protected static function normalizarEstado(mixed $value): string
     {
-        $id = positive_id($value, 'período');
-        // Cuotas trabaja con una estructura fija: seis períodos bimestrales
-        // (1..6) y Contado Anual (7). Configuración puede conservar opciones
-        // auxiliares/históricas, pero nunca deben entrar al circuito de cobro.
-        if ($id < 1 || $id > 7) {
-            api_error('El período seleccionado no existe o no pertenece al módulo de cuotas.', 'PERIODO_INVALIDO');
-        }
-        $sql = 'SELECT id_periodo, nombre, meses, activo FROM periodo WHERE id_periodo = ?';
-        if ($soloActivo) $sql .= ' AND activo = 1';
-        $sql .= ' LIMIT 1';
-        $statement = $db->prepare($sql);
-        $statement->execute([$id]);
-        $row = $statement->fetch(PDO::FETCH_ASSOC);
-        if (!$row) api_error('El período seleccionado no existe o está inactivo.', 'PERIODO_INVALIDO');
-        $row['id_periodo'] = (int)$row['id_periodo'];
-        $row['activo'] = (bool)$row['activo'];
-        return $row;
+        $state = strtoupper(trim((string)$value));
+        return in_array($state, ['DEUDORES', 'PAGADOS', 'CONDONADOS'], true)
+            ? $state
+            : 'DEUDORES';
     }
 
-    protected static function periodos(PDO $db, bool $soloActivos = true): array
+    protected static function periodosCatalogo(PDO $db): array
     {
-        $conditions = ['id_periodo BETWEEN 1 AND 7'];
-        if ($soloActivos) $conditions[] = 'activo = 1';
-        $sql = 'SELECT id_periodo, nombre, meses, activo FROM periodo'
-            . ' WHERE ' . implode(' AND ', $conditions)
-            . ' ORDER BY id_periodo ASC';
-        $rows = $db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        $statement = $db->query(
+            'SELECT id_mes, nombre, monto
+             FROM meses
+             WHERE id_mes NOT IN (1, 2)
+             ORDER BY CASE
+                WHEN id_mes BETWEEN 3 AND 12 THEN id_mes
+                WHEN id_mes = 13 THEN 13
+                WHEN id_mes = 15 THEN 14
+                WHEN id_mes = 16 THEN 15
+                WHEN id_mes = 14 THEN 16
+                ELSE 99
+             END, id_mes'
+        );
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
         return array_map(static fn(array $row): array => [
-            'id_periodo' => (int)$row['id_periodo'],
-            // Alias que consume el frontend base de Cuotas.
-            'id_mes' => (int)$row['id_periodo'],
+            'id_mes' => (int)$row['id_mes'],
+            'id_periodo' => (int)$row['id_mes'],
             'nombre' => (string)$row['nombre'],
-            'meses' => (string)$row['meses'],
-            'tipo' => (int)$row['id_periodo'] === 7 ? 'ANUAL' : 'MENSUAL',
-            'activo' => (bool)$row['activo'],
+            'monto' => (float)$row['monto'],
         ], $rows);
     }
 
-    protected static function esAnual(int $periodId): bool
+    protected static function periodo(PDO $db, mixed $value): array
     {
-        return $periodId === 7;
-    }
+        $periodId = (int)$value;
+        if ($periodId <= 0) {
+            $month = (int)date('n');
+            $periodId = ($month >= 3 && $month <= 12) ? $month : 3;
+        }
+        if ($periodId === 1 || $periodId === 2 || $periodId < 1 || $periodId > 16) {
+            api_error('El período seleccionado no está habilitado para cuotas escolares.', 'PERIODO_INVALIDO');
+        }
 
-    protected static function tipoPrecio(int $periodId): string
-    {
-        return self::esAnual($periodId) ? 'anual' : 'mensual';
-    }
-
-    protected static function finPeriodo(int $year, int $periodId): string
-    {
-        if (self::esAnual($periodId)) return sprintf('%04d-12-31', $year);
-        $month = min(12, max(1, $periodId * 2));
-        return (new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month)))
-            ->modify('last day of this month')
-            ->format('Y-m-d');
-    }
-
-    protected static function inicioPeriodo(int $year, int $periodId): string
-    {
-        if (self::esAnual($periodId)) return sprintf('%04d-01-01', $year);
-        $month = min(12, max(1, $periodId * 2 - 1));
-        return sprintf('%04d-%02d-01', $year, $month);
-    }
-
-    /**
-     * Fecha efectiva para la composición familiar/reglas de un período.
-     *
-     * Conservamos la regla histórica original (inicio del período) cuando la
-     * operación se realiza fuera de ese bimestre. Si la consulta/pago ocurre
-     * dentro del propio período, usamos esa fecha real para reconocer familias
-     * creadas o modificadas durante el bimestre actual.
-     */
-    protected static function fechaReferenciaPeriodo(
-        int $year,
-        int $periodId,
-        ?string $operationDate = null
-    ): string {
-        $start = self::inicioPeriodo($year, $periodId);
-        $end = self::finPeriodo($year, $periodId);
-        $candidate = $operationDate ?: date('Y-m-d');
-
-        if ($candidate < $start || $candidate > $end) return $start;
-        return $candidate;
-    }
-
-    /**
-     * Un socio que ingresó dentro del bimestre no tenía una cuota/categoría
-     * aplicable el primer día del período. Para él, el precio histórico se
-     * reconstruye desde su fecha de ingreso. Los socios que ya existían
-     * conservan exactamente la regla histórica previa: precio al inicio.
-     */
-    protected static function fechaPrecioSocioPeriodo(
-        int $year,
-        int $periodId,
-        mixed $joinDate
-    ): string {
-        $start = self::inicioPeriodo($year, $periodId);
-        $end = self::finPeriodo($year, $periodId);
-        if ($joinDate === null || trim((string)$joinDate) === '') return $start;
-
-        $joined = (string)$joinDate;
-        if ($joined > $start && $joined <= $end) return $joined;
-        return $start;
-    }
-
-    protected static function medioPago(PDO $db, mixed $value): array
-    {
-        $id = positive_id($value, 'medio de pago');
-        $statement = $db->prepare(
-            'SELECT id_medio_pago, nombre FROM medios_pago
-             WHERE id_medio_pago = ? AND activo = 1 LIMIT 1'
-        );
-        $statement->execute([$id]);
+        $statement = $db->prepare('SELECT id_mes, nombre, monto FROM meses WHERE id_mes = ? LIMIT 1');
+        $statement->execute([$periodId]);
         $row = $statement->fetch(PDO::FETCH_ASSOC);
-        if (!$row) api_error('El medio de pago seleccionado no existe o está inactivo.', 'MEDIO_PAGO_INVALIDO');
-        return ['id_medio_pago' => (int)$row['id_medio_pago'], 'nombre' => (string)$row['nombre']];
+        if (!$row) api_error('El período seleccionado no existe.', 'PERIODO_INVALIDO');
+
+        return [
+            'id_mes' => (int)$row['id_mes'],
+            'id_periodo' => (int)$row['id_mes'],
+            'nombre' => (string)$row['nombre'],
+            'monto' => (float)$row['monto'],
+        ];
     }
 
-    protected static function mapaCategorias(PDO $db, array $ids): array
+    protected static function esMensual(int $periodId): bool
     {
-        $ids = array_values(array_unique(array_map('intval', $ids)));
-        if ($ids === []) return [];
-        $statement = $db->prepare(
-            'SELECT id_categoria, nombre, monto_mensual, monto_anual, activo
-             FROM categoria WHERE id_categoria IN (' . implode(',', array_fill(0, count($ids), '?')) . ')'
-        );
-        $statement->execute($ids);
-        $map = [];
-        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $map[(int)$row['id_categoria']] = $row;
+        return $periodId >= 3 && $periodId <= 12;
+    }
+
+    protected static function periodoCubreMes(int $paymentPeriod, int $consultedPeriod): bool
+    {
+        if ($paymentPeriod === $consultedPeriod) return true;
+        if (!self::esMensual($consultedPeriod)) return false;
+        if ($paymentPeriod === self::MES_ANUAL) return true;
+        if ($paymentPeriod === self::MES_MITAD_1) return in_array($consultedPeriod, self::MESES_MITAD_1, true);
+        if ($paymentPeriod === self::MES_MITAD_2) return in_array($consultedPeriod, self::MESES_MITAD_2, true);
+        return false;
+    }
+
+    protected static function idsCobertura(int $periodId): array
+    {
+        if (self::esMensual($periodId)) {
+            $ids = [$periodId, self::MES_ANUAL];
+            $ids[] = in_array($periodId, self::MESES_MITAD_1, true)
+                ? self::MES_MITAD_1
+                : self::MES_MITAD_2;
+            return $ids;
         }
-        return $map;
+        return [$periodId];
     }
 
-    protected static function historialesPrecios(PDO $db, array $categoryIds): array
+    protected static function fechaReferenciaPeriodo(int $year, int $periodId): string
     {
-        $categoryIds = array_values(array_unique(array_map('intval', $categoryIds)));
-        if ($categoryIds === []) return [];
+        if (self::esMensual($periodId)) return sprintf('%04d-%02d-01', $year, $periodId);
+        if ($periodId === self::MES_MATRICULA) return sprintf('%04d-01-01', $year);
+        if ($periodId === self::MES_MITAD_1) return sprintf('%04d-07-01', $year);
+        if ($periodId === self::MES_MITAD_2) return sprintf('%04d-12-01', $year);
+        return sprintf('%04d-12-31', $year);
+    }
+
+    protected static function alumnoElegible(array $student, int $periodId, int $year): bool
+    {
+        if ((int)($student['activo'] ?? 0) === 1) return true;
+        $entry = trim((string)($student['ingreso'] ?? ''));
+        if ($entry === '') return true;
+        try {
+            $date = new DateTimeImmutable($entry);
+        } catch (Throwable) {
+            return true;
+        }
+        $referenceMonth = self::esMensual($periodId)
+            ? $periodId
+            : ($periodId === self::MES_MATRICULA
+                ? 1
+                : ($periodId === self::MES_MITAD_1 ? 7 : 12));
+        return (int)$date->format('Y') < $year
+            || ((int)$date->format('Y') === $year && (int)$date->format('n') <= $referenceMonth);
+    }
+
+    protected static function precioHistoricoBase(PDO $db, int $categoryAmountId, string $type, string $date, float $fallback): float
+    {
         $statement = $db->prepare(
-            'SELECT id_historial, id_categoria, tipo, precio_viejo, precio_nuevo, fecha_cambio
+            'SELECT precio_anterior, precio_nuevo, fecha_cambio
              FROM precios_historicos
-             WHERE id_categoria IN (' . implode(',', array_fill(0, count($categoryIds), '?')) . ')
-             ORDER BY id_categoria ASC, tipo ASC, fecha_cambio ASC, id_historial ASC'
+             WHERE id_cat_monto = ? AND tipo = ?
+             ORDER BY fecha_cambio ASC, id_historico ASC'
         );
-        $statement->execute($categoryIds);
-        $map = [];
-        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $map[(int)$row['id_categoria']][(string)$row['tipo']][] = $row;
-        }
-        return $map;
-    }
+        $statement->execute([$categoryAmountId, $type]);
+        $history = $statement->fetchAll(PDO::FETCH_ASSOC);
+        if ($history === []) return round($fallback, 2);
 
-    /**
-     * Reconstruye la categoría que cada socio tenía a una fecha determinada
-     * usando la auditoría de cambios de Socios.
-     *
-     * @return array<int,int> id_socio => id_categoria
-     */
-    protected static function categoriasSociosEnFecha(PDO $db, array $partnerIds, string $date): array
-    {
-        $partnerIds = array_values(array_unique(array_filter(
-            array_map('intval', $partnerIds),
-            static fn(int $id): bool => $id > 0
-        )));
-        if ($partnerIds === []) return [];
-
-        $placeholders = implode(',', array_fill(0, count($partnerIds), '?'));
-        $statement = $db->prepare(
-            "SELECT id_socio, id_categoria, creado_en
-             FROM socios
-             WHERE id_socio IN ({$placeholders})"
-        );
-        $statement->execute($partnerIds);
-        $map = [];
-        $createdAt = [];
-        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $id = (int)$row['id_socio'];
-            $map[$id] = (int)$row['id_categoria'];
-            $createdAt[$id] = trim((string)($row['creado_en'] ?? ''));
-        }
-
-        $targetEnd = $date . ' 23:59:59';
-
-        // La limpieza E2E restablece AUTO_INCREMENT de forma segura. Eso implica
-        // que, entre ejecuciones distintas, un id_socio de Playwright puede volver
-        // a utilizarse. La auditoría histórica se identifica por tabla + id; por
-        // eso nunca debemos aplicar a la encarnación actual eventos registrados
-        // antes de que esta fila de socios haya sido creada.
-        //
-        // Si la fecha consultada es anterior a creado_en, la fila todavía no
-        // existía en esta encarnación y la única categoría válida de base es la
-        // actual. Evitamos además consultar auditorías obsoletas de IDs reciclados.
-        $auditableIds = [];
-        foreach (array_keys($map) as $id) {
-            $created = $createdAt[$id] ?? '';
-            if ($created === '' || $created <= $targetEnd) {
-                $auditableIds[] = $id;
-            }
-        }
-        if ($auditableIds === []) return $map;
-
-        $auditPlaceholders = implode(',', array_fill(0, count($auditableIds), '?'));
-        $audit = $db->prepare(
-            "SELECT id_registro, datos_anteriores, fecha
-             FROM auditoria
-             WHERE tabla = 'socios'
-               AND accion = 'UPDATE'
-               AND fecha > ?
-               AND id_registro IN ({$auditPlaceholders})
-             ORDER BY fecha DESC, id_auditoria DESC"
-        );
-        $audit->execute([$targetEnd, ...$auditableIds]);
-        foreach ($audit->fetchAll(PDO::FETCH_ASSOC) as $entry) {
-            $id = (int)$entry['id_registro'];
-            if (!isset($map[$id])) continue;
-
-            $eventDate = trim((string)($entry['fecha'] ?? ''));
-            $created = $createdAt[$id] ?? '';
-            if ($created !== '' && $eventDate !== '' && $eventDate < $created) {
-                continue;
-            }
-
-            $before = json_decode((string)($entry['datos_anteriores'] ?? ''), true);
-            if (!is_array($before) || !array_key_exists('id_categoria', $before)) continue;
-            $map[$id] = (int)$before['id_categoria'];
-        }
-        return $map;
-    }
-
-    protected static function montoCategoriaEnFecha(
-        array $category,
-        int $periodId,
-        array $history,
-        string $date
-    ): float {
-        $chosen = null;
+        $amount = (float)$history[0]['precio_anterior'];
         foreach ($history as $change) {
             if ((string)$change['fecha_cambio'] <= $date) {
-                $chosen = (float)$change['precio_nuevo'];
+                $amount = (float)$change['precio_nuevo'];
                 continue;
             }
-            if ($chosen === null) $chosen = (float)$change['precio_viejo'];
             break;
         }
-        if ($chosen === null) $chosen = self::montoActual($category, $periodId);
-        return round((float)$chosen, 2);
+        return round($amount, 2);
     }
 
-    protected static function montoActual(array $category, int $periodId): float
-    {
-        return round((float)(self::esAnual($periodId)
-            ? $category['monto_anual']
-            : $category['monto_mensual']), 2);
-    }
-
-    protected static function opcionesMonto(
-        array $category,
-        int $periodId,
-        array $history,
-        float $discount = 0.0,
-        ?string $preferredDate = null
-    ): array {
-        $current = self::montoActual($category, $periodId);
-        $options = [[
-            'id' => 'actual',
-            'actual' => true,
-            'recomendado' => false,
-            'monto_base' => number_format($current, 2, '.', ''),
-            'monto' => number_format(self::aplicarDescuento($current, $discount), 2, '.', ''),
-            // Sin rango: el frontend selecciona primero el valor actual.
-            'vigente_desde' => null,
-            'vigente_hasta' => null,
-        ]];
-
-        if ($history === []) return $options;
-
-        $segments = [];
-        $first = $history[0];
-        $segments[] = [
-            'id' => 'inicial-' . (int)$first['id_historial'],
-            'amount' => (float)$first['precio_viejo'],
-            'from' => null,
-            'to' => (new DateTimeImmutable((string)$first['fecha_cambio']))
-                ->modify('-1 day')->format('Y-m-d'),
-        ];
-        foreach ($history as $index => $change) {
-            $next = $history[$index + 1] ?? null;
-            $segments[] = [
-                'id' => 'hist-' . (int)$change['id_historial'],
-                'amount' => (float)$change['precio_nuevo'],
-                'from' => (string)$change['fecha_cambio'],
-                'to' => $next
-                    ? (new DateTimeImmutable((string)$next['fecha_cambio']))->modify('-1 day')->format('Y-m-d')
-                    : null,
-            ];
-        }
-
-        $seen = [];
-        foreach (array_reverse($segments) as $segment) {
-            $amount = round((float)$segment['amount'], 2);
-            if ($amount <= 0 || abs($amount - $current) < 0.005) continue;
-            $key = number_format($amount, 2, '.', '') . '|' . ($segment['to'] ?? '');
-            if (isset($seen[$key])) continue;
-            $seen[$key] = true;
-            $options[] = [
-                'id' => $segment['id'],
-                'actual' => false,
-                'recomendado' => false,
-                'monto_base' => number_format($amount, 2, '.', ''),
-                'monto' => number_format(self::aplicarDescuento($amount, $discount), 2, '.', ''),
-                'vigente_desde' => $segment['from'],
-                'vigente_hasta' => $segment['to'],
-            ];
-        }
-        if ($preferredDate !== null) {
-            $preferredBase = self::montoCategoriaEnFecha($category, $periodId, $history, $preferredDate);
-            $bestIndex = null;
-            foreach ($options as $index => $option) {
-                if (abs((float)$option['monto_base'] - $preferredBase) >= 0.005) continue;
-                $from = $option['vigente_desde'] ?? null;
-                $to = $option['vigente_hasta'] ?? null;
-                if (($from === null || $from <= $preferredDate) && ($to === null || $to >= $preferredDate)) {
-                    $bestIndex = $index;
-                    break;
-                }
-                if ($bestIndex === null) $bestIndex = $index;
-            }
-            if ($bestIndex !== null) $options[$bestIndex]['recomendado'] = true;
-        }
-        if (!array_filter($options, static fn(array $option): bool => !empty($option['recomendado']))) {
-            $options[0]['recomendado'] = true;
-        }
-        return $options;
-    }
-
-    protected static function reglasDescuento(PDO $db, string $date): array
+    protected static function precioHistoricoHermanos(PDO $db, int $familyCategoryId, string $type, string $date, float $fallback): float
     {
         $statement = $db->prepare(
-            'SELECT cantidad_integrantes_desde, cantidad_integrantes_hasta, porcentaje_descuento
-             FROM descuentos_familiares
-             WHERE vigencia_desde <= ?
-               AND (vigencia_hasta IS NULL OR vigencia_hasta >= ?)
-               AND (
-                    activo = 1
-                    OR (
-                        activo = 0
-                        AND (
-                            ? < DATE(actualizado_en)
-                            OR (
-                                vigencia_desde <= DATE(actualizado_en)
-                                AND vigencia_hasta > DATE(actualizado_en)
-                            )
-                        )
-                    )
-               )
-             ORDER BY cantidad_integrantes_desde DESC, id_descuento_familiar DESC'
+            'SELECT precio_anterior, precio_nuevo, fecha_cambio
+             FROM categoria_hermanos_historial
+             WHERE id_cat_hermanos = ? AND tipo = ?
+             ORDER BY fecha_cambio ASC, id_hist ASC'
         );
-        // `actualizado_en` fija el instante lógico del archivo: una regla deja
-        // de regir ese mismo día y continúa aplicándose antes de esa fecha. La
-        // segunda rama conserva versiones cerradas con vigencia futura sin que
-        // una regla futura archivada antes de comenzar pueda reaparecer luego.
-        $statement->execute([$date, $date, $date]);
+        $statement->execute([$familyCategoryId, $type]);
+        $history = $statement->fetchAll(PDO::FETCH_ASSOC);
+        if ($history === []) return round($fallback, 2);
+
+        // Replica la regla del sistema anterior: antes del primer cambio se usa
+        // precio_anterior si es válido; si ese primer histórico nació con NULL/0,
+        // se conserva el valor actual configurado como fallback.
+        $firstDate = substr((string)$history[0]['fecha_cambio'], 0, 10);
+        if ($date < $firstDate) {
+            $previous = (float)($history[0]['precio_anterior'] ?? 0);
+            return round($previous > 0 ? $previous : $fallback, 2);
+        }
+
+        $amount = $fallback;
+        foreach ($history as $change) {
+            if (substr((string)$change['fecha_cambio'], 0, 10) <= $date) {
+                $next = (float)($change['precio_nuevo'] ?? 0);
+                if ($next > 0) $amount = $next;
+                continue;
+            }
+            break;
+        }
+        return round($amount, 2);
+    }
+
+    protected static function cantidadFamilia(PDO $db, ?int $familyId): int
+    {
+        if (!$familyId) return 1;
+        $statement = $db->prepare('SELECT COUNT(*) FROM alumnos WHERE id_familia = ?');
+        $statement->execute([$familyId]);
+        return max(1, (int)$statement->fetchColumn());
+    }
+
+    protected static function miembrosFamilia(PDO $db, ?int $familyId): array
+    {
+        if (!$familyId) return [];
+        $statement = $db->prepare(
+            'SELECT
+                a.id_alumno, a.apellido, a.nombre, a.num_documento, a.activo,
+                a.id_categoria, a.id_cat_monto, a.es_cobrador, a.id_familia,
+                an.nombre_anio, d.nombre_division
+             FROM alumnos a
+             LEFT JOIN anio an ON an.id_anio = a.id_anio
+             LEFT JOIN division d ON d.id_division = a.id_division
+             WHERE a.id_familia = ?
+             ORDER BY a.activo DESC, a.apellido ASC, a.nombre ASC, a.id_alumno ASC'
+        );
+        $statement->execute([$familyId]);
+        return array_map(static fn(array $row): array => [
+            'id_alumno' => (int)$row['id_alumno'],
+            'id_socio' => (int)$row['id_alumno'],
+            'apellido' => (string)$row['apellido'],
+            'nombre' => (string)($row['nombre'] ?? ''),
+            'denominacion' => trim((string)$row['apellido'] . ', ' . (string)($row['nombre'] ?? ''), ', '),
+            'documento' => (string)$row['num_documento'],
+            'activo' => (bool)$row['activo'],
+            'id_categoria' => $row['id_categoria'] !== null ? (int)$row['id_categoria'] : null,
+            'id_cat_monto' => $row['id_cat_monto'] !== null ? (int)$row['id_cat_monto'] : null,
+            'es_cobrador' => (bool)$row['es_cobrador'],
+            'id_familia' => (int)$row['id_familia'],
+            'curso' => trim((string)($row['nombre_anio'] ?? '') . ' ' . (string)($row['nombre_division'] ?? '')),
+        ], $statement->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    protected static function categoriaMontoAlumno(PDO $db, array $student): array
+    {
+        $categoryAmountId = (int)($student['id_cat_monto'] ?? 0);
+        if ($categoryAmountId <= 0) {
+            api_error('El alumno no tiene una categoría de monto configurada.', 'CUOTA_SIN_CATEGORIA_MONTO');
+        }
+        $statement = $db->prepare(
+            'SELECT id_cat_monto, nombre_categoria, monto_mensual, monto_anual
+             FROM categoria_monto
+             WHERE id_cat_monto = ? LIMIT 1'
+        );
+        $statement->execute([$categoryAmountId]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        if (!$row) api_error('La categoría de monto del alumno no existe.', 'CUOTA_SIN_CATEGORIA_MONTO');
+        return [
+            'id_cat_monto' => (int)$row['id_cat_monto'],
+            'nombre_categoria' => (string)$row['nombre_categoria'],
+            'monto_mensual' => (float)$row['monto_mensual'],
+            'monto_anual' => (float)$row['monto_anual'],
+        ];
+    }
+
+    protected static function montosAlumno(PDO $db, array $student, int $year): array
+    {
+        $category = self::categoriaMontoAlumno($db, $student);
+        $familyCount = self::cantidadFamilia($db, isset($student['id_familia']) ? (int)$student['id_familia'] : null);
+        $familyRule = null;
+        if ($familyCount >= 2) {
+            $statement = $db->prepare(
+                'SELECT id_cat_hermanos, monto_mensual, monto_anual
+                 FROM categoria_hermanos
+                 WHERE id_cat_monto = ? AND cantidad_hermanos = ? AND activo = 1
+                 LIMIT 1'
+            );
+            $statement->execute([$category['id_cat_monto'], $familyCount]);
+            $row = $statement->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                $familyRule = [
+                    'id_cat_hermanos' => (int)$row['id_cat_hermanos'],
+                    'monto_mensual' => (float)$row['monto_mensual'],
+                    'monto_anual' => (float)$row['monto_anual'],
+                ];
+            }
+        }
+
+        $monthly = [];
+        foreach (self::MESES_ESCOLARES as $month) {
+            $date = sprintf('%04d-%02d-01', $year, $month);
+            if ($familyRule) {
+                $monthly[$month] = self::precioHistoricoHermanos(
+                    $db,
+                    $familyRule['id_cat_hermanos'],
+                    'MENSUAL',
+                    $date,
+                    $familyRule['monto_mensual']
+                );
+            } else {
+                // El módulo original sólo aplicaba histórico a las reglas de
+                // hermanos. Para una categoría base usaba el monto configurado
+                // actualmente, incluso al consultar años anteriores.
+                $monthly[$month] = round($category['monto_mensual'], 2);
+            }
+        }
+
+        $endDate = sprintf('%04d-12-31', $year);
+        $annual = $familyRule
+            ? self::precioHistoricoHermanos(
+                $db,
+                $familyRule['id_cat_hermanos'],
+                'ANUAL',
+                $endDate,
+                $familyRule['monto_anual']
+            )
+            : round($category['monto_anual'], 2);
+
+        $registration = (float)$db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn();
+        $halfOne = round($annual / 2, 2);
+        $halfTwo = round($annual - $halfOne, 2);
+
+        $baseMonthly = [];
+        foreach (self::MESES_ESCOLARES as $month) {
+            $baseMonthly[$month] = round($category['monto_mensual'], 2);
+        }
+        $baseAnnual = round($category['monto_anual'], 2);
+
+        return [
+            'id_cat_monto' => $category['id_cat_monto'],
+            'categoria_nombre' => $category['nombre_categoria'],
+            'family_count' => $familyCount,
+            'family_rule' => $familyRule,
+            'montos_por_periodo' => $monthly + [
+                self::MES_ANUAL => $annual,
+                self::MES_MATRICULA => $registration,
+                self::MES_MITAD_1 => $halfOne,
+                self::MES_MITAD_2 => $halfTwo,
+            ],
+            'montos_base_por_periodo' => $baseMonthly + [
+                self::MES_ANUAL => $baseAnnual,
+                self::MES_MATRICULA => $registration,
+                self::MES_MITAD_1 => round($baseAnnual / 2, 2),
+                self::MES_MITAD_2 => round($baseAnnual - round($baseAnnual / 2, 2), 2),
+            ],
+            'warning' => $familyCount >= 2 && !$familyRule
+                ? "No existe una configuración de {$familyCount} hermanos para {$category['nombre_categoria']}. Se usará el monto base."
+                : null,
+        ];
+    }
+
+    protected static function alumno(PDO $db, int $studentId): array
+    {
+        $statement = $db->prepare(
+            'SELECT
+                a.id_alumno, a.apellido, a.nombre, a.num_documento, a.domicilio,
+                a.localidad, a.cp, a.telefono, a.id_anio, a.id_division,
+                a.id_categoria, a.id_cat_monto, a.es_cobrador, a.activo,
+                a.ingreso, a.id_familia,
+                an.nombre_anio, d.nombre_division,
+                c.nombre_categoria AS categoria,
+                f.nombre_familia
+             FROM alumnos a
+             LEFT JOIN anio an ON an.id_anio = a.id_anio
+             LEFT JOIN division d ON d.id_division = a.id_division
+             LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
+             LEFT JOIN familias f ON f.id_familia = a.id_familia
+             WHERE a.id_alumno = ? LIMIT 1'
+        );
+        $statement->execute([$studentId]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        if (!$row) api_error('El alumno seleccionado no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+        return $row;
+    }
+
+    protected static function pagosAlumnoAnio(PDO $db, int $studentId, int $year): array
+    {
+        $statement = $db->prepare(
+            'SELECT p.*, m.nombre AS periodo, mp.medio_pago
+             FROM pagos p
+             INNER JOIN meses m ON m.id_mes = p.id_mes
+             LEFT JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
+             WHERE p.id_alumno = ? AND p.anio_aplicado = ?
+             ORDER BY p.id_pago DESC'
+        );
+        $statement->execute([$studentId, $year]);
         return $statement->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    protected static function porcentajeDescuento(array $rules, int $count): float
+    protected static function pagoQueCubre(array $payments, int $periodId, ?string $state = null): ?array
     {
-        foreach ($rules as $rule) {
-            $from = (int)$rule['cantidad_integrantes_desde'];
-            $to = $rule['cantidad_integrantes_hasta'] === null ? null : (int)$rule['cantidad_integrantes_hasta'];
-            if ($count >= $from && ($to === null || $count <= $to)) {
-                return max(0.0, min(100.0, (float)$rule['porcentaje_descuento']));
+        $state = $state !== null ? strtolower($state) : null;
+        $priority = [$periodId];
+        if (self::esMensual($periodId)) {
+            // Igual que el listado histórico: un pago directo manda; si no hay,
+            // CONTADO ANUAL tiene prioridad sobre la mitad correspondiente.
+            $priority[] = self::MES_ANUAL;
+            $priority[] = in_array($periodId, self::MESES_MITAD_1, true)
+                ? self::MES_MITAD_1
+                : self::MES_MITAD_2;
+        }
+
+        foreach ($priority as $candidatePeriod) {
+            foreach ($payments as $payment) {
+                if ((int)$payment['id_mes'] !== $candidatePeriod) continue;
+                if ($state !== null && strtolower((string)$payment['estado']) !== $state) continue;
+                return $payment;
             }
         }
-        return 0.0;
+        return null;
     }
 
-    protected static function aplicarDescuento(float $amount, float $percentage): float
+    protected static function estadoPeriodo(array $payments, int $periodId): array
     {
-        return round($amount * (1 - max(0.0, min(100.0, $percentage)) / 100), 2);
+        $payment = self::pagoQueCubre($payments, $periodId);
+        if (!$payment) return ['estado' => 'deudor', 'pago' => null];
+        return [
+            'estado' => strtolower((string)$payment['estado']) === 'condonado' ? 'condonado' : 'pagado',
+            'pago' => $payment,
+        ];
     }
 
-    protected static function familiaDeSocio(PDO $db, int $partnerId, string $date): ?array
+    protected static function pagoRealParaEliminar(PDO $db, int $studentId, int $periodId, int $year, ?string $expectedState = null): array
     {
-        // La baja de una familia o integrante es efectiva en la fecha `hasta`.
-        // Por eso el intervalo es [desde, hasta): usar >= revivía durante un
-        // día al vínculo que Socios ya había cerrado. El flag activo también
-        // evita que datos legacy con `hasta` nulo reabran familias dadas de baja.
-        $statement = $db->prepare(
-            "SELECT f.id_familia,
-                    CASE
-                        WHEN LEFT(f.nombre_familia, 13) = '__ELIMINADA__'
-                             AND LOCATE('::', f.nombre_familia) > 13
-                        THEN SUBSTRING(f.nombre_familia, LOCATE('::', f.nombre_familia) + 2)
-                        ELSE f.nombre_familia
-                    END AS nombre_familia
-             FROM familias_socios fs
-             INNER JOIN familias f ON f.id_familia = fs.id_familia
-             WHERE fs.id_socio = ?
-               AND (fs.desde IS NULL OR fs.desde <= ?)
-               AND ((fs.activo = 1 AND fs.hasta IS NULL) OR fs.hasta > ?)
-               AND (
-                    f.activo = 1
-                    OR (fs.activo = 0 AND fs.hasta IS NOT NULL)
-               )
-             ORDER BY fs.id_familia_socio DESC LIMIT 1"
-        );
-        $statement->execute([$partnerId, $date, $date]);
-        $row = $statement->fetch(PDO::FETCH_ASSOC);
-        return $row ? ['id_familia' => (int)$row['id_familia'], 'nombre' => (string)$row['nombre_familia']] : null;
-    }
-
-    protected static function integrantesFamilia(PDO $db, int $familyId, string $date): array
-    {
-        $statement = $db->prepare(
-            'SELECT s.id_socio
-             FROM familias_socios fs
-             INNER JOIN familias f
-                ON f.id_familia = fs.id_familia
-             INNER JOIN socios s ON s.id_socio = fs.id_socio
-             WHERE fs.id_familia = ?
-               AND (fs.desde IS NULL OR fs.desde <= ?)
-               AND ((fs.activo = 1 AND fs.hasta IS NULL) OR fs.hasta > ?)
-               AND (
-                    f.activo = 1
-                    OR (fs.activo = 0 AND fs.hasta IS NOT NULL)
-               )
-             ORDER BY s.nombre ASC, s.id_socio ASC'
-        );
-        $statement->execute([$familyId, $date, $date]);
-        return array_map('intval', array_column($statement->fetchAll(PDO::FETCH_ASSOC), 'id_socio'));
-    }
-
-    /**
-     * Resuelve pertenencia y cantidad familiar para muchos socios con dos
-     * consultas como máximo. Evita el N+1 cuando se confirman cientos de cuotas
-     * desde selección múltiple.
-     *
-     * @return array<int,array{familia:?array,cantidad:int}>
-     */
-    protected static function mapaFamiliasSocios(PDO $db, array $partnerIds, string $date): array
-    {
-        $partnerIds = array_values(array_unique(array_filter(
-            array_map('intval', $partnerIds),
-            static fn(int $id): bool => $id > 0
-        )));
-        if ($partnerIds === []) return [];
-
-        $placeholders = implode(',', array_fill(0, count($partnerIds), '?'));
-        $statement = $db->prepare(
-            "SELECT fs.id_socio, fs.id_familia, fs.id_familia_socio,
-                    CASE
-                        WHEN LEFT(f.nombre_familia, 13) = '__ELIMINADA__'
-                             AND LOCATE('::', f.nombre_familia) > 13
-                        THEN SUBSTRING(f.nombre_familia, LOCATE('::', f.nombre_familia) + 2)
-                        ELSE f.nombre_familia
-                    END AS nombre_familia
-             FROM familias_socios fs
-             INNER JOIN familias f
-                ON f.id_familia = fs.id_familia
-             WHERE fs.id_socio IN ({$placeholders})
-               AND (fs.desde IS NULL OR fs.desde <= ?)
-               AND ((fs.activo = 1 AND fs.hasta IS NULL) OR fs.hasta > ?)
-               AND (
-                    f.activo = 1
-                    OR (fs.activo = 0 AND fs.hasta IS NOT NULL)
-               )
-             ORDER BY fs.id_socio, fs.id_familia_socio DESC"
-        );
-        $statement->execute([...$partnerIds, $date, $date]);
-
-        $familyByPartner = [];
-        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $partnerId = (int)$row['id_socio'];
-            if (isset($familyByPartner[$partnerId])) continue;
-            $familyByPartner[$partnerId] = [
-                'id_familia' => (int)$row['id_familia'],
-                'nombre' => (string)$row['nombre_familia'],
-            ];
-        }
-        if ($familyByPartner === []) return [];
-
-        $familyIds = array_values(array_unique(array_map(
-            static fn(array $family): int => (int)$family['id_familia'],
-            $familyByPartner
-        )));
-        $familyPlaceholders = implode(',', array_fill(0, count($familyIds), '?'));
-        $countStatement = $db->prepare(
-            "SELECT fs.id_familia, COUNT(DISTINCT fs.id_socio) AS cantidad
-             FROM familias_socios fs
-             INNER JOIN familias f
-                ON f.id_familia = fs.id_familia
-             WHERE fs.id_familia IN ({$familyPlaceholders})
-               AND (fs.desde IS NULL OR fs.desde <= ?)
-               AND ((fs.activo = 1 AND fs.hasta IS NULL) OR fs.hasta > ?)
-               AND (
-                    f.activo = 1
-                    OR (fs.activo = 0 AND fs.hasta IS NOT NULL)
-               )
-             GROUP BY fs.id_familia"
-        );
-        $countStatement->execute([...$familyIds, $date, $date]);
-        $counts = [];
-        foreach ($countStatement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $counts[(int)$row['id_familia']] = (int)$row['cantidad'];
-        }
-
-        $result = [];
-        foreach ($familyByPartner as $partnerId => $family) {
-            $result[$partnerId] = [
-                'familia' => $family,
-                'cantidad' => (int)($counts[(int)$family['id_familia']] ?? 0),
-            ];
-        }
-        return $result;
-    }
-
-    protected static function pagosRegistrados(PDO $db, array $partnerIds, int $year): array
-    {
-        $partnerIds = array_values(array_unique(array_map('intval', $partnerIds)));
-        if ($partnerIds === []) return [];
-        $statement = $db->prepare(
-            'SELECT p.*, mp.nombre AS medio_pago
-             FROM pagos p LEFT JOIN medios_pago mp ON mp.id_medio_pago = p.id_medio_pago
-             WHERE p.id_socio IN (' . implode(',', array_fill(0, count($partnerIds), '?')) . ')
-               AND p.anio_aplicado = ? ORDER BY p.id_pago DESC'
-        );
-        $statement->execute(array_merge($partnerIds, [$year]));
-        $map = [];
-        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $key = (int)$row['id_socio'] . '-' . (int)$row['id_periodo'];
-            if (!isset($map[$key])) $map[$key] = $row;
-        }
-        return $map;
-    }
-
-    protected static function conflictoModalidad(array $payments, int $partnerId, int $periodId): ?string
-    {
-        if (self::esAnual($periodId)) {
-            for ($id = 1; $id <= 6; $id++) {
-                if (isset($payments[$partnerId . '-' . $id])) {
-                    return 'El pago anual no está disponible porque el socio ya posee períodos registrados en ese año.';
-                }
-            }
-            return null;
-        }
-        return isset($payments[$partnerId . '-7']) ? 'El período ya está cubierto por un pago anual.' : null;
-    }
-
-    protected static function codigoOperacion(string $prefix, array $ids): string
-    {
-        if (count($ids) === 1) return $prefix . '-' . $ids[0];
-        return $prefix . '-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
-    }
-
-    protected static function codigoBarra(int $periodId, int $year, int $partnerId): string
-    {
-        if ($periodId < 1 || $periodId > 7 || $year < 2000 || $year > 2099 || $partnerId <= 0) {
+        $payments = self::pagosAlumnoAnio($db, $studentId, $year);
+        $payment = self::pagoQueCubre($payments, $periodId, $expectedState);
+        if (!$payment) {
             api_error(
-                'No se pudo generar el código de barras del comprobante.',
-                'CODIGO_BARRA_INVALIDO',
-                500
+                $expectedState === 'condonado'
+                    ? 'No se encontró la condonación correspondiente.'
+                    : 'No se encontró el pago correspondiente.',
+                'PAGO_NO_ENCONTRADO',
+                404
             );
         }
-
-        return sprintf('%d%02d-%d', $periodId, $year % 100, $partnerId);
+        $realPeriodId = (int)$payment['id_mes'];
+        $special = in_array($realPeriodId, [self::MES_ANUAL, self::MES_MITAD_1, self::MES_MITAD_2], true);
+        return [
+            'id_pago' => (int)$payment['id_pago'],
+            'id_mes_real' => $realPeriodId,
+            'id_mes_solicitado' => $periodId,
+            'anio_aplicado' => (int)$payment['anio_aplicado'],
+            'fecha_pago' => (string)$payment['fecha_pago'],
+            'estado' => strtoupper((string)$payment['estado']),
+            'monto' => (float)($payment['monto_pago'] ?? 0),
+            'monto_base' => (float)($payment['monto_base'] ?? 0),
+            'medio_pago' => (string)($payment['medio_pago'] ?? ''),
+            'nombre_mes' => strtoupper((string)$payment['periodo']),
+            'warning' => $special,
+            'warning_text' => $special
+                ? 'Este pago corresponde a ' . strtoupper((string)$payment['periodo']) . '. Si lo eliminás, eliminás ese período completo.'
+                : '',
+        ];
     }
 
-    protected static function fechaPago(mixed $value, string $label = 'pago'): string
+    protected static function porcentajeDescuento(float $base, float $effective): ?float
     {
-        $date = valid_date($value ?? date('Y-m-d'), $label);
-        if ($date > date('Y-m-d')) api_error('La fecha de pago no puede ser futura.', 'FECHA_PAGO_FUTURA');
-        return $date;
+        if ($base <= 0 || $effective >= $base) return null;
+        return round((1 - ($effective / $base)) * 100, 2);
+    }
+
+    protected static function descripcionCobrador(PDO $db): int
+    {
+        $statement = $db->prepare(
+            'SELECT id_cont_descripcion
+             FROM contable_descripcion
+             WHERE UPPER(TRIM(nombre_descripcion)) = ? LIMIT 1'
+        );
+        $statement->execute([self::DESCRIPCION_COBRADOR]);
+        $id = (int)$statement->fetchColumn();
+        if ($id > 0) return $id;
+
+        $insert = $db->prepare(
+            'INSERT INTO contable_descripcion (nombre_descripcion, fecha_creacion)
+             VALUES (?, CURDATE())'
+        );
+        $insert->execute([self::DESCRIPCION_COBRADOR]);
+        return (int)$db->lastInsertId();
+    }
+
+    protected static function crearEgresoCobrador(PDO $db, int $paymentId, int $studentId, string $date, ?int $paymentMediumId, float $commission): void
+    {
+        if ($commission <= 0) return;
+        $descriptionId = self::descripcionCobrador($db);
+        $statement = $db->prepare(
+            'INSERT INTO egresos
+             (fecha, id_cont_categoria, id_cont_proveedor, comprobante,
+              id_cont_descripcion, id_medio_pago, importe, comprobante_url,
+              id_pago_origen, id_alumno_origen)
+             VALUES (?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?)'
+        );
+        $statement->execute([
+            $date,
+            'PAGO #' . $paymentId,
+            $descriptionId,
+            $paymentMediumId,
+            number_format($commission, 2, '.', ''),
+            $paymentId,
+            $studentId,
+        ]);
+    }
+
+    protected static function receiptStudent(array $student): array
+    {
+        return [
+            'id_alumno' => (int)$student['id_alumno'],
+            'id_socio' => (int)$student['id_alumno'],
+            'apellido' => (string)$student['apellido'],
+            'nombre' => (string)($student['nombre'] ?? ''),
+            'nombre_completo' => trim((string)$student['apellido'] . ', ' . (string)($student['nombre'] ?? ''), ', '),
+            'num_documento' => (string)$student['num_documento'],
+            'dni' => (string)$student['num_documento'],
+            'domicilio' => (string)($student['domicilio'] ?? ''),
+            'localidad' => (string)($student['localidad'] ?? ''),
+            'cp' => (string)($student['cp'] ?? ''),
+            'telefono' => (string)($student['telefono'] ?? ''),
+            'id_anio' => $student['id_anio'] !== null ? (int)$student['id_anio'] : null,
+            'id_año' => $student['id_anio'] !== null ? (int)$student['id_anio'] : null,
+            'nombre_anio' => (string)($student['nombre_anio'] ?? ''),
+            'nombre_año' => (string)($student['nombre_anio'] ?? ''),
+            'id_division' => $student['id_division'] !== null ? (int)$student['id_division'] : null,
+            'nombre_division' => (string)($student['nombre_division'] ?? ''),
+            'id_categoria' => $student['id_categoria'] !== null ? (int)$student['id_categoria'] : null,
+            'categoria_nombre' => (string)($student['categoria'] ?? ''),
+            'nombre_categoria' => (string)($student['categoria'] ?? ''),
+            'id_cat_monto' => $student['id_cat_monto'] !== null ? (int)$student['id_cat_monto'] : null,
+            'id_familia' => $student['id_familia'] !== null ? (int)$student['id_familia'] : null,
+            'familia' => (string)($student['nombre_familia'] ?? ''),
+            'es_cobrador' => (bool)$student['es_cobrador'],
+            'activo' => (bool)$student['activo'],
+        ];
+    }
+
+    protected static function receiptForPayment(PDO $db, array $payment): array
+    {
+        $student = self::alumno($db, (int)$payment['id_alumno']);
+        $receipt = self::receiptStudent($student);
+        $receipt['id_pago'] = (int)$payment['id_pago'];
+        $receipt['id_mes'] = (int)$payment['id_mes'];
+        $receipt['id_periodo'] = (int)$payment['id_mes'];
+        $receipt['periodo_texto'] = (string)$payment['periodo'] . ' ' . (int)$payment['anio_aplicado'];
+        $receipt['anio'] = (int)$payment['anio_aplicado'];
+        $receipt['fecha_pago'] = (string)$payment['fecha_pago'];
+        $receipt['estado_pago'] = strtoupper((string)$payment['estado']);
+        $commissionStatement = $db->prepare(
+            'SELECT COALESCE(SUM(importe), 0) FROM egresos WHERE id_pago_origen = ?'
+        );
+        $commissionStatement->execute([(int)$payment['id_pago']]);
+        $commission = (float)$commissionStatement->fetchColumn();
+        $gross = (float)($payment['monto_pago'] ?? 0) + $commission;
+        $receipt['importe_total'] = $gross;
+        $receipt['monto_total'] = $gross;
+        $receipt['monto_neto_cooperadora'] = (float)($payment['monto_pago'] ?? 0);
+        $receipt['monto_comision_cobrador'] = $commission;
+        $receipt['monto_base'] = (float)($payment['monto_base'] ?? 0);
+        $receipt['medio_pago'] = (string)($payment['medio_pago'] ?? '');
+        return $receipt;
     }
 }

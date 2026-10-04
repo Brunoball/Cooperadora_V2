@@ -2,8 +2,9 @@
 declare(strict_types=1);
 
 /**
- * Verifica que Cuotas esté trabajando contra el esquema real de RH Negativo.
- * No crea ni altera tablas: evita errores SQL difíciles de diagnosticar.
+ * Verifica que Cuotas trabaje sobre el esquema real de Cooperadora V2.
+ * No crea ni altera tablas: si falta algo, devuelve un error claro antes de
+ * ejecutar consultas parciales que podrían dejar datos inconsistentes.
  */
 function ensure_cuotas_schema(PDO $db): void
 {
@@ -11,27 +12,43 @@ function ensure_cuotas_schema(PDO $db): void
     if ($verified) return;
 
     $required = [
-        'socios' => [
-            'id_socio', 'nombre', 'dni', 'id_categoria', 'id_cobrador',
-            'fecha_ingreso', 'vigente', 'domicilio', 'numero',
-            'domicilio_cobro', 'telefono_fijo', 'telefono_movil',
+        'alumnos' => [
+            'id_alumno', 'apellido', 'nombre', 'num_documento', 'domicilio',
+            'localidad', 'telefono', 'id_anio', 'id_division', 'id_categoria',
+            'id_cat_monto', 'es_cobrador', 'activo', 'ingreso', 'id_familia',
         ],
-        'categoria' => ['id_categoria', 'nombre', 'monto_mensual', 'monto_anual', 'activo'],
-        'precios_historicos' => ['id_historial', 'id_categoria', 'tipo', 'precio_viejo', 'precio_nuevo', 'fecha_cambio'],
-        'periodo' => ['id_periodo', 'nombre', 'meses', 'activo'],
-        'pagos' => [
-            'id_pago', 'id_socio', 'id_periodo', 'anio_aplicado', 'fecha_pago', 'estado',
-            'monto', 'id_medio_pago', 'tipo_pago', 'porcentaje_descuento_familiar',
+        'anio' => ['id_anio', 'nombre_anio'],
+        'division' => ['id_division', 'nombre_division'],
+        'categoria' => ['id_categoria', 'nombre_categoria'],
+        'categoria_monto' => [
+            'id_cat_monto', 'nombre_categoria', 'monto_mensual', 'monto_anual',
         ],
-        'pagos_inscripcion' => ['id_inscripcion', 'id_socio', 'monto', 'fecha_pago', 'id_medio_pago', 'creado_en', 'estado', 'motivo_condonacion'],
-        'medios_pago' => ['id_medio_pago', 'nombre', 'activo'],
-        'cobrador' => ['id_cobrador', 'nombre'],
+        'precios_historicos' => [
+            'id_historico', 'id_cat_monto', 'tipo', 'precio_anterior',
+            'precio_nuevo', 'fecha_cambio',
+        ],
+        'categoria_hermanos' => [
+            'id_cat_hermanos', 'id_cat_monto', 'cantidad_hermanos',
+            'monto_mensual', 'monto_anual', 'activo',
+        ],
+        'categoria_hermanos_historial' => [
+            'id_hist', 'id_cat_hermanos', 'tipo', 'precio_anterior',
+            'precio_nuevo', 'fecha_cambio',
+        ],
         'familias' => ['id_familia', 'nombre_familia', 'activo'],
-        'familias_socios' => ['id_familia_socio', 'id_familia', 'id_socio', 'desde', 'hasta', 'activo'],
-        'descuentos_familiares' => [
-            'id_descuento_familiar', 'cantidad_integrantes_desde',
-            'cantidad_integrantes_hasta', 'porcentaje_descuento',
-            'vigencia_desde', 'vigencia_hasta', 'activo', 'actualizado_en',
+        'meses' => ['id_mes', 'nombre', 'monto'],
+        'pagos' => [
+            'id_pago', 'id_alumno', 'id_mes', 'anio_aplicado', 'fecha_pago',
+            'estado', 'monto_base', 'monto_pago', 'id_medio_pago', 'tipo_pago',
+            'porcentaje_descuento_familiar',
+        ],
+        'medio_pago' => ['id_medio_pago', 'medio_pago'],
+        'contable_descripcion' => [
+            'id_cont_descripcion', 'nombre_descripcion', 'fecha_creacion',
+        ],
+        'egresos' => [
+            'id_egreso', 'fecha', 'id_cont_descripcion', 'id_medio_pago',
+            'importe', 'id_pago_origen', 'id_alumno_origen',
         ],
     ];
 
@@ -51,7 +68,9 @@ function ensure_cuotas_schema(PDO $db): void
     $missing = [];
     foreach ($required as $table => $columns) {
         foreach ($columns as $column) {
-            if (!isset($available[$table][$column])) $missing[] = $table . '.' . $column;
+            if (!isset($available[$table][$column])) {
+                $missing[] = $table . '.' . $column;
+            }
         }
     }
 

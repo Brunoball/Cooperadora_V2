@@ -1,1134 +1,472 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCalendarDays,
-  faChevronDown,
+  faCheck,
+  faCoins,
   faIdCard,
-  faMoneyBillWave,
-  faPlus,
-  faTrashCan,
+  faPenToSquare,
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
-import {
-  EntityTabs,
-  FloatingField,
-} from "../../Global/Formularios/TabbedForm";
 import "./CuotasModal.css";
 
-const formatOptionDate = (value) => {
-  if (!value) return "";
-  const [year, month, day] = String(value).slice(0, 10).split("-");
-  if (!year || !month || !day) return String(value);
-  return `${day}/${month}/${year.slice(-2)}`;
+const PERIODOS_MENSUALES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+const ANUAL = 13;
+const MATRICULA = 14;
+const MITAD_1 = 15;
+const MITAD_2 = 16;
+const H1_MONTHS = new Set([3, 4, 5, 6, 7]);
+const H2_MONTHS = new Set([8, 9, 10, 11, 12]);
+
+const today = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
 };
 
-const amountOptionPeriodLabel = (option) => {
-  if (option?.actual) return "actual";
-  if (option?.vigente_hasta) return `hasta ${formatOptionDate(option.vigente_hasta)}`;
-  return "histórico";
+const money = (value) =>
+  new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+
+const amountInput = (value) =>
+  String(value ?? "")
+    .replace(/,/g, ".")
+    .replace(/[^0-9.]/g, "")
+    .replace(/(\..*)\./g, "$1")
+    .slice(0, 16);
+
+const statusLabel = (period) => {
+  if (!period) return "";
+  if (period.condonado) return "Condonado";
+  if (period.pagado) return period.periodo_pago ? `Pagado por ${period.periodo_pago}` : "Pagado";
+  return "Disponible";
 };
-
-const CURRENT_YEAR = new Date().getFullYear();
-
-function PaymentYearChip({
-  value,
-  options,
-  onChange,
-  disabled = false,
-  nextYear = null,
-  onAddNextYear,
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const closeOnOutsideClick = (event) => {
-      if (!containerRef.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
-  }, []);
-
-  return (
-    <div className="cuotas-year-chip" ref={containerRef}>
-      <button
-        type="button"
-        className={open ? "is-open" : ""}
-        onClick={() => setOpen((current) => !current)}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Año ${value}`}
-      >
-        <FontAwesomeIcon icon={faCalendarDays} />
-        <span>{value}</span>
-        <i aria-hidden="true" />
-      </button>
-
-      {open ? (
-        <div className="cuotas-year-chip__menu" role="listbox">
-          {options.map((year) => {
-            const selected = String(year) === String(value);
-            return (
-              <button
-                type="button"
-                role="option"
-                aria-selected={selected}
-                className={selected ? "is-selected" : ""}
-                key={year}
-                onClick={() => {
-                  onChange(String(year));
-                  setOpen(false);
-                }}
-              >
-                {year}
-              </button>
-            );
-          })}
-          {nextYear && onAddNextYear ? (
-            <button
-              type="button"
-              role="option"
-              aria-selected="false"
-              className="cuotas-add-year"
-              onClick={() => {
-                onAddNextYear();
-                setOpen(false);
-              }}
-              title={`Habilitar ${nextYear} para registrar un pago`}
-            >
-              <span className="cuotas-add-year__icon" aria-hidden="true">
-                <FontAwesomeIcon icon={faPlus} />
-              </span>
-              <span className="cuotas-add-year__copy">
-                <strong>Agregar año</strong>
-                <small>Habilitar {nextYear}</small>
-              </span>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export default function ModalPagoCuota({
-  paymentOpen,
-  paymentMode,
-  tipo,
-  paymentForm,
-  entityLabel,
-  closePayment,
-  submitPayment,
-  submitRegistration,
-  requestDeleteRegistration,
-  saving,
-  selectedMonthIds,
-  family,
-  familyPaymentCount,
-  contextLoading,
-  registrationContext,
-  paymentTotal,
-  money,
-  selectedPartner,
-  principal,
-  setPaymentForm,
-  updatePaymentDate,
-  paymentYearOptions,
-  updatePaymentYear,
-  paymentPeriodAmount,
-  availableMonthIds,
-  annualPaymentAvailable,
-  allAvailableMonthsSelected,
-  toggleAllPaymentMonths,
-  monthOptions,
-  paymentPeriods,
-  togglePaymentMonth,
+  open,
+  mode = "pago",
+  alumno,
+  context,
   catalogos,
-  updateMonthAmountOption,
-  toggleMonthCustomAmount,
-  updateMonthCustomAmount,
-  updateRegistrationAmount,
-  updateBatchAmountOption,
+  loading,
+  saving,
+  initialYear,
+  initialPeriod,
+  onClose,
+  onSubmit,
+  onReloadContext,
+  onUpdateMatricula,
 }) {
-  const [activePaymentTab, setActivePaymentTab] = useState("periods");
-  const [familyExpanded, setFamilyExpanded] = useState(false);
-  const [extraPaymentYears, setExtraPaymentYears] = useState([]);
+  const condoning = mode === "condonar";
+  const [fecha, setFecha] = useState(today());
+  const [anio, setAnio] = useState(String(initialYear || new Date().getFullYear()));
+  const [selected, setSelected] = useState([]);
+  const [medio, setMedio] = useState("");
+  const [family, setFamily] = useState(false);
+  const [amounts, setAmounts] = useState({});
+  const [matriculaGlobal, setMatriculaGlobal] = useState("");
+  const [editingMatricula, setEditingMatricula] = useState(false);
+  const [updatingMatricula, setUpdatingMatricula] = useState(false);
+  const [freeMode, setFreeMode] = useState(false);
+  const [freeAmount, setFreeAmount] = useState("");
 
-  useEffect(() => {
-    setActivePaymentTab("periods");
-    setFamilyExpanded(false);
-  }, [paymentOpen, paymentForm.id_socio, paymentForm.anio]);
-
-  useEffect(() => {
-    if (paymentOpen) setExtraPaymentYears([]);
-  }, [paymentOpen]);
-
-  const modalPaymentYearOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [...paymentYearOptions, ...extraPaymentYears, paymentForm.anio]
-            .filter(Boolean)
-            .map(String),
-        ),
-      ).sort((left, right) => Number(right) - Number(left)),
-    [extraPaymentYears, paymentForm.anio, paymentYearOptions],
+  const periods = useMemo(() => context?.periodos || [], [context?.periodos]);
+  const periodMap = useMemo(
+    () => new Map(periods.map((item) => [Number(item.id_mes), item])),
+    [periods],
   );
 
-  const nextPaymentYear = CURRENT_YEAR + 1;
-  const canAddNextPaymentYear = !modalPaymentYearOptions.includes(
-    String(nextPaymentYear),
-  );
+  useEffect(() => {
+    if (!open) return;
+    setFecha(today());
+    setAnio(String(initialYear || new Date().getFullYear()));
+    setSelected(initialPeriod ? [Number(initialPeriod)] : []);
+    setMedio("");
+    setFamily(Boolean(context?.familia?.tiene_familia && context?.familia?.integrantes_activos > 0));
+    setAmounts({});
+    setEditingMatricula(false);
+    setMatriculaGlobal("");
+    setFreeMode(false);
+    setFreeAmount("");
+  }, [open, alumno?.id_alumno, initialYear, initialPeriod, context?.familia?.tiene_familia, context?.familia?.integrantes_activos]);
 
-  const addNextPaymentYear = () => {
-    const nextYear = String(nextPaymentYear);
-    setExtraPaymentYears((current) =>
-      current.includes(nextYear) ? current : [...current, nextYear],
-    );
-    updatePaymentYear(nextYear);
+  useEffect(() => {
+    if (!open || !context) return;
+    const defaults = {};
+    (context.periodos || []).forEach((item) => {
+      defaults[String(item.id_mes)] = String(Number(item.monto_sugerido || 0));
+    });
+    setAmounts(defaults);
+    const registration = (context.periodos || []).find((item) => Number(item.id_mes) === MATRICULA);
+    setMatriculaGlobal(String(Number(registration?.monto_sugerido || 0)));
+  }, [context, open]);
+
+  const years = useMemo(() => {
+    const all = new Set((catalogos?.anios || []).map(String));
+    all.add(String(initialYear || new Date().getFullYear()));
+    all.add(String(new Date().getFullYear() + 1));
+    return Array.from(all).sort((a, b) => Number(b) - Number(a));
+  }, [catalogos?.anios, initialYear]);
+
+  const monthly = periods.filter((item) => PERIODOS_MENSUALES.has(Number(item.id_mes)));
+  const special = {
+    anual: periodMap.get(ANUAL),
+    mitad1: periodMap.get(MITAD_1),
+    mitad2: periodMap.get(MITAD_2),
+    matricula: periodMap.get(MATRICULA),
   };
 
-  const selectedMonthKey = selectedMonthIds.join(",");
-  const familyPaidPeriodsByMember = useMemo(() => {
-    const result = new Map();
-    if (!family?.id_familia || !selectedMonthKey) return result;
+  const canSelect = (period) => Boolean(period?.puede_pagar);
+  const selectedSet = new Set(selected.map(Number));
+  const monthBlockedBySelection = (id) =>
+    selectedSet.has(ANUAL)
+    || (selectedSet.has(MITAD_1) && H1_MONTHS.has(Number(id)))
+    || (selectedSet.has(MITAD_2) && H2_MONTHS.has(Number(id)));
 
-    const monthNameById = new Map(
-      monthOptions.map((item) => [String(item.id_mes), String(item.nombre || item.id_mes)]),
-    );
+  const toggle = (id) => {
+    const numeric = Number(id);
+    const period = periodMap.get(numeric);
+    if (!canSelect(period)) return;
 
-    selectedMonthKey.split(",").filter(Boolean).forEach((monthId) => {
-      const periodFamily = paymentPeriods[String(monthId)]?.context?.familia;
-      if (!periodFamily || String(periodFamily.id_familia) !== String(family.id_familia)) return;
+    setSelected((current) => {
+      const has = current.includes(numeric);
+      if (has) return current.filter((value) => value !== numeric);
 
-      (periodFamily.integrantes || []).forEach((member) => {
-        if (!member?.pagado) return;
+      const next = [...current];
+      if (PERIODOS_MENSUALES.has(numeric)) {
+        const blocked = next.includes(ANUAL)
+          || (next.includes(MITAD_1) && H1_MONTHS.has(numeric))
+          || (next.includes(MITAD_2) && H2_MONTHS.has(numeric));
+        return blocked ? current : [...next, numeric];
+      }
 
-        const memberId = String(member.id_socio);
-        const monthName = monthNameById.get(String(monthId)) || `Mes ${monthId}`;
-        const shortMonth = monthName.slice(0, 3);
-        const periodLabel = `${shortMonth.charAt(0).toUpperCase()}${shortMonth.slice(1).toLowerCase()}/${paymentForm.anio}`;
-        const current = result.get(memberId) || [];
-        if (!current.includes(periodLabel)) current.push(periodLabel);
-        result.set(memberId, current);
+      if (numeric === ANUAL) {
+        return [...next.filter((value) => !PERIODOS_MENSUALES.has(Number(value)) && value !== MITAD_1 && value !== MITAD_2), ANUAL];
+      }
+
+      if (numeric === MITAD_1 || numeric === MITAD_2) {
+        const other = numeric === MITAD_1 ? MITAD_2 : MITAD_1;
+        const range = numeric === MITAD_1 ? H1_MONTHS : H2_MONTHS;
+        const cleaned = next.filter((value) => value !== ANUAL && !(PERIODOS_MENSUALES.has(Number(value)) && range.has(Number(value))));
+        // Igual que el sistema anterior: elegir las dos mitades equivale al anual completo.
+        if (cleaned.includes(other) && canSelect(periodMap.get(ANUAL))) {
+          return [...cleaned.filter((value) => value !== other), ANUAL];
+        }
+        return [...cleaned, numeric];
+      }
+
+      return [...next, numeric];
+    });
+  };
+
+  const availableMonthly = monthly.filter((item) => canSelect(item) && !monthBlockedBySelection(item.id_mes)).map((item) => Number(item.id_mes));
+  const allMonthlySelected = availableMonthly.length > 0 && availableMonthly.every((id) => selectedSet.has(id));
+  const toggleAllMonthly = () => {
+    if (allMonthlySelected) {
+      setSelected((current) => current.filter((id) => !availableMonthly.includes(Number(id))));
+      return;
+    }
+    setSelected((current) => Array.from(new Set([...current, ...availableMonthly])));
+  };
+
+  const selectedActiveFamily = family
+    ? Number(context?.familia?.integrantes_activos || 1)
+    : 1;
+  const unitTotal = selected.reduce((sum, id) => sum + Number(amounts[String(id)] || 0), 0);
+  const operationTotal = condoning ? 0 : unitTotal * Math.max(1, selectedActiveFamily);
+
+  const applyFreeAmount = (raw) => {
+    const normalized = amountInput(raw);
+    setFreeAmount(normalized);
+    const value = normalized === "" ? "0" : normalized;
+    setAmounts((current) => {
+      const next = { ...current };
+      monthly.forEach((period) => {
+        if (canSelect(period)) next[String(period.id_mes)] = value;
       });
+      return next;
+    });
+  };
+
+  const toggleFreeMode = (checked) => {
+    setFreeMode(checked);
+    if (checked) {
+      setSelected((current) => current.filter((id) => ![ANUAL, MITAD_1, MITAD_2].includes(Number(id))));
+      if (freeAmount !== "") applyFreeAmount(freeAmount);
+      return;
+    }
+    setAmounts((current) => {
+      const next = { ...current };
+      monthly.forEach((period) => {
+        next[String(period.id_mes)] = String(Number(period.monto_sugerido || 0));
+      });
+      return next;
+    });
+  };
+
+  const submitDisabled =
+    selected.length === 0 ||
+    (!condoning && !medio) ||
+    (!condoning && selected.some((id) => Number(amounts[String(id)] || 0) <= 0));
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (submitDisabled) return;
+
+    const payloadAmounts = {};
+    selected.forEach((id) => {
+      payloadAmounts[String(id)] = Number(amounts[String(id)] || 0);
     });
 
-    return result;
-  }, [family?.id_familia, monthOptions, paymentForm.anio, paymentPeriods, selectedMonthKey]);
+    await onSubmit?.({
+      id_alumno: Number(alumno?.id_alumno || alumno?.id_socio),
+      anio: Number(anio),
+      fecha_pago: fecha,
+      periodos: selected,
+      id_medio_pago: condoning ? null : Number(medio),
+      aplicar_familia: family,
+      ids_familia: family
+        ? (context?.familia?.integrantes || [])
+            .filter((member) => member.activo)
+            .map((member) => Number(member.id_alumno || member.id_socio))
+        : [],
+      montos_por_periodo: payloadAmounts,
+    });
+  };
 
-  const hasFamilyPaidSelectedPeriods = Array.from(
-    familyPaidPeriodsByMember.values(),
-  ).some((periods) => periods.length > 0);
-  const annualSelected = selectedMonthIds.includes("7");
-  const bimonthlySelected = selectedMonthIds.some(
-    (monthId) => String(monthId) !== "7",
-  );
+  const changeYear = async (value) => {
+    setAnio(value);
+    setSelected([]);
+    await onReloadContext?.({ anio: Number(value), fecha_pago: fecha });
+  };
 
-  const registrationTabActive =
-    paymentMode === "single" && activePaymentTab === "registration";
-  const registrationPaid = Boolean(registrationContext?.registrada || registrationContext?.pagada);
-  const registrationCondoned = Boolean(registrationContext?.condonada);
-  const condoningRegistration = Boolean(paymentForm.condonar_inscripcion);
-  const registrationDeleteLabel = registrationCondoned
-    ? "Eliminar condonación de inscripción" : "Eliminar pago de inscripción";
-  const registrationPayment = registrationContext?.pago || null;
-  const registrationAmount = Number(
-    paymentForm.monto_inscripcion || registrationContext?.monto_sugerido || 0,
-  );
-  const registrationMedia = useMemo(
-    () =>
-      (catalogos.medios_pago || []).filter((item) => {
-        const name = String(item?.nombre || "").toLocaleUpperCase("es-AR");
-        return name.includes("EFECTIVO") || name.includes("TRANSFERENCIA");
-      }),
-    [catalogos.medios_pago],
-  );
-  const registrationMediumSelected = registrationMedia.some(
-    (item) => String(item.id_medio_pago) === String(paymentForm.id_medio_pago),
-  );
-  const registrationReady = Boolean(registrationContext);
-  const registrationFooterAmount = registrationPaid
-    ? Number(registrationPayment?.monto || 0)
-    : condoningRegistration ? 0 : registrationAmount;
-  const footerAmount = registrationTabActive
-    ? registrationFooterAmount
-    : paymentTotal;
+  const changeDate = async (value) => {
+    setFecha(value);
+    await onReloadContext?.({ anio: Number(anio), fecha_pago: value });
+  };
+
+  const saveGlobalRegistration = async () => {
+    const value = Number(matriculaGlobal || 0);
+    if (value < 0 || Number.isNaN(value)) return;
+    setUpdatingMatricula(true);
+    try {
+      await onUpdateMatricula?.(value);
+      setEditingMatricula(false);
+      await onReloadContext?.({ anio: Number(anio), fecha_pago: fecha });
+    } finally {
+      setUpdatingMatricula(false);
+    }
+  };
+
+  const renderPeriodCard = (period, extraClass = "") => {
+    if (!period) return null;
+    const id = Number(period.id_mes);
+    const active = selectedSet.has(id);
+    const blockedBySpecial = PERIODOS_MENSUALES.has(id) && monthBlockedBySelection(id);
+    const blockedByFreeMode = freeMode && [ANUAL, MITAD_1, MITAD_2].includes(id);
+    const disabled = !canSelect(period) || blockedBySpecial || blockedByFreeMode;
+    return (
+      <article
+        className={`cuotas-v2-period ${active ? "is-selected" : ""} ${disabled ? "is-disabled" : ""} ${extraClass}`.trim()}
+        key={id}
+      >
+        <button
+          type="button"
+          className="cuotas-v2-period__select"
+          onClick={() => toggle(id)}
+          disabled={disabled}
+        >
+          <span className="cuotas-v2-period__check">
+            {active ? <FontAwesomeIcon icon={faCheck} /> : null}
+          </span>
+          <span className="cuotas-v2-period__title">{period.nombre}</span>
+          <small className={`cuotas-v2-period__status ${disabled ? "is-resolved" : ""}`}>
+            {statusLabel(period)}
+          </small>
+        </button>
+        {!condoning && !disabled ? (
+          <label className="cuotas-v2-amount-field">
+            <span>Monto</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amounts[String(id)] ?? ""}
+              onChange={(event) =>
+                setAmounts((current) => ({
+                  ...current,
+                  [String(id)]: amountInput(event.target.value),
+                }))
+              }
+              disabled={!active}
+            />
+          </label>
+        ) : null}
+      </article>
+    );
+  };
+
+  const subtitle = `${alumno?.denominacion || alumno?.nombre_completo || "Alumno"} · DNI ${alumno?.documento || alumno?.dni || "—"}`;
 
   return (
     <CrudModal
-      open={paymentOpen}
-      title={
-        paymentMode === "multiple"
-          ? "Registrar pagos seleccionados"
-          : selectedPartner?.denominacion || principal?.denominacion || "Pago de socio"
-      }
-      subtitle={
-        paymentMode === "multiple" ? (
-          `Se registrarán ${paymentForm.pagos.length} cuotas en una sola operación.`
-        ) : (
-          <span className="cuotas-payment-header-meta">
-            <span>
-              {selectedPartner?.documento
-                ? `DNI ${selectedPartner.documento}`
-                : `DNI no informado`}
-            </span>
-            <span>
-              Categoría {principal?.categoria || selectedPartner?.categoria || "SIN CATEGORÍA"}
-            </span>
-            <span>
-              Cuota {money(
-                paymentPeriodAmount ||
-                  principal?.monto_sugerido ||
-                  selectedPartner?.monto_sugerido ||
-                  0,
-              )}
-            </span>
-          </span>
-        )
-      }
-      onClose={closePayment}
-      onSubmit={registrationTabActive ? submitRegistration : submitPayment}
+      open={open}
+      title={condoning ? "Condonar cuota" : "Registrar pago"}
+      subtitle={subtitle}
+      onClose={onClose}
+      onSubmit={handleSubmit}
       saving={saving}
-      loading={paymentMode === "single" && contextLoading}
-      loadingLabel="Cargando datos del pago..."
-      loadingText="Consultando los meses disponibles y la información del grupo familiar."
-      submitLabel={
-        paymentMode === "multiple"
-          ? `Registrar ${paymentForm.pagos.length} pagos`
-          : registrationTabActive
-            ? registrationPaid
-              ? registrationCondoned ? "Inscripción condonada" : "Inscripción ya registrada"
-              : condoningRegistration ? "Condonar inscripción" : "Registrar inscripción"
-            : paymentForm.aplicar_familia && family
-              ? `Registrar pago familiar (${familyPaymentCount} ${familyPaymentCount === 1 ? "cuota" : "cuotas"})`
-              : selectedMonthIds.length > 1
-                ? `Registrar ${selectedMonthIds.length} cuotas`
-                : "Registrar pago"
-      }
-      submitDisabled={
-        contextLoading ||
-        (registrationTabActive
-          ? !registrationReady ||
-            registrationPaid ||
-            (!condoningRegistration && !(registrationAmount > 0)) ||
-            !paymentForm.fecha_pago ||
-            (!condoningRegistration && !registrationMediumSelected)
-          : paymentMode === "single"
-            ? !selectedMonthIds.length || !(paymentTotal > 0)
-            : !(paymentTotal > 0))
-      }
+      loading={loading}
+      loadingLabel="Cargando cuotas..."
+      submitLabel={condoning ? "Confirmar condonación" : "Registrar pago"}
+      danger={condoning}
+      submitDisabled={submitDisabled}
       wide
-      closeOnBackdrop={false}
+      modalClassName="cuotas-v2-payment-modal"
       footerStart={
-        <div className="cuotas-payment-footer-total">
-          <span>
-            {registrationTabActive && registrationPaid
-              ? "Inscripción registrada"
-              : "Total a pagar"}
-          </span>
-          <strong>{money(footerAmount)}</strong>
-          <small>
-            {paymentMode === "multiple"
-              ? `${paymentForm.pagos.length} cuotas seleccionadas`
-              : registrationTabActive
-                ? registrationPaid
-                  ? `${registrationCondoned ? "Condonada" : "Pagada"} el ${formatOptionDate(registrationPayment?.fecha_pago)}`
-                  : condoningRegistration ? "Condonación sin ingreso de dinero" : "Pago único de inscripción"
-                : annualSelected
-                  ? "Contado anual seleccionado"
-                  : `${selectedMonthIds.length} ${selectedMonthIds.length === 1 ? "período seleccionado" : "períodos seleccionados"}`}
-          </small>
+        <div className="cuotas-v2-footer-total">
+          <small>{condoning ? "Importe condonado" : "Total operación"}</small>
+          <strong>{money(operationTotal)}</strong>
         </div>
       }
-      modalClassName={`cuotas-payment-modal cuotas-modal--payment ${paymentMode === "multiple" ? "cuotas-modal--batch" : ""}`.trim()}
     >
-      {paymentMode === "single" ? (
-        <>
-          <EntityTabs
-            tabs={[
-              {
-                value: "periods",
-                label: "Meses a pagar",
-                icon: faCalendarDays,
-                badge: selectedMonthIds.length,
-              },
-              {
-                value: "registration",
-                label: "Inscripción",
-                icon: faIdCard,
-                badge: registrationPaid ? "✓" : null,
-              },
-              {
-                value: "family",
-                label: "Familia",
-                icon: faUsers,
-                badge: family?.cantidad_integrantes || 0,
-              },
-              {
-                value: "amounts",
-                label: "Importe por período",
-                icon: faMoneyBillWave,
-                badge: selectedMonthIds.length,
-              },
-            ]}
-            value={activePaymentTab}
-            onChange={setActivePaymentTab}
-            idPrefix="cuotas-payment-tab"
-            ariaLabel="Secciones del pago"
-          />
-
-          <div
-            id={`cuotas-payment-tab-${activePaymentTab}-panel`}
-            className="cuotas-payment-tab-panel"
-            role="tabpanel"
-            aria-labelledby={`cuotas-payment-tab-${activePaymentTab}`}
-          >
-            {activePaymentTab === "family" ? (
-              <div className="cuotas-payment-top-context">
-                {tipo === "PERSONA" && family ? (
-                  <section
-                    className="cuotas-family-card"
-                    data-modal-size-passive="true"
-                    aria-label="Grupo familiar del socio"
-                  >
-                  <div className="cuotas-family-card__head">
-                    <div className="cuotas-family-card__identity">
-                      <span className="cuotas-family-card__icon" aria-hidden="true">
-                        <FontAwesomeIcon icon={faUsers} />
-                      </span>
-                      <div>
-                        <span>Grupo familiar</span>
-                        <strong>{family.nombre}</strong>
-                        <small>
-                          {family.cantidad_integrantes} integrantes · Descuento vigente {Number(
-                            family.porcentaje_descuento || 0,
-                          ).toFixed(2)}%
-                        </small>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className={`cuotas-family-expand-btn ${familyExpanded ? "is-open" : ""}`.trim()}
-                      onClick={() => setFamilyExpanded((current) => !current)}
-                      aria-expanded={familyExpanded}
-                      aria-controls="cuotas-family-members-list"
-                    >
-                      <span>
-                        {familyExpanded
-                          ? "Ocultar integrantes"
-                          : "Ver integrantes"}
-                      </span>
-                      <FontAwesomeIcon icon={faChevronDown} aria-hidden="true" />
-                    </button>
-                  </div>
-
-                  <label className="cuotas-family-toggle">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(paymentForm.aplicar_familia)}
-                      disabled={
-                        !selectedMonthIds.length || familyPaymentCount < 1
-                      }
-                      onChange={(event) =>
-                        setPaymentForm((current) => ({
-                          ...current,
-                          aplicar_familia: event.target.checked,
-                        }))
-                      }
-                      aria-label="Aplicar pago a todo el grupo familiar"
-                    />
-                    <span>
-                      <strong>Aplicar pago a todo el grupo familiar</strong>
-                      <small>
-                        {!selectedMonthIds.length
-                          ? "Seleccioná uno o más meses para habilitar el pago del grupo familiar."
-                          : hasFamilyPaidSelectedPeriods
-                            ? "Se cobrarán todos los meses pendientes del grupo. Los períodos ya pagados se omiten automáticamente; abrí “Ver integrantes” para identificarlos."
-                            : selectedMonthIds.length > 1
-                              ? `Se registrarán los ${selectedMonthIds.length} meses seleccionados para todos los integrantes que los tengan pendientes.`
-                              : `Está seleccionado por defecto. Al desmarcarlo, se registra únicamente la cuota de ${
-                                  principal?.denominacion ||
-                                  selectedPartner?.denominacion ||
-                                  "este socio"
-                                }.`}
-                      </small>
-                    </span>
-                  </label>
-
-                  {hasFamilyPaidSelectedPeriods ? (
-                    <div className="cuotas-family-paid-note" role="status">
-                      <strong>Hay cuotas ya pagadas en la selección.</strong>
-                      <span>
-                        Los integrantes marcados en verde ya abonaron esos períodos.
-                        Esos cruces se omiten y el resto del grupo sí se registra normalmente.
-                      </span>
-                    </div>
-                  ) : null}
-
-                  <div
-                    className={`cuotas-family-members-shell ${familyExpanded ? "is-open" : ""}`.trim()}
-                    aria-hidden={!familyExpanded}
-                  >
-                    <div
-                      id="cuotas-family-members-list"
-                      className="cuotas-family-members"
-                    >
-                      {family.integrantes.map((member) => {
-                          const paidPeriods =
-                            familyPaidPeriodsByMember.get(String(member.id_socio)) || [];
-                          const memberClassName = [
-                            member.puede_pagar ? "" : "is-unavailable",
-                            paidPeriods.length ? "has-paid-selected-period" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ");
-
-                          return (
-                            <article
-                              key={member.id_socio}
-                              className={memberClassName}
-                            >
-                              <div>
-                                <strong>{member.denominacion}</strong>
-                                <span>
-                                  {member.documento || "SIN DNI"} · {member.categoria || "SIN CATEGORÍA"}
-                                </span>
-                                {paidPeriods.length ? (
-                                  <small
-                                    className="cuotas-family-paid-badge"
-                                    title={`Períodos ya pagados: ${paidPeriods.join(", ")}`}
-                                  >
-                                    Pagó {paidPeriods.join(" · ")}
-                                  </small>
-                                ) : null}
-                              </div>
-                              <div>
-                                {paidPeriods.length ? (
-                                  <>
-                                    <strong className="cuotas-family-paid-status">PAGADO</strong>
-                                    <small>{paidPeriods.join(" · ")}</small>
-                                  </>
-                                ) : member.puede_pagar ? (
-                                  <>
-                                    <strong>{money(member.monto_sugerido)}</strong>
-                                    <small>Base {money(member.monto_base)}</small>
-                                  </>
-                                ) : (
-                                  <strong>
-                                    {member.pagado ? "YA PAGADO" : "NO DISPONIBLE"}
-                                  </strong>
-                                )}
-                              </div>
-                            </article>
-                          );
-                      })}
-                    </div>
-                  </div>
-                  </section>
-                ) : (
-                  <div className="cuotas-no-family">
-                    <FontAwesomeIcon icon={faUsers} aria-hidden="true" />
-                    <span>
-                      {tipo === "PERSONA"
-                        ? "Este socio no pertenece a un grupo familiar."
-                        : "La aplicación familiar está disponible únicamente para socios."}
-                    </span>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-          {activePaymentTab === "registration" ? (
-            <section
-              className={`cuotas-registration-card ${registrationPaid ? "is-paid" : ""}`.trim()}
-              aria-label="Pago de inscripción"
-            >
-              {registrationPaid ? (
-                <div className="cuotas-registration-paid">
-                  <button
-                    type="button"
-                    className="cuotas-registration-paid__delete"
-                    onClick={requestDeleteRegistration}
-                    aria-label={registrationDeleteLabel}
-                    title={registrationDeleteLabel}
-                    disabled={saving || contextLoading}
-                  >
-                    <FontAwesomeIcon icon={faTrashCan} aria-hidden="true" />
-                  </button>
-
-                  <span className="cuotas-registration-paid__icon" aria-hidden="true">
-                    <FontAwesomeIcon icon={faIdCard} />
-                  </span>
-                  <div className="cuotas-registration-paid__content">
-                    <span>{registrationCondoned ? "Inscripción condonada" : "Inscripción ya registrada"}</span>
-                    <strong>{money(registrationPayment?.monto || 0)}</strong>
-                    <small>
-                      {registrationCondoned ? "Se condonó el " : "Se pagó el "}{formatOptionDate(registrationPayment?.fecha_pago)}
-                      {registrationCondoned
-                        ? " · sin ingreso de dinero"
-                        : registrationPayment?.medio_pago
-                          ? ` · ${registrationPayment.medio_pago}`
-                          : " · medio no informado"}
-                    </small>
-                    {registrationCondoned && registrationPayment?.motivo_condonacion ? (
-                      <small>Motivo: {registrationPayment.motivo_condonacion}</small>
-                    ) : null}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <header className="cuotas-registration-card__header">
-                    <div className="cuotas-registration-card__identity">
-                      <span className="cuotas-registration-card__icon" aria-hidden="true">
-                        <FontAwesomeIcon icon={faIdCard} />
-                      </span>
-                      <div className="cuotas-registration-card__copy">
-                        <div className="cuotas-registration-card__eyebrow">
-                          <span>Inscripción</span>
-                          <em>Pago único</em>
-                        </div>
-                        <strong>{condoningRegistration ? "Condonar inscripción de ingreso" : "Registrar pago de ingreso"}</strong>
-                        <small>Este cobro se realiza una sola vez por socio.</small>
-                      </div>
-                    </div>
-
-                    <div className="cuotas-registration-card__suggested">
-                      <span>Importe sugerido</span>
-                      <strong>{money(registrationContext?.monto_sugerido || 0)}</strong>
-                      <small>Podés modificarlo</small>
-                    </div>
-                  </header>
-
-                  <div className="cuotas-registration-card__body">
-                    <label className="cuotas-registration-waiver">
-                      <input
-                        type="checkbox"
-                        checked={condoningRegistration}
-                        disabled={saving || contextLoading}
-                        onChange={(event) => setPaymentForm((current) => ({
-                          ...current, condonar_inscripcion: event.target.checked,
-                        }))}
-                      />
-                      <span>Condonar inscripción</span>
-                    </label>
-                    <div className="cuotas-registration-fields">
-                    {!condoningRegistration ? <FloatingField
-                      label="Monto de inscripción *"
-                      active={Boolean(paymentForm.monto_inscripcion)}
-                    >
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={10}
-                        value={paymentForm.monto_inscripcion ?? ""}
-                        onChange={(event) =>
-                          updateRegistrationAmount(event.target.value)
-                        }
-                        aria-label="Monto de inscripción *"
-                        placeholder="0"
-                      />
-                    </FloatingField> : null}
-
-                    <FloatingField
-                      label={condoningRegistration ? "Fecha de condonación *" : "Fecha de pago *"}
-                      active={Boolean(paymentForm.fecha_pago)}
-                    >
-                      <input
-                        type="date"
-                        value={paymentForm.fecha_pago}
-                        onChange={(event) => updatePaymentDate(event.target.value)}
-                        aria-label={condoningRegistration ? "Fecha de condonación de inscripción *" : "Fecha de pago de inscripción *"}
-                      />
-                    </FloatingField>
-
-                    {!condoningRegistration ? <FloatingField label="Medio de pago *" active>
-                      <select
-                        value={
-                          registrationMediumSelected
-                            ? paymentForm.id_medio_pago
-                            : ""
-                        }
-                        onChange={(event) =>
-                          setPaymentForm((current) => ({
-                            ...current,
-                            id_medio_pago: event.target.value,
-                          }))
-                        }
-                        aria-label="Medio de pago de inscripción *"
-                      >
-                        <option value="">Seleccionar...</option>
-                        {registrationMedia.map((item) => (
-                          <option key={item.id_medio_pago} value={item.id_medio_pago}>
-                            {item.nombre}
-                          </option>
-                        ))}
-                      </select>
-                    </FloatingField> : (
-                      <FloatingField
-                        label="Motivo de condonación"
-                        active={Boolean(paymentForm.motivo_inscripcion)}
-                        placeholderOnFloat
-                      >
-                        <input
-                          type="text"
-                          maxLength={500}
-                          value={paymentForm.motivo_inscripcion || ""}
-                          onChange={(event) => setPaymentForm((current) => ({
-                            ...current, motivo_inscripcion: event.target.value,
-                          }))}
-                          aria-label="Motivo de condonación"
-                          placeholder="Opcional"
-                        />
-                      </FloatingField>
-                    )}
-                    </div>
-
-                    <div className="cuotas-registration-note" role="note">
-                      <FontAwesomeIcon icon={faIdCard} aria-hidden="true" />
-                      <span>
-                        {condoningRegistration
-                          ? "Se registrará la inscripción como condonada, con importe $0 y sin medio de pago."
-                          : "El valor vigente se completa automáticamente. Si corresponde, podés ingresar otro importe antes de registrar el pago."}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </section>
-          ) : null}
-
-          {!["family", "registration"].includes(activePaymentTab) ? (
-            <div
-              className={`cuotas-payment-main-row ${tipo !== "PERSONA" ? "is-date-only" : ""}`.trim()}
-            >
-            {activePaymentTab === "periods" ? (
-              <section
-                className="cuotas-period-group cuotas-period-selector"
-                aria-label="Períodos a pagar"
-              >
-              <header>
-                <div>
-                  <span>Períodos disponibles</span>
-                  <small>
-                    Contado Anual es exclusivo y representa el pago completo del año.
-                  </small>
-                </div>
-                <div className="cuotas-period-selector__actions">
-                  <PaymentYearChip
-                    value={paymentForm.anio}
-                    options={modalPaymentYearOptions}
-                    onChange={updatePaymentYear}
-                    disabled={contextLoading || !paymentForm.id_socio}
-                    nextYear={canAddNextPaymentYear ? nextPaymentYear : null}
-                    onAddNextYear={addNextPaymentYear}
-                  />
-                  <div
-                    className="cuotas-period-amount"
-                    aria-label={`Importe ${money(paymentPeriodAmount)}`}
-                  >
-                    <span>Importe</span>
-                    <strong>
-                      {contextLoading ? "Consultando…" : money(paymentPeriodAmount)}
-                    </strong>
-                  </div>
-                  <button
-                    type="button"
-                    className="cuotas-select-all"
-                    onClick={toggleAllPaymentMonths}
-                    disabled={
-                      contextLoading || annualSelected || !availableMonthIds.length
-                    }
-                  >
-                    {allAvailableMonthsSelected
-                      ? "Deseleccionar todos"
-                      : "Seleccionar todos"}
-                  </button>
-                </div>
-              </header>
-
-              <div
-                className={`cuotas-month-grid ${contextLoading ? "is-loading" : ""}`}
-                aria-busy={contextLoading}
-              >
-                {monthOptions.map((item) => {
-                  const monthId = String(item.id_mes);
-                  const period = paymentPeriods[monthId];
-                  const selected = selectedMonthIds.includes(monthId);
-                  const paid = Boolean(period?.paid);
-                  const unavailable = Boolean(period?.unavailable);
-                  const annualBlockedByIncompleteYear =
-                    monthId === "7" && !annualPaymentAvailable;
-                  const blockedBySelection =
-                    (annualSelected && monthId !== "7") ||
-                    (bimonthlySelected && monthId === "7");
-                  const disabled =
-                    contextLoading ||
-                    paid ||
-                    unavailable ||
-                    annualBlockedByIncompleteYear ||
-                    blockedBySelection;
-                  const unavailableReason =
-                    period?.context?.principal?.motivo_no_disponible || "";
-                  const status = String(
-                    period?.context?.principal?.estado || "",
-                  ).toUpperCase();
-                  const coveredByAnnual = Boolean(
-                    period?.context?.principal?.origen_anual,
-                  );
-                  const statusLabel =
-                    status === "CONDONADO"
-                      ? "Condonado"
-                      : coveredByAnnual
-                        ? "Cubierto por anual"
-                        : paid
-                          ? "Pagado"
-                          : unavailable || annualBlockedByIncompleteYear
-                            ? "No disponible"
-                            : blockedBySelection
-                              ? "Modalidad exclusiva"
-                              : selected
-                                ? "Seleccionado"
-                                : "Disponible";
-
-                  return (
-                    <button
-                      type="button"
-                      key={`${paymentForm.anio}-${monthId}`}
-                      className={`${selected ? "is-selected" : ""} ${paid ? "is-paid" : ""} ${unavailable ? "is-unavailable" : ""} ${disabled && !contextLoading ? "is-disabled" : ""}`.trim()}
-                      onClick={() => togglePaymentMonth(monthId)}
-                      disabled={disabled}
-                      aria-pressed={selected}
-                      title={
-                        unavailableReason ||
-                        (annualBlockedByIncompleteYear
-                          ? "Contado Anual requiere que los seis períodos del año estén disponibles para pagar."
-                          : blockedBySelection
-                            ? "Desmarcá la modalidad seleccionada para cambiar."
-                            : undefined)
-                      }
-                      aria-label={`${item.nombre} ${paymentForm.anio}: ${statusLabel.toLowerCase()}`}
-                    >
-                      <strong>{item.nombre}</strong>
-                      <small>{paymentForm.anio}</small>
-                      <span>
-                        {statusLabel}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              </section>
-            ) : null}
-
-            {activePaymentTab === "periods" || activePaymentTab === "amounts" ? (
-              <aside
-                className={`cuotas-payment-date-card ${activePaymentTab === "amounts" ? "is-amounts-only" : ""}`.trim()}
-              >
-                {activePaymentTab === "periods" ? (
-                  <div className="cuotas-payment-date-card__header">
-                    <span>Datos del pago</span>
-                    <small>Completá la fecha y el medio de pago.</small>
-                  </div>
-                ) : null}
-
-                <div className="cuotas-payment-date-card__fields">
-                  {activePaymentTab === "periods" ? (
-                    <div className="cuotas-payment-date-method-row">
-                  <FloatingField
-                    label="Fecha de pago *"
-                    active={Boolean(paymentForm.fecha_pago)}
-                  >
-                    <input
-                      type="date"
-                      value={paymentForm.fecha_pago}
-                      onChange={(event) => updatePaymentDate(event.target.value)}
-                      aria-label="Fecha de pago *"
-                    />
-                  </FloatingField>
-
-                  <FloatingField label="Medio de pago *" active>
-                    <select
-                      value={paymentForm.id_medio_pago}
-                      onChange={(event) =>
-                        setPaymentForm((current) => ({
-                          ...current,
-                          id_medio_pago: event.target.value,
-                        }))
-                      }
-                      aria-label="Medio de pago *"
-                    >
-                      <option value="">Seleccionar...</option>
-                      {(catalogos.medios_pago || []).map((item) => (
-                        <option key={item.id_medio_pago} value={item.id_medio_pago}>
-                          {item.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </FloatingField>
-                    </div>
-                  ) : null}
-
-                {activePaymentTab === "amounts" ? (
-                  selectedMonthIds.length ? (
-                    <div className="cuotas-month-amount-editor">
-                      <div className="cuotas-month-amount-editor__title">
-                        <span>Importe por período</span>
-                        <small>
-                          {paymentForm.aplicar_familia && family
-                            ? "El monto personalizado se aplica a cada integrante pendiente y mantiene activo el pago familiar."
-                            : "Actual o histórico según el período."}
-                        </small>
-                      </div>
-
-                    <div className="cuotas-month-amount-editor__list">
-                      {selectedMonthIds.map((monthId) => {
-                        const period = paymentPeriods[monthId];
-                        const principalForMonth = period?.context?.principal || null;
-                        const options = Array.isArray(principalForMonth?.opciones_monto)
-                          ? principalForMonth.opciones_monto
-                          : [];
-                        const amountState =
-                          paymentForm.montos_por_mes?.[monthId] || {};
-                        const monthLabel =
-                          monthOptions.find(
-                            (item) => String(item.id_mes) === String(monthId),
-                          )?.nombre || `Mes ${monthId}`;
-
-                        return (
-                          <section
-                            className="cuotas-month-amount-row"
-                            key={`amount-${paymentForm.anio}-${monthId}`}
-                          >
-                            <div className="cuotas-month-amount-row__head">
-                              <strong>{monthLabel}</strong>
-                              <span>{money(amountState.monto || 0)}</span>
-                            </div>
-
-                            <label className="cuotas-month-amount-field">
-                              <span>Monto</span>
-                              <select
-                                value={
-                                  options.length
-                                    ? amountState.opcion_id || options[0]?.id || ""
-                                    : ""
-                                }
-                                disabled={Boolean(amountState.personalizado)}
-                                onChange={(event) =>
-                                  updateMonthAmountOption(monthId, event.target.value)
-                                }
-                                aria-label={`Monto de categoría para ${monthLabel}`}
-                              >
-                                {options.length ? (
-                                  options.map((option) => (
-                                    <option key={option.id} value={option.id}>
-                                      {money(option.monto)} · {amountOptionPeriodLabel(option)}
-                                    </option>
-                                  ))
-                                ) : (
-                                  <option value="">
-                                    {money(
-                                      principalForMonth?.monto_sugerido ||
-                                        principalForMonth?.monto_base ||
-                                        0,
-                                    )}
-                                  </option>
-                                )}
-                              </select>
-                            </label>
-
-                            <label className="cuotas-custom-amount-toggle">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(amountState.personalizado)}
-                                onChange={(event) =>
-                                  toggleMonthCustomAmount(monthId, event.target.checked)
-                                }
-                              />
-                              <span>Monto personalizado</span>
-                            </label>
-
-                            {amountState.personalizado ? (
-                              <FloatingField label="Monto personalizado *" active>
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  pattern="[0-9]*[.,]?[0-9]{0,2}"
-                                  maxLength={15}
-                                  value={amountState.monto ?? ""}
-                                  onChange={(event) =>
-                                    updateMonthCustomAmount(monthId, event.target.value)
-                                  }
-                                  aria-label={`Monto personalizado para ${monthLabel}`}
-                                  placeholder="0,00"
-                                  autoFocus={selectedMonthIds.length === 1}
-                                />
-                              </FloatingField>
-                            ) : null}
-                          </section>
-                        );
-                      })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="cuotas-payment-tab-empty" role="status">
-                      <strong>No hay períodos seleccionados</strong>
-                      <span>
-                        Elegí uno o más meses en la pestaña “Meses a pagar” para
-                        configurar sus importes.
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActivePaymentTab("periods")}
-                      >
-                        Ir a Meses a pagar
-                      </button>
-                    </div>
-                  )
-                ) : null}
-
-                </div>
-              </aside>
-            ) : null}
-            </div>
-          ) : null}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="entity-form__grid cuotas-payment-grid cuotas-payment-grid--multiple">
-            <FloatingField
-              label="Fecha de pago *"
-              active={Boolean(paymentForm.fecha_pago)}
-            >
-              <input
-                type="date"
-                value={paymentForm.fecha_pago}
-                onChange={(event) =>
-                  setPaymentForm((current) => ({
-                    ...current,
-                    fecha_pago: event.target.value,
-                  }))
-                }
-                aria-label="Fecha de pago *"
-              />
-            </FloatingField>
-            <FloatingField
-              label="Medio de pago *"
-              active
-            >
-              <select
-                value={paymentForm.id_medio_pago}
-                onChange={(event) =>
-                  setPaymentForm((current) => ({
-                    ...current,
-                    id_medio_pago: event.target.value,
-                  }))
-                }
-                aria-label="Medio de pago *"
-              >
+      <div className="cuotas-v2-payment-body">
+        <section className="cuotas-v2-payment-toolbar">
+          <label>
+            <span><FontAwesomeIcon icon={faCalendarDays} /> Fecha</span>
+            <input type="date" value={fecha} onChange={(event) => changeDate(event.target.value)} />
+          </label>
+          <label>
+            <span>Año aplicado</span>
+            <select value={anio} onChange={(event) => changeYear(event.target.value)}>
+              {years.map((year) => <option value={year} key={year}>{year}</option>)}
+            </select>
+          </label>
+          {!condoning ? (
+            <label>
+              <span><FontAwesomeIcon icon={faCoins} /> Medio de pago</span>
+              <select value={medio} onChange={(event) => setMedio(event.target.value)}>
                 <option value="">Seleccionar...</option>
-                {(catalogos.medios_pago || []).map((item) => (
-                  <option key={item.id_medio_pago} value={item.id_medio_pago}>
-                    {item.nombre}
-                  </option>
+                {(catalogos?.medios_pago || []).map((item) => (
+                  <option value={item.id_medio_pago} key={item.id_medio_pago}>{item.nombre}</option>
                 ))}
               </select>
-            </FloatingField>
-          </div>
-    
-          <section
-            className="cuotas-batch-list"
-            aria-label="Pagos seleccionados"
-          >
-            <header>
-              <div>
-                <span>Selección múltiple</span>
-                <strong>
-                  {paymentForm.pagos.length} cuotas listas para registrar
-                </strong>
-              </div>
-              <strong>{money(paymentTotal)}</strong>
-            </header>
-            <div>
-              {paymentForm.pagos.map((payment, index) => {
-                const metadata = [
-                  payment.documento || null,
-                  payment.categoria || "SIN CATEGORÍA",
-                  payment.mes && payment.anio
-                    ? `${payment.mes}/${payment.anio}`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ");
-                const amountOptions =
-                  Array.isArray(payment.opciones_monto) &&
-                  payment.opciones_monto.length
-                    ? payment.opciones_monto
-                    : [
-                        {
-                          id: payment.opcion_monto_id || "actual",
-                          actual: true,
-                          monto: payment.monto,
-                        },
-                      ];
+            </label>
+          ) : (
+            <div className="cuotas-v2-condone-note">
+              La condonación se guarda con importe $0 y sin medio de pago.
+            </div>
+          )}
+        </section>
 
-                return (
-                  <article
-                    key={`${payment.id_socio}-${payment.anio}-${payment.mes}`}
-                  >
-                    <span
-                      className="cuotas-batch-list__index"
-                      aria-hidden="true"
-                    >
-                      {index + 1}
-                    </span>
-                    <div>
-                      <strong>{payment.denominacion}</strong>
-                      {metadata ? <span>{metadata}</span> : null}
-                      {payment.familia ? (
-                        <small>
-                          {payment.familia} ·{" "}
-                          {Number(
-                            payment.porcentaje_descuento_familiar || 0,
-                          ).toFixed(2)}
-                          % de descuento
-                        </small>
-                      ) : null}
+        {context?.aviso ? <div className="cuotas-v2-warning">{context.aviso}</div> : null}
+
+        <section className="cuotas-v2-section">
+          <header className="cuotas-v2-section__head">
+            <div>
+              <h3>Cuotas mensuales</h3>
+              <p>Marzo a diciembre. Podés seleccionar varios meses en una sola operación.</p>
+            </div>
+            <button type="button" className="mov-btn mov-btn--ghost" onClick={toggleAllMonthly} disabled={!availableMonthly.length}>
+              {allMonthlySelected ? "Quitar disponibles" : "Seleccionar disponibles"}
+            </button>
+          </header>
+          {!condoning ? (
+            <div className={`cuotas-v2-free-amount ${freeMode ? "is-active" : ""}`}>
+              <label>
+                <input type="checkbox" checked={freeMode} onChange={(event) => toggleFreeMode(event.target.checked)} />
+                <span>Usar <strong>monto libre por mes</strong></span>
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Monto libre"
+                value={freeAmount}
+                disabled={!freeMode}
+                onChange={(event) => applyFreeAmount(event.target.value)}
+              />
+              <small>Al activarlo, el mismo importe se aplica a los meses seleccionados y se deshabilita el anual/mitades.</small>
+            </div>
+          ) : null}
+          <div className="cuotas-v2-period-grid">
+            {monthly.map((period) => renderPeriodCard(period))}
+          </div>
+        </section>
+
+        <section className="cuotas-v2-section">
+          <header className="cuotas-v2-section__head">
+            <div>
+              <h3>Pagos especiales</h3>
+              <p>Contado anual, mitades y matrícula mantienen exactamente la cobertura del sistema anterior.</p>
+            </div>
+          </header>
+          <div className="cuotas-v2-special-grid">
+            {renderPeriodCard(special.anual, "is-special")}
+            {renderPeriodCard(special.mitad1, "is-special")}
+            {renderPeriodCard(special.mitad2, "is-special")}
+            <div className="cuotas-v2-registration-card">
+              {renderPeriodCard(special.matricula, "is-special")}
+              {!condoning && special.matricula ? (
+                <div className="cuotas-v2-registration-global">
+                  <div>
+                    <small>Monto global de matrícula</small>
+                    <strong>{money(special.matricula.monto_sugerido)}</strong>
+                  </div>
+                  {editingMatricula ? (
+                    <div className="cuotas-v2-registration-editor">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={matriculaGlobal}
+                        onChange={(event) => setMatriculaGlobal(amountInput(event.target.value))}
+                      />
+                      <button type="button" className="mov-btn mov-btn--primary" disabled={updatingMatricula} onClick={saveGlobalRegistration}>
+                        {updatingMatricula ? "Guardando..." : "Guardar global"}
+                      </button>
                     </div>
-                    <label>
-                      <span>Monto</span>
-                      <select
-                        value={payment.opcion_monto_id || amountOptions[0]?.id || ""}
-                        onChange={(event) =>
-                          updateBatchAmountOption(index, event.target.value)
-                        }
-                        aria-label={`Monto de ${payment.denominacion}`}
-                      >
-                        {amountOptions.map((option) => {
-                          const periodLabel = amountOptionPeriodLabel(option);
-                          const label = option.actual
-                            ? "Actual"
-                            : periodLabel.charAt(0).toUpperCase() +
-                              periodLabel.slice(1);
-                          return (
-                            <option key={option.id} value={option.id}>
-                              {money(option.monto)} · {label}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </label>
-                  </article>
-                );
-              })}
+                  ) : (
+                    <button type="button" className="mov-btn mov-btn--ghost" onClick={() => setEditingMatricula(true)}>
+                      <FontAwesomeIcon icon={faPenToSquare} /> Editar global
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        {context?.familia?.tiene_familia ? (
+          <section className="cuotas-v2-section cuotas-v2-family-section">
+            <header className="cuotas-v2-section__head">
+              <div>
+                <h3><FontAwesomeIcon icon={faUsers} /> Grupo familiar</h3>
+                <p>
+                  {context.familia.nombre_familia || "Familia"} · {context.familia.cantidad_total} integrante(s) cargado(s), {context.familia.integrantes_activos} activo(s).
+                </p>
+              </div>
+              <label className="cuotas-v2-family-toggle">
+                <input type="checkbox" checked={family} onChange={(event) => setFamily(event.target.checked)} />
+                <span>Aplicar al grupo familiar</span>
+              </label>
+            </header>
+            <div className="cuotas-v2-family-list">
+              {(context.familia.integrantes || []).map((member) => (
+                <div className={`cuotas-v2-family-member ${member.activo ? "" : "is-inactive"}`} key={member.id_alumno || member.id_socio}>
+                  <FontAwesomeIcon icon={faIdCard} />
+                  <span>{member.denominacion}</span>
+                  <small>{member.curso || "Sin curso"}</small>
+                  <b>{member.activo ? "ACTIVO" : "BAJA"}</b>
+                </div>
+              ))}
             </div>
           </section>
-        </>
-      )}
+        ) : null}
+      </div>
     </CrudModal>
   );
 }

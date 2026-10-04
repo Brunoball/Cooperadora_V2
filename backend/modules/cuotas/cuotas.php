@@ -23,74 +23,61 @@ final class Cuotas extends CuotasRegistros
         $year = isset($_GET['anio']) && $_GET['anio'] !== ''
             ? self::validarAnio($_GET['anio'])
             : (int)date('Y');
-        $periodId = isset($_GET['mes']) && $_GET['mes'] !== ''
-            ? (int)self::periodo($auth['db'], $_GET['mes'])['id_periodo']
-            : 1;
+        $periodId = (int)($_GET['mes'] ?? $_GET['id_mes'] ?? ((int)date('n') >= 3 ? (int)date('n') : 3));
         api_success(self::catalogosDatos($auth['db'], $year, $periodId));
     }
 
     public static function contextoPago(): never
     {
         $auth = auth_context();
-        $partnerId = positive_id($_GET['id_socio'] ?? null, 'socio');
+        $studentId = positive_id($_GET['id_alumno'] ?? $_GET['id_socio'] ?? null, 'alumno');
         $year = self::validarAnio($_GET['anio'] ?? date('Y'));
         $periodId = (int)self::periodo(
             $auth['db'],
-            $_GET['mes'] ?? $_GET['id_periodo'] ?? null
-        )['id_periodo'];
+            $_GET['mes'] ?? $_GET['id_mes'] ?? $_GET['id_periodo'] ?? ((int)date('n') >= 3 ? (int)date('n') : 3)
+        )['id_mes'];
         $date = self::fechaPago($_GET['fecha_pago'] ?? date('Y-m-d'));
-        api_success(self::contextoPagoDatos($auth['db'], $partnerId, $year, $periodId, $date));
+        api_success(self::contextoPagoDatos($auth['db'], $studentId, $year, $periodId, $date));
     }
 
     public static function contextosPago(): never
     {
         $auth = auth_context();
-        $partnerId = positive_id($_GET['id_socio'] ?? null, 'socio');
+        $studentId = positive_id($_GET['id_alumno'] ?? $_GET['id_socio'] ?? null, 'alumno');
         $year = self::validarAnio($_GET['anio'] ?? date('Y'));
         $date = self::fechaPago($_GET['fecha_pago'] ?? date('Y-m-d'));
-        api_success([
-            'anio' => $year,
-            'fecha_pago' => $date,
-            'periodos' => self::contextosPagoDatos($auth['db'], $partnerId, $year, $date),
-            'inscripcion' => self::contextoInscripcionDatos($auth['db'], $partnerId),
-        ]);
+        api_success(self::contextosPagoDatos($auth['db'], $studentId, $year, $date));
     }
 
-    public static function registrarInscripcion(): never
+    public static function comprobante(): never
     {
-        $auth = require_admin();
-        $item = self::registrarInscripcionDatos($auth, request_body());
-        api_success(['item' => $item], 'Inscripción pagada correctamente.');
+        $auth = auth_context();
+        $studentId = positive_id($_GET['id_alumno'] ?? $_GET['id_socio'] ?? $_GET['id'] ?? null, 'alumno');
+        $paymentId = isset($_GET['id_pago']) && $_GET['id_pago'] !== ''
+            ? positive_id($_GET['id_pago'], 'pago')
+            : null;
+        api_success(self::comprobanteDatos($auth['db'], $studentId, $paymentId));
     }
 
-    public static function condonarInscripcion(): never
+    public static function buscarPagoEliminar(): never
     {
-        $auth = require_admin();
-        $item = self::registrarInscripcionDatos($auth, request_body(), true);
-        api_success(['item' => $item], 'Inscripción condonada correctamente.');
-    }
-
-    public static function eliminarInscripcion(): never
-    {
-        $auth = require_admin();
-        $item = self::eliminarInscripcionDatos($auth, request_body());
-        api_success(
-            ['item' => $item],
-            $item['estado'] === 'CONDONADO'
-                ? 'Condonación de inscripción eliminada correctamente. La inscripción volvió a quedar pendiente.'
-                : 'Pago de inscripción eliminado correctamente. La inscripción volvió a quedar pendiente.'
-        );
+        $auth = auth_context();
+        $body = request_body();
+        $studentId = positive_id($body['id_alumno'] ?? $body['id_socio'] ?? null, 'alumno');
+        $periodId = positive_id($body['id_mes'] ?? $body['mes'] ?? null, 'período');
+        $year = self::validarAnio($body['anio'] ?? date('Y'));
+        $state = strtolower(trim((string)($body['estado_esperado'] ?? '')));
+        if (!in_array($state, ['pagado', 'condonado'], true)) $state = null;
+        api_success(self::buscarPagoEliminarDatos($auth['db'], $studentId, $periodId, $year, $state));
     }
 
     public static function registrarPago(): never
     {
         $auth = require_admin();
-        $result = self::registrarPagosDatos($auth, request_body());
+        $result = self::registrarPagosDatos($auth, request_body(), false);
         api_success(
             $result,
-            count($result['items']) > 1
-                ? 'Pagos registrados correctamente.'
-                : 'Pago registrado correctamente.'
+            count($result['items']) > 1 ? 'Pagos registrados correctamente.' : 'Pago registrado correctamente.'
         );
     }
 
@@ -104,27 +91,31 @@ final class Cuotas extends CuotasRegistros
         $auth = require_admin();
         $result = self::condonarPagoDatos($auth, request_body());
         api_success(
-            [
-                'item' => $result['items'][0],
-                'comprobante' => $result['comprobante'],
-            ],
-            'Cuota condonada correctamente. El período ya no figura como deuda.'
+            $result,
+            count($result['items']) > 1 ? 'Cuotas condonadas correctamente.' : 'Cuota condonada correctamente.'
         );
     }
 
     public static function eliminarPago(): never
     {
         $auth = require_admin();
-        $item = self::eliminarPagoDatos($auth, request_body());
+        $result = self::eliminarPagoDatos($auth, request_body());
+        $item = $result['item'];
         api_success(
-            ['item' => $item],
+            $result,
             $item['estado'] === 'CONDONADO'
                 ? 'Condonación eliminada correctamente. El período volvió a quedar como deuda.'
                 : 'Pago eliminado correctamente. El período volvió a quedar como deuda.'
         );
     }
 
-    /** Alias conservados para clientes anteriores. */
+    public static function actualizarMatricula(): never
+    {
+        $auth = require_admin();
+        api_success(self::actualizarMatriculaDatos($auth, request_body()), 'Monto global de matrícula actualizado.');
+    }
+
+    /** Alias conservados para llamadas anteriores del frontend V2. */
     public static function registrarCobro(): never
     {
         self::registrarPago();
