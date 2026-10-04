@@ -1,8 +1,6 @@
 <?php
 declare(strict_types=1);
 
-// El archivo puede ser analizado o cargado de manera independiente sin depender
-// del orden de includes de routes/api.php.
 require_once __DIR__ . '/../../core/auth.php';
 require_once __DIR__ . '/../../core/domain.php';
 require_once __DIR__ . '/../../core/request.php';
@@ -23,9 +21,7 @@ final class Usuarios
         $result = self::guardarDatos($auth, request_body());
         api_success(
             $result,
-            $result['creado']
-                ? 'Usuario creado correctamente.'
-                : 'Usuario actualizado correctamente.'
+            $result['creado'] ? 'Usuario creado correctamente.' : 'Usuario actualizado correctamente.'
         );
     }
 
@@ -35,9 +31,7 @@ final class Usuarios
         $result = self::cambiarEstadoDatos($auth, request_body());
         api_success(
             $result,
-            $result['activo']
-                ? 'Usuario reactivado correctamente.'
-                : 'Usuario dado de baja correctamente.'
+            $result['activo'] ? 'Usuario reactivado correctamente.' : 'Usuario dado de baja correctamente.'
         );
     }
 
@@ -50,64 +44,55 @@ final class Usuarios
 
     private static function listarDatos(array $auth): array
     {
-        $db = app_db();
+        $db = $auth['db'];
         $statement = $db->query(
             "SELECT
-                u.idUsuario,
+                u.id_usuario,
+                u.nombre_completo,
                 u.usuario,
-                u.email,
                 u.rol,
                 u.activo,
                 u.creado_en,
-                (SELECT COUNT(*) FROM sis_sesiones s WHERE s.idUsuario = u.idUsuario) AS sesiones,
-                (SELECT COUNT(*) FROM sis_login_auditoria la WHERE la.idUsuario = u.idUsuario) AS accesos
+                (SELECT COUNT(*) FROM sis_sesiones s WHERE s.id_usuario = u.id_usuario) AS sesiones,
+                (SELECT COUNT(*) FROM sis_login_auditoria la WHERE la.id_usuario = u.id_usuario) AS accesos
              FROM sis_usuarios u
-             ORDER BY u.activo DESC, u.usuario ASC, u.idUsuario ASC"
+             ORDER BY u.activo DESC, u.usuario ASC, u.id_usuario ASC"
         );
 
         $users = [];
         $summary = ['total' => 0, 'activos' => 0, 'bajas' => 0, 'admins' => 0];
         foreach ($statement->fetchAll() as $row) {
             $active = (bool)$row['activo'];
-            $current = (int)$row['idUsuario'] === (int)$auth['id_usuario'];
-            $sessions = (int)$row['sesiones'];
-            $accesses = (int)$row['accesos'];
+            $current = (int)$row['id_usuario'] === (int)$auth['id_usuario'];
 
             $summary['total']++;
             $summary[$active ? 'activos' : 'bajas']++;
             if ((string)$row['rol'] === 'admin') $summary['admins']++;
 
             $users[] = [
-                'id' => (int)$row['idUsuario'],
+                'id' => (int)$row['id_usuario'],
+                'nombre_completo' => (string)$row['nombre_completo'],
                 'usuario' => (string)$row['usuario'],
-                'email' => $row['email'] === null ? null : (string)$row['email'],
                 'rol' => (string)$row['rol'],
                 'activo' => $active,
-                'creado_en' => $row['creado_en'] === null ? null : (string)$row['creado_en'],
+                'creado_en' => (string)$row['creado_en'],
                 'sesion_actual' => $current,
-                'cantidad_sesiones' => $sessions,
-                'cantidad_accesos' => $accesses,
+                'cantidad_sesiones' => (int)$row['sesiones'],
+                'cantidad_accesos' => (int)$row['accesos'],
                 'puede_cambiar_estado' => !$current,
                 'puede_eliminar' => !$current,
             ];
         }
 
-        return [
-            'usuarios' => $users,
-            'resumen' => $summary,
-            'capacidades' => [
-                'email' => true,
-                'fecha_creacion' => true,
-            ],
-        ];
+        return ['usuarios' => $users, 'resumen' => $summary];
     }
 
     private static function guardarDatos(array $auth, array $body): array
     {
-        $db = app_db();
+        $db = $auth['db'];
         $id = self::optionalId($body['id'] ?? null);
+        $fullName = self::fullName($body['nombre_completo'] ?? '');
         $username = self::username($body['usuario'] ?? '');
-        $email = self::email($body['email'] ?? null);
         $role = self::role($body['rol'] ?? 'vista');
         $password = (string)($body['contrasena'] ?? '');
         $passwordConfirmation = (string)($body['confirmar_contrasena'] ?? '');
@@ -120,45 +105,51 @@ final class Usuarios
             $db,
             $auth,
             $id,
+            $fullName,
             $username,
-            $email,
             $role,
             $password
         ): array {
             self::assertUniqueUsername($db, $username, $id);
-            self::assertUniqueEmail($db, $email, $id);
 
             if ($id === null) {
                 $insert = $db->prepare(
                     'INSERT INTO sis_usuarios
-                     (usuario, hash_contrasena, email, rol, activo, creado_en, actualizado_en)
+                     (nombre_completo, usuario, password_hash, rol, activo, creado_en, actualizado_en)
                      VALUES (?, ?, ?, ?, 1, NOW(), NOW())'
                 );
                 $insert->execute([
+                    $fullName,
                     $username,
                     password_hash($password, PASSWORD_DEFAULT),
-                    $email,
                     $role,
                 ]);
                 $savedId = (int)$db->lastInsertId();
 
                 self::audit($auth, 'CREAR_USUARIO', $savedId, null, [
+                    'nombre_completo' => $fullName,
                     'usuario' => $username,
-                    'email' => $email,
                     'rol' => $role,
                     'activo' => true,
                 ]);
 
                 return [
                     'creado' => true,
-                    'usuario' => self::publicUser($savedId, $username, $email, $role, true, false),
+                    'usuario' => self::publicUser(
+                        $savedId,
+                        $fullName,
+                        $username,
+                        $role,
+                        true,
+                        false
+                    ),
                 ];
             }
 
             $lock = $db->prepare(
-                'SELECT idUsuario, usuario, email, rol, activo
+                'SELECT id_usuario, nombre_completo, usuario, rol, activo
                  FROM sis_usuarios
-                 WHERE idUsuario = ?
+                 WHERE id_usuario = ?
                  FOR UPDATE'
             );
             $lock->execute([$id]);
@@ -177,16 +168,21 @@ final class Usuarios
                 self::assertAnotherActiveAdmin($db, $id);
             }
 
-            $sets = ['usuario = ?', 'email = ?', 'rol = ?', 'actualizado_en = NOW()'];
-            $values = [$username, $email, $role];
+            $sets = [
+                'nombre_completo = ?',
+                'usuario = ?',
+                'rol = ?',
+                'actualizado_en = NOW()',
+            ];
+            $values = [$fullName, $username, $role];
             if ($password !== '') {
-                $sets[] = 'hash_contrasena = ?';
+                $sets[] = 'password_hash = ?';
                 $values[] = password_hash($password, PASSWORD_DEFAULT);
             }
             $values[] = $id;
 
             $db->prepare(
-                'UPDATE sis_usuarios SET ' . implode(', ', $sets) . ' WHERE idUsuario = ?'
+                'UPDATE sis_usuarios SET ' . implode(', ', $sets) . ' WHERE id_usuario = ?'
             )->execute($values);
 
             if ($password !== '') {
@@ -198,14 +194,15 @@ final class Usuarios
             }
 
             self::audit($auth, 'EDITAR_USUARIO', $id, [
+                'nombre_completo' => (string)$existing['nombre_completo'],
                 'usuario' => (string)$existing['usuario'],
-                'email' => $existing['email'],
                 'rol' => (string)$existing['rol'],
                 'activo' => (bool)$existing['activo'],
             ], [
+                'nombre_completo' => $fullName,
                 'usuario' => $username,
-                'email' => $email,
                 'rol' => $role,
+                'activo' => (bool)$existing['activo'],
                 'contrasena_modificada' => $password !== '',
             ]);
 
@@ -213,8 +210,8 @@ final class Usuarios
                 'creado' => false,
                 'usuario' => self::publicUser(
                     $id,
+                    $fullName,
                     $username,
-                    $email,
                     $role,
                     (bool)$existing['activo'],
                     $isCurrent
@@ -225,7 +222,7 @@ final class Usuarios
 
     private static function cambiarEstadoDatos(array $auth, array $body): array
     {
-        $db = app_db();
+        $db = $auth['db'];
         $id = positive_id($body['id'] ?? null, 'usuario');
         $active = filter_var($body['activo'] ?? null, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
         if ($active === null) api_error('El estado indicado no es válido.', 'VALIDATION_ERROR');
@@ -235,9 +232,9 @@ final class Usuarios
 
         return transaction($db, static function () use ($db, $auth, $id, $active): array {
             $lock = $db->prepare(
-                'SELECT idUsuario, usuario, rol, activo
+                'SELECT id_usuario, nombre_completo, usuario, rol, activo
                  FROM sis_usuarios
-                 WHERE idUsuario = ?
+                 WHERE id_usuario = ?
                  FOR UPDATE'
             );
             $lock->execute([$id]);
@@ -249,12 +246,10 @@ final class Usuarios
             }
 
             $db->prepare(
-                'UPDATE sis_usuarios SET activo = ?, actualizado_en = NOW() WHERE idUsuario = ?'
+                'UPDATE sis_usuarios SET activo = ?, actualizado_en = NOW() WHERE id_usuario = ?'
             )->execute([$active ? 1 : 0, $id]);
 
-            if (!$active) {
-                self::invalidarSesionesUsuario($db, $id);
-            }
+            if (!$active) self::invalidarSesionesUsuario($db, $id);
 
             self::audit(
                 $auth,
@@ -270,7 +265,7 @@ final class Usuarios
 
     private static function eliminarDatos(array $auth, array $body): array
     {
-        $db = app_db();
+        $db = $auth['db'];
         $id = positive_id($body['id'] ?? null, 'usuario');
         if ($id === (int)$auth['id_usuario']) {
             api_error('No podés eliminar tu propia sesión.', 'USUARIO_ACTUAL_ELIMINAR', 409);
@@ -278,9 +273,9 @@ final class Usuarios
 
         return transaction($db, static function () use ($db, $auth, $id): array {
             $lock = $db->prepare(
-                'SELECT idUsuario, usuario, email, rol, activo
+                'SELECT id_usuario, nombre_completo, usuario, rol, activo
                  FROM sis_usuarios
-                 WHERE idUsuario = ?
+                 WHERE id_usuario = ?
                  FOR UPDATE'
             );
             $lock->execute([$id]);
@@ -291,24 +286,17 @@ final class Usuarios
                 self::assertAnotherActiveAdmin($db, $id);
             }
 
-            // Eliminar un usuario debe ser una baja definitiva real, incluso si ya
-            // inició sesión alguna vez. Conservamos los historiales funcionales,
-            // pero desligados del usuario eliminado; las sesiones sí se eliminan
-            // porque su FK impide borrar sis_usuarios mientras existan.
-            $db->prepare('DELETE FROM sis_sesiones WHERE idUsuario = ?')->execute([$id]);
-            $db->prepare('UPDATE sis_login_auditoria SET idUsuario = NULL WHERE idUsuario = ?')->execute([$id]);
-            $db->prepare('UPDATE socios_historial_estados SET id_usuario = NULL WHERE id_usuario = ?')->execute([$id]);
-            $db->prepare('UPDATE auditoria SET id_usuario = NULL WHERE id_usuario = ?')->execute([$id]);
-
-            $delete = $db->prepare('DELETE FROM sis_usuarios WHERE idUsuario = ?');
+            // Las FK reales de Cooperadora conservan auditoría y eliminados con
+            // ON DELETE SET NULL, y las sesiones se eliminan con ON DELETE CASCADE.
+            $delete = $db->prepare('DELETE FROM sis_usuarios WHERE id_usuario = ?');
             $delete->execute([$id]);
             if ($delete->rowCount() !== 1) {
                 api_error('El usuario ya no existe.', 'USUARIO_NO_ENCONTRADO', 404);
             }
 
             self::audit($auth, 'ELIMINAR_USUARIO', $id, [
+                'nombre_completo' => (string)$user['nombre_completo'],
                 'usuario' => (string)$user['usuario'],
-                'email' => $user['email'],
                 'rol' => (string)$user['rol'],
                 'activo' => (bool)$user['activo'],
             ], null);
@@ -323,9 +311,16 @@ final class Usuarios
         return positive_id($value, 'usuario');
     }
 
+    private static function fullName(mixed $value): string
+    {
+        $name = clean_text($value, 120, false);
+        if ($name === '') api_error('El nombre completo es obligatorio.', 'VALIDATION_ERROR', 422);
+        return $name;
+    }
+
     private static function username(mixed $value): string
     {
-        $username = clean_text($value, 100, false);
+        $username = clean_text($value, 80, false);
         if ($username === '') api_error('El usuario es obligatorio.', 'VALIDATION_ERROR');
         $length = function_exists('mb_strlen') ? mb_strlen($username, 'UTF-8') : strlen($username);
         if ($length < 3) api_error('El usuario debe tener al menos 3 caracteres.', 'VALIDATION_ERROR');
@@ -333,15 +328,6 @@ final class Usuarios
             api_error('El usuario solo puede contener letras, números, punto, guion, guion bajo o arroba.', 'VALIDATION_ERROR');
         }
         return $username;
-    }
-
-    private static function email(mixed $value): ?string
-    {
-        $email = optional_text($value, 190, false);
-        if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            api_error('El email ingresado no es válido.', 'VALIDATION_ERROR');
-        }
-        return $email;
     }
 
     private static function role(mixed $value): string
@@ -366,111 +352,67 @@ final class Usuarios
 
     private static function assertUniqueUsername(PDO $db, string $username, ?int $excludeId): void
     {
-        $sql = 'SELECT idUsuario FROM sis_usuarios WHERE usuario = ?';
+        $sql = 'SELECT id_usuario FROM sis_usuarios WHERE usuario = ?';
         $params = [$username];
         if ($excludeId !== null) {
-            $sql .= ' AND idUsuario <> ?';
+            $sql .= ' AND id_usuario <> ?';
             $params[] = $excludeId;
         }
         $sql .= ' LIMIT 1';
         $statement = $db->prepare($sql);
         $statement->execute($params);
-        if ($statement->fetchColumn()) {
+        if ($statement->fetchColumn() !== false) {
             api_error('Ya existe un usuario con ese nombre en el sistema.', 'USUARIO_DUPLICADO', 409);
         }
     }
 
-    private static function assertUniqueEmail(PDO $db, ?string $email, ?int $excludeId): void
-    {
-        if ($email === null) return;
-        $sql = 'SELECT idUsuario FROM sis_usuarios WHERE email = ?';
-        $params = [$email];
-        if ($excludeId !== null) {
-            $sql .= ' AND idUsuario <> ?';
-            $params[] = $excludeId;
-        }
-        $sql .= ' LIMIT 1';
-        $statement = $db->prepare($sql);
-        $statement->execute($params);
-        if ($statement->fetchColumn()) {
-            api_error('Ya existe un usuario con ese email.', 'EMAIL_DUPLICADO', 409);
-        }
-    }
-
-    /**
-     * Invalida sesiones de un usuario. Las sesiones son datos efímeros: si el
-     * UPDATE lógico falla por una particularidad del esquema/trigger del host,
-     * se elimina la fila como fallback para mantener exactamente la misma
-     * garantía de seguridad (la sesión deja de ser utilizable).
-     */
     private static function invalidarSesionesUsuario(
         PDO $db,
         int $userId,
         ?int $exceptSessionId = null
     ): void {
-        $where = 'idUsuario = ?';
+        $where = 'id_usuario = ?';
         $params = [$userId];
         if ($exceptSessionId !== null) {
-            $where .= ' AND idSesion <> ?';
+            $where .= ' AND id_sesion <> ?';
             $params[] = $exceptSessionId;
         }
 
-        try {
-            $db->prepare("UPDATE sis_sesiones SET activo = 0 WHERE {$where}")
-                ->execute($params);
-            return;
-        } catch (Throwable $error) {
-            error_log(
-                sprintf(
-                    'Falló invalidación lógica de sesiones para usuario %d; se usa eliminación segura: %s',
-                    $userId,
-                    $error->getMessage()
-                )
-            );
-        }
-
-        $db->prepare("DELETE FROM sis_sesiones WHERE {$where}")->execute($params);
+        $db->prepare("UPDATE sis_sesiones SET activa = 0 WHERE {$where}")
+            ->execute($params);
     }
 
     private static function assertAnotherActiveAdmin(PDO $db, int $excludeId): void
     {
-        // Bloquea el conjunto de administradores activos dentro de la transacción.
-        // Así dos solicitudes concurrentes no pueden verse mutuamente como "el otro"
-        // y dejar al sistema sin ningún administrador activo.
         $statement = $db->query(
-            "SELECT idUsuario FROM sis_usuarios
+            "SELECT id_usuario FROM sis_usuarios
              WHERE rol = 'admin' AND activo = 1
-             ORDER BY idUsuario
+             ORDER BY id_usuario
              FOR UPDATE"
         );
-        $hasAnother = false;
         foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $adminId) {
-            if ((int)$adminId !== $excludeId) {
-                $hasAnother = true;
-                break;
-            }
+            if ((int)$adminId !== $excludeId) return;
         }
-        if (!$hasAnother) {
-            api_error(
-                'El sistema debe conservar al menos un administrador activo.',
-                'ULTIMO_ADMIN_ACTIVO',
-                409
-            );
-        }
+
+        api_error(
+            'El sistema debe conservar al menos un administrador activo.',
+            'ULTIMO_ADMIN_ACTIVO',
+            409
+        );
     }
 
     private static function publicUser(
         int $id,
+        string $fullName,
         string $username,
-        ?string $email,
         string $role,
         bool $active,
         bool $current
     ): array {
         return [
             'id' => $id,
+            'nombre_completo' => $fullName,
             'usuario' => $username,
-            'email' => $email,
             'rol' => $role,
             'activo' => $active,
             'sesion_actual' => $current,

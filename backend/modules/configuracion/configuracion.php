@@ -35,27 +35,23 @@ final class Configuracion
     {
         $auth = require_admin();
         $result = self::eliminarDefinitivoItemDatos($auth, request_body());
-        api_success($result, 'La opción se eliminó definitivamente.');
+        api_success($result, 'La opción se eliminó correctamente.');
+    }
+
+    public static function eliminarDefinitivoItem(): never
+    {
+        self::eliminarItem();
     }
 
     public static function darBajaItem(): never
     {
         $auth = require_admin();
-        $result = self::establecerEstadoItemDatos($auth, request_body(), false);
-        api_success($result, 'La opción se dio de baja correctamente.');
-    }
-
-    public static function eliminarDefinitivoItem(): never
-    {
-        $auth = require_admin();
-        $result = self::eliminarDefinitivoItemDatos($auth, request_body());
-        api_success($result, 'La opción se eliminó definitivamente.');
+        self::establecerEstadoItemDatos($auth, request_body(), false);
     }
 
     public static function reactivarItem(): never
     {
         $auth = require_admin();
-        $result = self::cambiarEstadoItemDatos($auth, request_body(), true);
-        api_success($result, 'La opción se reactivó correctamente.');
+        self::establecerEstadoItemDatos($auth, request_body(), true);
     }
 }

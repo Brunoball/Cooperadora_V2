@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faBell,
   faCalendarDays,
   faCircleCheck,
   faClock,
+  faHouse,
   faRotateRight,
-  faTags,
-
   faUsers,
   faWallet,
 } from "@fortawesome/free-solid-svg-icons";
@@ -24,15 +22,12 @@ const money = (value) =>
 
 const EMPTY = {
   periodo: {},
-  socios: {},
+  alumnos: {},
   familias: {},
-  categorias: { distribucion: [] },
   cuotas: {},
   contable: {},
-  estado: {},
   actividad: {},
   serie_cuotas: [],
-  pagos_recientes: [],
   fuentes: {},
 };
 
@@ -85,7 +80,7 @@ function FeaturedGeneralIndicator({ icon, label, value, detail, tone = "default"
 
 function PaymentChart({ items }) {
   const maximum = useMemo(
-    () => Math.max(1, ...items.map((item) => Number(item.pagadas || 0))),
+    () => Math.max(1, ...items.map((item) => Number(item.cubiertas || 0))),
     [items],
   );
 
@@ -93,7 +88,7 @@ function PaymentChart({ items }) {
     <div
       className="admin-dashboard__chart"
       role="img"
-      aria-label="Cuotas registradas durante los últimos seis períodos"
+      aria-label="Cuotas cubiertas durante los últimos seis períodos de Cooperadora"
     >
       <div className="admin-dashboard__chartGrid" aria-hidden="true">
         <i />
@@ -103,16 +98,16 @@ function PaymentChart({ items }) {
       </div>
       <div className="admin-dashboard__chartColumns">
         {items.map((item) => {
-          const paid = Number(item.pagadas || 0);
-          const height = paid > 0 ? Math.max(5, (paid / maximum) * 100) : 0;
+          const covered = Number(item.cubiertas || 0);
+          const height = covered > 0 ? Math.max(5, (covered / maximum) * 100) : 0;
           return (
             <div className="admin-dashboard__chartMonth" key={item.periodo}>
-              <strong className="admin-dashboard__chartValue">{paid}</strong>
+              <strong className="admin-dashboard__chartValue">{covered}</strong>
               <div className="admin-dashboard__bars">
                 <i
                   className="is-paid"
                   style={{ height: `${height}%` }}
-                  title={`${paid} cuota${paid === 1 ? "" : "s"} registrada${paid === 1 ? "" : "s"}`}
+                  title={`${covered} cuota${covered === 1 ? "" : "s"} cubierta${covered === 1 ? "" : "s"}`}
                 />
               </div>
               <strong>{item.etiqueta}</strong>
@@ -142,7 +137,7 @@ export default function Dashboard() {
         if (requestError?.name !== "AbortError") {
           setError(
             requestError?.message ||
-              "No se pudo cargar el panel de administración.",
+              "No se pudo cargar el panel de Cooperadora.",
           );
         }
       })
@@ -153,59 +148,29 @@ export default function Dashboard() {
   }, [reloadKey]);
 
   const {
-    socios,
-    familias,
-    cuotas,
-    contable,
-    estado,
-    periodo,
+    alumnos = {},
+    familias = {},
+    cuotas = {},
+    contable = {},
+    periodo = {},
   } = summary;
+
   const balance = Number(contable.saldo_mes || 0);
   const currentCompliance = Number(cuotas.cumplimiento_mes || 0);
+  const feesEnabled = periodo.cuotas_habilitadas !== false;
+  const covered = Number(cuotas.cubiertas_mes || 0);
+  const expected = Number(cuotas.esperadas_mes || 0);
 
-  const statusItems = [
-    {
-      icon: faTags,
-      label: "Socios con categoría",
-      value: estado.socios_con_categoria,
-      detail: `${Number(socios.con_categoria || 0)} de ${Number(socios.activos || 0)} socios activos`,
-    },
-    {
-      icon: faUsers,
-      label: "Personas con familia",
-      value: estado.socios_con_familia,
-      detail: `${Number(socios.con_familia || 0)} de ${Number(socios.personas_activas || 0)} personas activas`,
-    },
-  ];
-
-  // Algunas instalaciones de RH Negativo no tienen aún el campo de
-  // recordatorios. No mostramos un 0% engañoso cuando esa fuente no existe.
-  if (summary.fuentes?.recordatorios_disponibles !== false) {
-    statusItems.push({
-      icon: faBell,
-      label: "Recordatorios habilitados",
-      value: estado.socios_con_recordatorio,
-      detail: `${Number(socios.con_recordatorio || 0)} socios reciben aviso de pago`,
-    });
-  }
-
-  const qualityAverage = statusItems.length
-    ? Math.round(
-        statusItems.reduce((total, item) => total + Number(item.value || 0), 0) /
-          statusItems.length,
-      )
-    : 0;
-
-  const qualityDetail = statusItems
-    .map((item) => `${item.label}: ${Math.max(0, Math.min(100, Number(item.value || 0)))}%`)
-    .join(" · ");
+  const complianceDetail = feesEnabled
+    ? `${covered} cubiertas de ${expected} esperadas`
+    : "Enero y febrero no tienen cuota mensual programada";
 
   return (
     <section className="admin-dashboard">
       <header className="admin-dashboard__header">
         <div>
           <h1>Panel de gestión</h1>
-          <p>Resumen actualizado con información registrada en la base.</p>
+          <p>Resumen actualizado de alumnos, cuotas y movimientos de Cooperadora.</p>
         </div>
         <div className="admin-dashboard__period">
           <FontAwesomeIcon icon={faCalendarDays} />
@@ -233,46 +198,48 @@ export default function Dashboard() {
         <section className="admin-dashboard__metrics">
           <MetricCard
             icon={faUsers}
-            title="Socios activos"
-            value={Number(socios.activos || 0)}
-            detail={`${Number(socios.inactivos || 0)} de baja`}
+            title="Alumnos activos"
+            value={Number(alumnos.activos || 0)}
+            detail={`${Number(alumnos.bajas || 0)} de baja · ${Number(alumnos.egresados || 0)} egresados`}
           />
           <MetricCard
             icon={faCircleCheck}
             title="Cuotas cubiertas"
-            value={Number(cuotas.pagadas_mes || 0)}
-            detail={`${Number(cuotas.condonadas_mes || 0)} condonadas · Período ${periodo.mes_nombre || "actual"}`}
+            value={covered}
+            detail={
+              feesEnabled
+                ? `${Number(cuotas.pagadas_mes || 0)} pagadas · ${Number(cuotas.condonadas_mes || 0)} condonadas`
+                : "Sin cuota mensual en este período"
+            }
             tone="success"
           />
           <MetricCard
             icon={faClock}
             title="Cuotas pendientes"
             value={Number(cuotas.pendientes_mes || 0)}
-            detail={`${currentCompliance}% de cumplimiento`}
-            tone={Number(cuotas.pendientes_mes || 0) > 0 ? "warning" : "success"}
+            detail={feesEnabled ? `${currentCompliance}% de cumplimiento · ${expected} esperadas` : "Próximo período: marzo"}
+            tone={feesEnabled && Number(cuotas.pendientes_mes || 0) > 0 ? "warning" : "success"}
           />
           <MetricCard
             icon={faWallet}
             title="Saldo del mes"
             value={money(contable.saldo_mes)}
-            detail={`${Number(cuotas.cobros_registrados_mes || 0)} cobros registrados`}
+            detail={`Ingresos ${money(contable.ingresos_mes)} · Egresos ${money(contable.egresos_mes)}`}
             tone={balance < 0 ? "danger" : "balance"}
             keepValueVisible
           />
         </section>
 
-
-
         <div className="admin-dashboard__mainGrid">
           <article className="admin-dashboard__panel admin-dashboard__panel--chart">
             <header className="admin-dashboard__panelHead">
               <div>
-                <h2>Cuotas registradas</h2>
-                <p>Cantidad de períodos pagados durante los últimos seis meses.</p>
+                <h2>Cuotas cubiertas</h2>
+                <p>Alumnos con el período cubierto durante los últimos seis meses de cuota.</p>
               </div>
               <span className="admin-dashboard__statusChip is-complete">
                 <FontAwesomeIcon icon={faCircleCheck} />
-                {Number(cuotas.pagadas_mes || 0)} pagadas del período
+                {feesEnabled ? `${covered} cubiertas del período` : "Sin cuota este mes"}
               </span>
             </header>
             <PaymentChart items={summary.serie_cuotas || []} />
@@ -282,46 +249,46 @@ export default function Dashboard() {
             <header className="admin-dashboard__panelHead">
               <div>
                 <h2>Indicadores generales</h2>
-                <p>Totales principales del padrón y calidad de los datos.</p>
+                <p>Estado actual del padrón y la cobranza mensual.</p>
               </div>
             </header>
 
             <div className="admin-dashboard__indicatorGrid">
               <FeaturedGeneralIndicator
                 icon={faCircleCheck}
-                label="Calidad general de datos"
-                value={`${qualityAverage}%`}
-                detail={qualityDetail}
+                label="Cumplimiento del mes"
+                value={feesEnabled ? `${currentCompliance}%` : "—"}
+                detail={complianceDetail}
                 tone="quality"
               />
 
               <GeneralIndicator
                 icon={faUsers}
-                label="Personas activas"
-                value={Number(socios.personas_activas || 0)}
-                detail="Registradas actualmente"
+                label="Alumnos activos"
+                value={Number(alumnos.activos || 0)}
+                detail="En el padrón actual"
                 tone="people"
               />
               <GeneralIndicator
-                icon={faUsers}
-                label="Socios de baja"
-                value={Number(socios.inactivos || 0)}
-                detail="Fuera del padrón activo"
+                icon={faClock}
+                label="Alumnos de baja"
+                value={Number(alumnos.bajas || 0)}
+                detail="No incluye egresados"
                 tone="muted"
               />
               <GeneralIndicator
-                icon={faTags}
-                label="Con categoría"
-                value={Number(socios.con_categoria || 0)}
-                detail="Socios categorizados"
-                tone="category"
+                icon={faCircleCheck}
+                label="Egresados"
+                value={Number(alumnos.egresados || 0)}
+                detail={`${Number(alumnos.egresados_mes || 0)} egresados este mes`}
+                tone="success"
               />
               <GeneralIndicator
-                icon={faCircleCheck}
-                label="Cobros del mes"
-                value={Number(cuotas.cobros_registrados_mes || 0)}
-                detail={`Período ${periodo.mes_nombre || "actual"}`}
-                tone="success"
+                icon={faHouse}
+                label="Familias activas"
+                value={Number(familias.activas || 0)}
+                detail={`${Number(alumnos.con_familia || 0)} alumnos vinculados`}
+                tone="category"
               />
             </div>
           </aside>

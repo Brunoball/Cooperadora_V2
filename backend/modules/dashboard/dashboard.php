@@ -1,215 +1,376 @@
 <?php
 declare(strict_types=1);
 
-/** Dashboard compatible con los esquemas histórico y RH Negativo V2. */
+/**
+ * Dashboard principal de Cooperadora V2.
+ *
+ * Lee exclusivamente el esquema real de Cooperadora: alumnos, familias,
+ * pagos e información contable. No depende de tablas heredadas de RH.
+ */
 final class Dashboard
 {
+    private const BILLABLE_MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    private const ANNUAL_PERIOD = 13;
+    private const FIRST_HALF_PERIOD = 15;
+    private const SECOND_HALF_PERIOD = 16;
+
     public static function resumen(): never
     {
         $auth = auth_context();
-        api_success(['resumen' => self::resumenDatos($auth['db'])]);
+
+        try {
+            api_success(['resumen' => self::resumenDatos($auth['db'])]);
+        } catch (PDOException $error) {
+            error_log('[dashboard] ' . $error->getMessage());
+            api_error(
+                'No se pudo construir el dashboard con la base actual de Cooperadora.',
+                'DASHBOARD_DB_ERROR',
+                500
+            );
+        }
     }
 
     private static function resumenDatos(PDO $db): array
     {
-        $today = new DateTimeImmutable('today');
+        $timezone = new DateTimeZone('America/Argentina/Cordoba');
+        $today = new DateTimeImmutable('today', $timezone);
         $start = $today->modify('first day of this month');
         $end = $start->modify('+1 month');
         $year = (int)$today->format('Y');
         $month = (int)$today->format('n');
-        $modern = self::columnExists($db, 'socios', 'vigente');
-        $hasDeletedArchive = self::tableExists($db, 'socios_eliminados');
-        $notDeleted = $hasDeletedArchive
-            ? ' AND NOT EXISTS (SELECT 1 FROM socios_eliminados se_arch WHERE se_arch.id_socio = socios.id_socio)'
-            : '';
-        $notDeletedAlias = $hasDeletedArchive
-            ? ' AND NOT EXISTS (SELECT 1 FROM socios_eliminados se_arch WHERE se_arch.id_socio = s.id_socio)'
-            : '';
-        $activeWhere = ($modern ? 'vigente = 1' : "tipo_socio = 'PERSONA' AND estado = 'ACTIVO'") . $notDeleted;
-        $activeSocioWhere = ($modern ? 's.vigente = 1' : "s.tipo_socio = 'PERSONA' AND s.estado = 'ACTIVO'") . $notDeletedAlias;
-        $inactiveWhere = ($modern ? 'vigente = 0' : "tipo_socio = 'PERSONA' AND estado = 'INACTIVO'") . $notDeleted;
-        $dateColumn = self::columnExists($db, 'socios', 'fecha_ingreso') ? 'fecha_ingreso' : 'fecha_alta';
 
-        $active = self::safeCount($db, "SELECT COUNT(*) FROM socios WHERE {$activeWhere}");
-        $inactive = self::safeCount($db, "SELECT COUNT(*) FROM socios WHERE {$inactiveWhere}");
-        $new = self::safeCount($db, "SELECT COUNT(*) FROM socios WHERE {$activeWhere} AND {$dateColumn} >= ? AND {$dateColumn} < ?", [$start->format('Y-m-d'), $end->format('Y-m-d')]);
-        $withCategory = self::columnExists($db, 'socios', 'id_categoria')
-            ? self::safeCount($db, "SELECT COUNT(*) FROM socios WHERE {$activeWhere} AND id_categoria IS NOT NULL") : 0;
-        $withReminder = self::columnExists($db, 'socios', 'enviar_recordatorio')
-            ? self::safeCount($db, "SELECT COUNT(*) FROM socios WHERE {$activeWhere} AND enviar_recordatorio = 1") : 0;
-
-        [$familyTable, $familyLink] = self::familyTables($db);
-        $families = $familyTable === null ? 0 : self::safeCount($db, "SELECT COUNT(*) FROM `{$familyTable}`" . (self::columnExists($db, $familyTable, 'activo') ? ' WHERE activo = 1' : ''));
-        $familyWhere = $activeSocioWhere;
-        if ($familyLink !== null && self::columnExists($db, $familyLink, 'activo')) $familyWhere .= ' AND fs.activo = 1';
-        if ($familyLink !== null && self::columnExists($db, $familyLink, 'desde')) $familyWhere .= ' AND (fs.desde IS NULL OR fs.desde <= CURDATE())';
-        if ($familyLink !== null && self::columnExists($db, $familyLink, 'hasta')) $familyWhere .= ' AND (fs.hasta IS NULL OR fs.hasta >= CURDATE())';
-        $withFamily = $familyLink === null ? 0 : self::safeCount($db, "SELECT COUNT(DISTINCT s.id_socio) FROM socios s INNER JOIN `{$familyLink}` fs ON fs.id_socio = s.id_socio WHERE {$familyWhere}");
-
-        $payments = self::currentPayments($db, $year, $month);
-        $expected = $withCategory > 0 ? $withCategory : $active;
-        $resolved = min($expected, $payments['pagadas'] + $payments['condonadas']);
-        $quotaIncome = self::safeSum($db, "SELECT COALESCE(SUM(monto), 0) FROM pagos WHERE estado = 'PAGADO' AND fecha_pago >= ? AND fecha_pago < ?", [$start->format('Y-m-d'), $end->format('Y-m-d')]);
-        $registrationIncome = self::tableExists($db, 'pagos_inscripcion')
-            ? self::safeSum($db, "SELECT COALESCE(SUM(monto), 0) FROM pagos_inscripcion WHERE fecha_pago >= ? AND fecha_pago < ?", [$start->format('Y-m-d'), $end->format('Y-m-d')])
-            : 0.0;
-        $partnerIncome = $quotaIncome + $registrationIncome;
-        $otherIncome = self::accountingSum($db, 'contable_ingresos', $start, $end);
-        $expenses = self::accountingSum($db, 'contable_egresos', $start, $end);
+        $students = self::studentSummary($db, $start, $end);
+        $families = self::familySummary($db);
+        $coverage = self::currentCoverage($db, $year, $month, $end);
+        $accounting = self::accountingSummary($db, $start, $end);
 
         return [
-            'periodo' => ['fecha' => $today->format('Y-m-d'), 'anio' => $year, 'mes' => $month, 'mes_nombre' => self::monthName($month)],
-            'socios' => [
-                'activos' => $active, 'inactivos' => $inactive, 'personas_activas' => $active,
-                'altas_mes' => $new, 'con_familia' => $withFamily, 'sin_familia' => max(0, $active - $withFamily),
-                'con_categoria' => $withCategory, 'sin_categoria' => max(0, $active - $withCategory),
-                'con_recordatorio' => $withReminder, 'sin_recordatorio' => max(0, $active - $withReminder),
+            'periodo' => [
+                'fecha' => $today->format('Y-m-d'),
+                'anio' => $year,
+                'mes' => $month,
+                'mes_nombre' => self::monthName($month),
+                'cuotas_habilitadas' => self::isBillableMonth($month),
             ],
-            'familias' => ['activas' => $families],
-            'categorias' => ['activas' => self::activeCategories($db), 'distribucion' => self::categoryDistribution($db, $activeSocioWhere)],
+            'alumnos' => $students,
+            'familias' => $families,
             'cuotas' => [
-                'esperadas_mes' => $expected, 'pagadas_mes' => $payments['pagadas'],
-                'condonadas_mes' => $payments['condonadas'], 'pendientes_mes' => max(0, $expected - $resolved),
-                'cumplimiento_mes' => self::percentage($resolved, $expected),
-                'cobros_registrados_mes' => $payments['operaciones'], 'cobros_sin_importe_mes' => $payments['sin_importe'],
+                'esperadas_mes' => $coverage['esperadas'],
+                'pagadas_mes' => $coverage['pagadas'],
+                'condonadas_mes' => $coverage['condonadas'],
+                'cubiertas_mes' => $coverage['cubiertas'],
+                'pendientes_mes' => $coverage['pendientes'],
+                'cumplimiento_mes' => self::percentage($coverage['cubiertas'], $coverage['esperadas']),
+                'cobros_registrados_mes' => $accounting['cobros_registrados_mes'],
+                'condonaciones_registradas_mes' => $accounting['condonaciones_registradas_mes'],
             ],
             'contable' => [
-                'ingresos_socios_mes' => self::money($partnerIncome), 'otros_ingresos_mes' => self::money($otherIncome),
-                'ingresos_mes' => self::money($partnerIncome + $otherIncome), 'egresos_mes' => self::money($expenses),
-                'saldo_mes' => self::money($partnerIncome + $otherIncome - $expenses),
-            ],
-            'estado' => [
-                'socios_con_familia' => self::percentage($withFamily, $active),
-                'socios_con_categoria' => self::percentage($withCategory, $active),
-                'socios_con_recordatorio' => self::percentage($withReminder, $active),
+                'ingresos_cuotas_mes' => self::money($accounting['ingresos_cuotas_mes']),
+                'otros_ingresos_mes' => self::money($accounting['otros_ingresos_mes']),
+                'ingresos_mes' => self::money($accounting['ingresos_mes']),
+                'egresos_mes' => self::money($accounting['egresos_mes']),
+                'saldo_mes' => self::money($accounting['saldo_mes']),
+                'movimientos_ingresos_mes' => $accounting['movimientos_ingresos_mes'],
+                'movimientos_egresos_mes' => $accounting['movimientos_egresos_mes'],
             ],
             'actividad' => [
-                'altas_mes' => $new, 'bajas_mes' => self::stateEvents($db, 'BAJA', $start, $end),
-                'reactivaciones_mes' => self::stateEvents($db, 'REACTIVACION', $start, $end), 'cobros_mes' => $payments['operaciones'],
+                'altas_mes' => $students['altas_mes'],
+                'egresados_mes' => $students['egresados_mes'],
+                'cobros_mes' => $accounting['cobros_registrados_mes'],
             ],
-            'serie_cuotas' => self::paymentSeries($db, $start->modify('-5 months'), $end),
-            'pagos_recientes' => [],
+            'serie_cuotas' => self::paymentSeries($db, $today),
             'fuentes' => [
-                'contable_disponible' => self::tableExists($db, 'contable_ingresos') && self::tableExists($db, 'contable_egresos'),
-                'importes_legacy_incompletos' => $payments['sin_importe'] > 0,
-                'recordatorios_disponibles' => self::columnExists($db, 'socios', 'enviar_recordatorio'),
+                'esquema' => 'cooperadora_v2',
+                'cuotas_habilitadas_mes' => self::isBillableMonth($month),
             ],
         ];
     }
 
-    private static function currentPayments(PDO $db, int $year, int $month): array
+    private static function studentSummary(PDO $db, DateTimeImmutable $start, DateTimeImmutable $end): array
     {
-        if (self::columnExists($db, 'pagos', 'anio') && self::columnExists($db, 'pagos', 'id_mes')) {
-            $where = 'anio = ? AND id_mes = ?'; $params = [$year, $month];
-        } elseif (self::columnExists($db, 'pagos', 'anio') && self::columnExists($db, 'pagos', 'mes')) {
-            $where = 'anio = ? AND mes = ?'; $params = [$year, $month];
-        } elseif (self::columnExists($db, 'pagos', 'anio_aplicado') && self::columnExists($db, 'pagos', 'id_periodo')) {
-            $where = 'anio_aplicado = ? AND id_periodo IN (?, 7)'; $params = [$year, (int)ceil($month / 2)];
-        } else {
-            $periodStart = new DateTimeImmutable(sprintf('%04d-%02d-01', $year, $month));
-            $where = 'fecha_pago >= ? AND fecha_pago < ?'; $params = [$periodStart->format('Y-m-d'), $periodStart->modify('+1 month')->format('Y-m-d')];
-        }
-        $rows = self::safeRows($db, "SELECT estado, COUNT(DISTINCT id_socio) AS socios, COUNT(*) AS operaciones, SUM(monto IS NULL) AS sin_importe FROM pagos WHERE {$where} GROUP BY estado", $params);
-        $result = ['pagadas' => 0, 'condonadas' => 0, 'operaciones' => 0, 'sin_importe' => 0];
-        foreach ($rows as $row) {
-            $state = strtoupper((string)($row['estado'] ?? ''));
-            if ($state === 'PAGADO') $result['pagadas'] += (int)$row['socios'];
-            if ($state === 'CONDONADO') $result['condonadas'] += (int)$row['socios'];
-            if (in_array($state, ['PAGADO', 'CONDONADO'], true)) {
-                $result['operaciones'] += (int)$row['operaciones'];
-                $result['sin_importe'] += (int)$row['sin_importe'];
-            }
-        }
-        return $result;
+        $row = self::fetchOne(
+            $db,
+            'SELECT
+                COUNT(*) AS total,
+                SUM(a.activo = 1) AS activos,
+                SUM(a.activo = 0 AND ae.id_egresado IS NULL) AS bajas,
+                SUM(a.activo = 0 AND ae.id_egresado IS NOT NULL) AS egresados,
+                SUM(a.activo = 1 AND a.id_familia IS NOT NULL) AS con_familia,
+                SUM(a.activo = 1 AND a.id_categoria IS NOT NULL AND a.id_cat_monto IS NOT NULL) AS con_categoria,
+                SUM(a.activo = 1 AND a.telefono IS NOT NULL AND TRIM(a.telefono) <> \'\') AS con_telefono
+             FROM alumnos a
+             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno'
+        );
+
+        $newStudents = self::scalarInt(
+            $db,
+            'SELECT COUNT(*) FROM alumnos WHERE activo = 1 AND ingreso >= ? AND ingreso < ?',
+            [$start->format('Y-m-d'), $end->format('Y-m-d')]
+        );
+        $graduates = self::scalarInt(
+            $db,
+            'SELECT COUNT(*) FROM alumnos_egresados WHERE fecha_egreso >= ? AND fecha_egreso < ?',
+            [$start->format('Y-m-d'), $end->format('Y-m-d')]
+        );
+
+        return [
+            'total' => (int)($row['total'] ?? 0),
+            'activos' => (int)($row['activos'] ?? 0),
+            'bajas' => (int)($row['bajas'] ?? 0),
+            'egresados' => (int)($row['egresados'] ?? 0),
+            'con_familia' => (int)($row['con_familia'] ?? 0),
+            'con_categoria' => (int)($row['con_categoria'] ?? 0),
+            'con_telefono' => (int)($row['con_telefono'] ?? 0),
+            'altas_mes' => $newStudents,
+            'egresados_mes' => $graduates,
+        ];
     }
 
-    private static function paymentSeries(PDO $db, DateTimeImmutable $start, DateTimeImmutable $end): array
+    private static function familySummary(PDO $db): array
     {
-        $rows = self::safeRows($db, "SELECT YEAR(fecha_pago) AS anio, MONTH(fecha_pago) AS mes, COUNT(*) AS pagadas, COALESCE(SUM(monto), 0) AS importe FROM pagos WHERE estado = 'PAGADO' AND fecha_pago >= ? AND fecha_pago < ? GROUP BY YEAR(fecha_pago), MONTH(fecha_pago)", [$start->format('Y-m-d'), $end->format('Y-m-d')]);
-        $indexed = [];
-        foreach ($rows as $row) $indexed[sprintf('%04d-%02d', $row['anio'], $row['mes'])] = $row;
-        $series = [];
-        for ($cursor = $start; $cursor < $end; $cursor = $cursor->modify('+1 month')) {
-            $key = $cursor->format('Y-m'); $row = $indexed[$key] ?? [];
-            $series[] = ['periodo' => $key, 'anio' => (int)$cursor->format('Y'), 'mes' => (int)$cursor->format('n'),
-                'etiqueta' => substr(self::monthName((int)$cursor->format('n')), 0, 3),
-                'pagadas' => (int)($row['pagadas'] ?? 0), 'importe' => self::money((float)($row['importe'] ?? 0))];
+        $row = self::fetchOne(
+            $db,
+            'SELECT COUNT(*) AS total, SUM(activo = 1) AS activas, SUM(activo = 0) AS inactivas FROM familias'
+        );
+
+        return [
+            'total' => (int)($row['total'] ?? 0),
+            'activas' => (int)($row['activas'] ?? 0),
+            'inactivas' => (int)($row['inactivas'] ?? 0),
+        ];
+    }
+
+    /**
+     * Calcula cuántos alumnos activos tienen cubierto el mes solicitado.
+     *
+     * Cooperadora maneja diez cuotas (marzo-diciembre), más Contado Anual,
+     * 1era Mitad (marzo-julio) y 2da Mitad (agosto-diciembre). Un pago de esas
+     * modalidades cubre el mes correspondiente sin duplicar al alumno.
+     */
+    private static function currentCoverage(PDO $db, int $year, int $month, DateTimeImmutable $end): array
+    {
+        if (!self::isBillableMonth($month)) {
+            return ['esperadas' => 0, 'pagadas' => 0, 'condonadas' => 0, 'cubiertas' => 0, 'pendientes' => 0];
         }
+
+        $periodIds = self::coveragePeriodIds($month);
+        $placeholders = implode(',', array_fill(0, count($periodIds), '?'));
+        $params = array_merge([$year], $periodIds, [$end->modify('-1 day')->format('Y-m-d')]);
+
+        $rows = self::fetchAll(
+            $db,
+            "SELECT
+                a.id_alumno,
+                MAX(CASE WHEN p.estado = 'pagado' THEN 1 ELSE 0 END) AS pagado,
+                MAX(CASE WHEN p.estado = 'condonado' THEN 1 ELSE 0 END) AS condonado
+             FROM alumnos a
+             LEFT JOIN pagos p
+               ON p.id_alumno = a.id_alumno
+              AND p.anio_aplicado = ?
+              AND p.id_mes IN ({$placeholders})
+             WHERE a.activo = 1
+               AND a.ingreso <= ?
+             GROUP BY a.id_alumno",
+            $params
+        );
+
+        $expected = count($rows);
+        $paid = 0;
+        $waived = 0;
+
+        foreach ($rows as $row) {
+            $hasPaid = (int)($row['pagado'] ?? 0) === 1;
+            $hasWaived = (int)($row['condonado'] ?? 0) === 1;
+            if ($hasPaid) {
+                $paid++;
+            } elseif ($hasWaived) {
+                $waived++;
+            }
+        }
+
+        $covered = $paid + $waived;
+        return [
+            'esperadas' => $expected,
+            'pagadas' => $paid,
+            'condonadas' => $waived,
+            'cubiertas' => $covered,
+            'pendientes' => max(0, $expected - $covered),
+        ];
+    }
+
+    private static function accountingSummary(PDO $db, DateTimeImmutable $start, DateTimeImmutable $end): array
+    {
+        $range = [$start->format('Y-m-d'), $end->format('Y-m-d')];
+
+        $paymentRow = self::fetchOne(
+            $db,
+            "SELECT
+                COALESCE(SUM(CASE WHEN estado = 'pagado' THEN COALESCE(monto_pago, monto_base, 0) ELSE 0 END), 0) AS total,
+                SUM(estado = 'pagado') AS cobros,
+                SUM(estado = 'condonado') AS condonaciones
+             FROM pagos
+             WHERE fecha_pago >= ? AND fecha_pago < ?",
+            $range
+        );
+        $incomeRow = self::fetchOne(
+            $db,
+            'SELECT COALESCE(SUM(importe), 0) AS total, COUNT(*) AS movimientos FROM ingresos WHERE fecha >= ? AND fecha < ?',
+            $range
+        );
+        $expenseRow = self::fetchOne(
+            $db,
+            'SELECT COALESCE(SUM(importe), 0) AS total, COUNT(*) AS movimientos FROM egresos WHERE fecha >= ? AND fecha < ?',
+            $range
+        );
+
+        $feeIncome = (float)($paymentRow['total'] ?? 0);
+        $otherIncome = (float)($incomeRow['total'] ?? 0);
+        $expenses = (float)($expenseRow['total'] ?? 0);
+        $income = $feeIncome + $otherIncome;
+
+        return [
+            'ingresos_cuotas_mes' => $feeIncome,
+            'otros_ingresos_mes' => $otherIncome,
+            'ingresos_mes' => $income,
+            'egresos_mes' => $expenses,
+            'saldo_mes' => $income - $expenses,
+            'cobros_registrados_mes' => (int)($paymentRow['cobros'] ?? 0),
+            'condonaciones_registradas_mes' => (int)($paymentRow['condonaciones'] ?? 0),
+            'movimientos_ingresos_mes' => (int)($incomeRow['movimientos'] ?? 0),
+            'movimientos_egresos_mes' => (int)($expenseRow['movimientos'] ?? 0),
+        ];
+    }
+
+    /** @return array<int,array<string,int|string>> */
+    private static function paymentSeries(PDO $db, DateTimeImmutable $today): array
+    {
+        $periods = self::lastBillableMonths($today, 6);
+        if ($periods === []) return [];
+
+        $years = array_map(static fn(array $period): int => $period['anio'], $periods);
+        $minYear = min($years);
+        $maxYear = max($years);
+
+        $rows = self::fetchAll(
+            $db,
+            "SELECT id_alumno, id_mes, anio_aplicado, estado
+             FROM pagos
+             WHERE anio_aplicado BETWEEN ? AND ?
+               AND estado IN ('pagado', 'condonado')
+               AND id_mes IN (3,4,5,6,7,8,9,10,11,12,13,15,16)",
+            [$minYear, $maxYear]
+        );
+
+        $series = [];
+        foreach ($periods as $period) {
+            $studentStates = [];
+            $coverageIds = array_fill_keys(self::coveragePeriodIds($period['mes']), true);
+
+            foreach ($rows as $row) {
+                if ((int)$row['anio_aplicado'] !== $period['anio']) continue;
+                if (!isset($coverageIds[(int)$row['id_mes']])) continue;
+
+                $studentId = (int)$row['id_alumno'];
+                $state = strtolower((string)$row['estado']);
+                if ($state === 'pagado') {
+                    $studentStates[$studentId] = 'pagado';
+                } elseif (!isset($studentStates[$studentId])) {
+                    $studentStates[$studentId] = 'condonado';
+                }
+            }
+
+            $paid = 0;
+            $waived = 0;
+            foreach ($studentStates as $state) {
+                if ($state === 'pagado') $paid++;
+                else $waived++;
+            }
+
+            $series[] = [
+                'periodo' => sprintf('%04d-%02d', $period['anio'], $period['mes']),
+                'anio' => $period['anio'],
+                'mes' => $period['mes'],
+                'etiqueta' => substr(self::monthName($period['mes']), 0, 3),
+                'pagadas' => $paid,
+                'condonadas' => $waived,
+                'cubiertas' => $paid + $waived,
+            ];
+        }
+
         return $series;
     }
 
-    private static function categoryDistribution(PDO $db, string $activeSocioWhere): array
+    /** @return array<int,array{anio:int,mes:int}> */
+    private static function lastBillableMonths(DateTimeImmutable $today, int $limit): array
     {
-        $table = self::categoryTable($db);
-        if ($table === null || !self::columnExists($db, 'socios', 'id_categoria')) return [];
-        $rows = self::safeRows($db, "SELECT COALESCE(c.nombre, 'SIN CATEGORÍA') AS categoria, COUNT(*) AS cantidad FROM socios s LEFT JOIN `{$table}` c ON c.id_categoria = s.id_categoria WHERE {$activeSocioWhere} GROUP BY s.id_categoria, c.nombre ORDER BY cantidad DESC LIMIT 8");
-        return array_map(static fn(array $row): array => ['categoria' => (string)$row['categoria'], 'cantidad' => (int)$row['cantidad']], $rows);
+        $cursor = $today->modify('first day of this month');
+        $periods = [];
+
+        while (count($periods) < $limit) {
+            $month = (int)$cursor->format('n');
+            if (self::isBillableMonth($month)) {
+                $periods[] = ['anio' => (int)$cursor->format('Y'), 'mes' => $month];
+            }
+            $cursor = $cursor->modify('-1 month');
+        }
+
+        return array_reverse($periods);
     }
 
-    private static function activeCategories(PDO $db): int
+    /** @return int[] */
+    private static function coveragePeriodIds(int $month): array
     {
-        $table = self::categoryTable($db);
-        if ($table === null) return 0;
-        return self::safeCount($db, "SELECT COUNT(*) FROM `{$table}`" . (self::columnExists($db, $table, 'activo') ? ' WHERE activo = 1' : ''));
+        $periods = [$month, self::ANNUAL_PERIOD];
+        if ($month >= 3 && $month <= 7) $periods[] = self::FIRST_HALF_PERIOD;
+        if ($month >= 8 && $month <= 12) $periods[] = self::SECOND_HALF_PERIOD;
+        return $periods;
     }
 
-    private static function categoryTable(PDO $db): ?string
+    private static function isBillableMonth(int $month): bool
     {
-        if (self::tableExists($db, 'categoria')) return 'categoria';
-        if (self::tableExists($db, 'categorias')) return 'categorias';
-        return null;
+        return in_array($month, self::BILLABLE_MONTHS, true);
     }
 
-    private static function familyTables(PDO $db): array
+    private static function fetchOne(PDO $db, string $sql, array $params = []): array
     {
-        $family = self::tableExists($db, 'familias') ? 'familias' : null;
-        $link = self::tableExists($db, 'familias_socios') ? 'familias_socios' : (self::tableExists($db, 'familia_socios') ? 'familia_socios' : null);
-        return [$family, $link];
+        $statement = $db->prepare($sql);
+        $statement->execute($params);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        return is_array($row) ? $row : [];
     }
 
-    private static function stateEvents(PDO $db, string $event, DateTimeImmutable $start, DateTimeImmutable $end): int
+    /** @return array<int,array<string,mixed>> */
+    private static function fetchAll(PDO $db, string $sql, array $params = []): array
     {
-        if (!self::tableExists($db, 'socios_historial_estados')) return 0;
-        $date = self::columnExists($db, 'socios_historial_estados', 'fecha_evento') ? 'fecha_evento' : 'creado_en';
-        return self::safeCount($db, "SELECT COUNT(*) FROM socios_historial_estados WHERE tipo_evento = ? AND {$date} >= ? AND {$date} < ?", [$event, $start->format('Y-m-d'), $end->format('Y-m-d')]);
+        $statement = $db->prepare($sql);
+        $statement->execute($params);
+        $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+        return is_array($rows) ? $rows : [];
     }
 
-    private static function accountingSum(PDO $db, string $table, DateTimeImmutable $start, DateTimeImmutable $end): float
+    private static function scalarInt(PDO $db, string $sql, array $params = []): int
     {
-        if (!self::tableExists($db, $table)) return 0.0;
-        $active = self::columnExists($db, $table, 'estado') ? " AND estado = 'ACTIVO'" : '';
-        return self::safeSum($db, "SELECT COALESCE(SUM(importe), 0) FROM `{$table}` WHERE fecha >= ? AND fecha < ?{$active}", [$start->format('Y-m-d'), $end->format('Y-m-d')]);
+        $statement = $db->prepare($sql);
+        $statement->execute($params);
+        return (int)$statement->fetchColumn();
     }
 
-    private static function tableExists(PDO $db, string $table): bool
-    { return self::safeCount($db, 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [$table]) > 0; }
-
-    private static function columnExists(PDO $db, string $table, string $column): bool
-    { return self::safeCount($db, 'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', [$table, $column]) > 0; }
-
-    private static function safeRows(PDO $db, string $sql, array $params = []): array
+    private static function money(float $value): string
     {
-        try { $statement = $db->prepare($sql); $statement->execute($params); return $statement->fetchAll() ?: []; }
-        catch (Throwable $error) { error_log('[dashboard] ' . $error->getMessage()); return []; }
+        return number_format($value, 2, '.', '');
     }
 
-    private static function safeCount(PDO $db, string $sql, array $params = []): int
+    private static function percentage(int $part, int $total): int
     {
-        try { $statement = $db->prepare($sql); $statement->execute($params); return (int)$statement->fetchColumn(); }
-        catch (Throwable $error) { error_log('[dashboard] ' . $error->getMessage()); return 0; }
+        if ($total <= 0) return 0;
+        return max(0, min(100, (int)round(($part / $total) * 100)));
     }
 
-    private static function safeSum(PDO $db, string $sql, array $params = []): float
-    {
-        try { $statement = $db->prepare($sql); $statement->execute($params); return (float)$statement->fetchColumn(); }
-        catch (Throwable $error) { error_log('[dashboard] ' . $error->getMessage()); return 0.0; }
-    }
-
-    private static function money(float $value): string { return number_format($value, 2, '.', ''); }
-    private static function percentage(int $part, int $total): int { return $total <= 0 ? 0 : max(0, min(100, (int)round(($part / $total) * 100))); }
     private static function monthName(int $month): string
     {
-        return [1 => 'ENERO', 2 => 'FEBRERO', 3 => 'MARZO', 4 => 'ABRIL', 5 => 'MAYO', 6 => 'JUNIO',
-            7 => 'JULIO', 8 => 'AGOSTO', 9 => 'SEPTIEMBRE', 10 => 'OCTUBRE', 11 => 'NOVIEMBRE', 12 => 'DICIEMBRE'][$month] ?? '';
+        return [
+            1 => 'ENERO', 2 => 'FEBRERO', 3 => 'MARZO', 4 => 'ABRIL', 5 => 'MAYO', 6 => 'JUNIO',
+            7 => 'JULIO', 8 => 'AGOSTO', 9 => 'SEPTIEMBRE', 10 => 'OCTUBRE', 11 => 'NOVIEMBRE', 12 => 'DICIEMBRE',
+        ][$month] ?? '';
     }
 }

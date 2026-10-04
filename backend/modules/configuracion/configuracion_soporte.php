@@ -1,44 +1,124 @@
 <?php
 declare(strict_types=1);
 
+/**
+ * Definiciones de las tablas auxiliares reales de Cooperadora V2.
+ *
+ * La capa de configuración trabaja directamente sobre las tablas históricas
+ * existentes; no crea catálogos paralelos ni duplica información.
+ */
 function configuracion_listas_definiciones(): array
 {
     return [
-        'categoria' => [
-            'lista' => 'categoria', 'tabla' => 'categoria', 'id_campo' => 'id_categoria',
-            'etiqueta' => 'categoría', 'entidad' => 'CATEGORIA', 'auto_id' => true,
+        'contable_categoria' => [
+            'lista' => 'contable_categoria',
+            'tabla' => 'contable_categoria',
+            'id_campo' => 'id_cont_categoria',
+            'auto_id' => true,
+            'etiqueta' => 'categoría contable',
+            'entidad' => 'CATEGORIA_CONTABLE',
+            'fecha_campo' => 'fecha_creacion',
             'campos' => [
-                'nombre' => ['tipo' => 'texto', 'max' => 100, 'label' => 'nombre'],
-                'monto_mensual' => ['tipo' => 'decimal', 'label' => 'monto mensual'],
-                'monto_anual' => ['tipo' => 'decimal', 'label' => 'monto anual'],
+                'nombre' => [
+                    'columna' => 'nombre_categoria',
+                    'tipo' => 'texto',
+                    'max' => 120,
+                    'label' => 'nombre',
+                ],
+            ],
+            'relaciones' => [
+                ['tabla' => 'ingresos', 'columna' => 'id_cont_categoria'],
+                ['tabla' => 'egresos', 'columna' => 'id_cont_categoria'],
             ],
         ],
-        'cobrador' => [
-            'lista' => 'cobrador', 'tabla' => 'cobrador', 'id_campo' => 'id_cobrador',
-            'etiqueta' => 'cobrador', 'entidad' => 'COBRADOR', 'auto_id' => false,
-            'campos' => ['nombre' => ['tipo' => 'texto', 'max' => 50, 'label' => 'nombre']],
-        ],
-        'estado' => [
-            'lista' => 'estado', 'tabla' => 'estado', 'id_campo' => 'id_estado',
-            'etiqueta' => 'estado', 'entidad' => 'ESTADO', 'auto_id' => false,
-            'campos' => ['nombre' => ['tipo' => 'texto', 'max' => 20, 'label' => 'nombre']],
-        ],
-        'grupo_sanguineo' => [
-            'lista' => 'grupo_sanguineo', 'tabla' => 'grupo_sanguineo', 'id_campo' => 'id_grupo_sanguineo',
-            'etiqueta' => 'grupo sanguíneo', 'entidad' => 'GRUPO_SANGUINEO', 'auto_id' => false,
-            'campos' => ['nombre' => ['tipo' => 'texto', 'max' => 10, 'label' => 'nombre']],
-        ],
-        'medios_pago' => [
-            'lista' => 'medios_pago', 'tabla' => 'medios_pago', 'id_campo' => 'id_medio_pago',
-            'etiqueta' => 'medio de pago', 'entidad' => 'MEDIO_PAGO', 'auto_id' => true,
-            'campos' => ['nombre' => ['tipo' => 'texto', 'max' => 50, 'label' => 'nombre']],
-        ],
-        'periodo' => [
-            'lista' => 'periodo', 'tabla' => 'periodo', 'id_campo' => 'id_periodo',
-            'etiqueta' => 'período', 'entidad' => 'PERIODO', 'auto_id' => false,
+        'contable_descripcion' => [
+            'lista' => 'contable_descripcion',
+            'tabla' => 'contable_descripcion',
+            'id_campo' => 'id_cont_descripcion',
+            'auto_id' => true,
+            'etiqueta' => 'descripción contable',
+            'entidad' => 'DESCRIPCION_CONTABLE',
+            'fecha_campo' => 'fecha_creacion',
             'campos' => [
-                'nombre' => ['tipo' => 'texto', 'max' => 50, 'label' => 'nombre'],
-                'meses' => ['tipo' => 'texto', 'max' => 50, 'label' => 'meses'],
+                'nombre' => [
+                    'columna' => 'nombre_descripcion',
+                    'tipo' => 'texto',
+                    'max' => 160,
+                    'label' => 'descripción',
+                ],
+            ],
+            'relaciones' => [
+                ['tabla' => 'ingresos', 'columna' => 'id_cont_descripcion'],
+                ['tabla' => 'egresos', 'columna' => 'id_cont_descripcion'],
+            ],
+        ],
+        'contable_proveedor' => [
+            'lista' => 'contable_proveedor',
+            'tabla' => 'contable_proveedor',
+            'id_campo' => 'id_cont_proveedor',
+            'auto_id' => true,
+            'etiqueta' => 'proveedor',
+            'entidad' => 'PROVEEDOR_CONTABLE',
+            'fecha_campo' => 'fecha_creacion',
+            'campos' => [
+                'nombre' => [
+                    'columna' => 'nombre_proveedor',
+                    'tipo' => 'texto',
+                    'max' => 120,
+                    'label' => 'proveedor',
+                ],
+            ],
+            'relaciones' => [
+                ['tabla' => 'ingresos', 'columna' => 'id_cont_proveedor'],
+                ['tabla' => 'egresos', 'columna' => 'id_cont_proveedor'],
+            ],
+        ],
+        'sexo' => [
+            'lista' => 'sexo',
+            'tabla' => 'sexo',
+            'id_campo' => 'id_sexo',
+            'auto_id' => false,
+            'etiqueta' => 'sexo',
+            'entidad' => 'SEXO',
+            'fecha_campo' => null,
+            'campos' => [
+                'nombre' => [
+                    'columna' => 'sexo',
+                    'tipo' => 'texto',
+                    'max' => 50,
+                    'label' => 'sexo',
+                ],
+            ],
+            'relaciones' => [
+                ['tabla' => 'alumnos', 'columna' => 'id_sexo'],
+                ['tabla' => 'alumnos_egresados', 'columna' => 'id_sexo'],
+            ],
+        ],
+        'tipo_documento' => [
+            'lista' => 'tipo_documento',
+            'tabla' => 'tipos_documentos',
+            'id_campo' => 'id_tipo_documento',
+            'auto_id' => true,
+            'etiqueta' => 'tipo de documento',
+            'entidad' => 'TIPO_DOCUMENTO',
+            'fecha_campo' => null,
+            'campos' => [
+                'descripcion' => [
+                    'columna' => 'descripcion',
+                    'tipo' => 'texto',
+                    'max' => 100,
+                    'label' => 'descripción',
+                ],
+                'sigla' => [
+                    'columna' => 'sigla',
+                    'tipo' => 'texto',
+                    'max' => 10,
+                    'label' => 'sigla',
+                ],
+            ],
+            'relaciones' => [
+                ['tabla' => 'alumnos', 'columna' => 'id_tipo_documento'],
+                ['tabla' => 'alumnos_egresados', 'columna' => 'id_tipo_documento'],
             ],
         ],
     ];
@@ -49,264 +129,162 @@ function configuracion_lista_definicion(mixed $value): array
     $key = strtolower(trim((string)$value));
     $definitions = configuracion_listas_definiciones();
     if (!isset($definitions[$key])) {
-        api_error('La lista solicitada no es válida.', 'LISTA_CONFIGURACION_INVALIDA');
+        api_error('La tabla auxiliar solicitada no es válida.', 'LISTA_CONFIGURACION_INVALIDA', 422);
     }
     return $definitions[$key];
 }
 
+function configuracion_columnas_select(array $definition): string
+{
+    $columns = [];
+    foreach ($definition['campos'] as $key => $field) {
+        $column = (string)$field['columna'];
+        $columns[] = "`{$column}` AS `{$key}`";
+    }
+    return implode(', ', $columns);
+}
 
 function configuracion_siguiente_id_manual(PDO $db, array $definition): int
 {
     $table = (string)$definition['tabla'];
     $idField = (string)$definition['id_campo'];
+    $maxUsed = 0;
 
-    // El SELECT con FOR UPDATE conserva la serialización que ya tenía el alta
-    // manual. El siguiente ID debe ser mayor que cualquier ID actual o histórico:
-    // reutilizar un ID eliminado haría que una opción nueva heredara auditorías
-    // y referencias pertenecientes a otra opción anterior.
-    $currentStatement = $db->query(
+    $current = $db->query(
         "SELECT `{$idField}` FROM `{$table}` ORDER BY `{$idField}` DESC LIMIT 1 FOR UPDATE"
-    );
-    $current = $currentStatement->fetchColumn();
-    $maxUsedId = $current === false ? 0 : (int)$current;
+    )->fetchColumn();
+    if ($current === false) $current = 0;
+    $maxUsed = max($maxUsed, (int)$current);
 
-    if (configuracion_tabla_columna_existe($db, 'auditoria', 'id_registro')
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'tabla')) {
-        $auditStatement = $db->prepare(
-            'SELECT COALESCE(MAX(id_registro), 0) FROM auditoria WHERE tabla = ?'
-        );
-        $auditStatement->execute([$table]);
-        $maxUsedId = max($maxUsedId, (int)$auditStatement->fetchColumn());
-    }
-
-    // También contemplamos referencias relacionales que pudieron sobrevivir a
-    // datos legacy anteriores a la auditoría de catálogos.
-    foreach (configuracion_relaciones($definition) as $relation) {
+    foreach ($definition['relaciones'] ?? [] as $relation) {
         $relationTable = (string)$relation['tabla'];
         $relationColumn = (string)$relation['columna'];
-        if (!configuracion_tabla_columna_existe($db, $relationTable, $relationColumn)) continue;
-        $relationStatement = $db->query(
+        $value = $db->query(
             "SELECT COALESCE(MAX(`{$relationColumn}`), 0) FROM `{$relationTable}`"
-        );
-        $maxUsedId = max($maxUsedId, (int)$relationStatement->fetchColumn());
+        )->fetchColumn();
+        $maxUsed = max($maxUsed, (int)$value);
     }
 
-    // Cobrador y grupo sanguíneo también aparecen dentro de snapshots JSON de
-    // auditoría de Socios. Tomarlos en cuenta evita colisiones con datos legacy
-    // aunque la fila original del catálogo ya haya sido eliminada.
-    $historicalField = match ((string)$definition['lista']) {
-        'cobrador' => 'id_cobrador',
-        'grupo_sanguineo' => 'id_grupo_sanguineo',
-        default => null,
-    };
-    if ($historicalField !== null
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'datos_anteriores')
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'datos_nuevos')) {
-        $jsonPath = '$.' . $historicalField;
-        $snapshotStatement = $db->prepare(
-            "SELECT GREATEST(
-                COALESCE(MAX(CASE WHEN JSON_VALID(datos_anteriores)
-                    THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(datos_anteriores, ?)) AS UNSIGNED) ELSE 0 END), 0),
-                COALESCE(MAX(CASE WHEN JSON_VALID(datos_nuevos)
-                    THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(datos_nuevos, ?)) AS UNSIGNED) ELSE 0 END), 0)
-             )
-             FROM auditoria
-             WHERE tabla = 'socios'"
+    try {
+        $audit = $db->prepare(
+            'SELECT COALESCE(MAX(id_registro), 0) FROM auditoria WHERE tabla = ?'
         );
-        $snapshotStatement->execute([$jsonPath, $jsonPath]);
-        $maxUsedId = max($maxUsedId, (int)$snapshotStatement->fetchColumn());
+        $audit->execute([$table]);
+        $maxUsed = max($maxUsed, (int)$audit->fetchColumn());
+    } catch (Throwable) {
+        // La auditoría no debe impedir crear una opción si el esquema fuera
+        // anterior. En el esquema actual de Cooperadora la tabla sí existe.
     }
 
-    return $maxUsedId + 1;
-}
-
-function configuracion_columnas(array $definition): array
-{
-    return array_keys($definition['campos']);
+    return $maxUsed + 1;
 }
 
 function configuracion_item(PDO $db, array $definition, int $id, bool $lock = false): ?array
 {
-    $table = $definition['tabla'];
-    $idField = $definition['id_campo'];
-    $fields = implode(', ', configuracion_columnas($definition));
+    $table = (string)$definition['tabla'];
+    $idField = (string)$definition['id_campo'];
+    $fields = configuracion_columnas_select($definition);
+    $dateField = $definition['fecha_campo'] ?? null;
+    $dateSelect = $dateField ? ", `{$dateField}` AS creado_en" : ', NULL AS creado_en';
     $suffix = $lock ? ' FOR UPDATE' : '';
+
     $statement = $db->prepare(
-        "SELECT {$idField}, {$fields}, activo, creado_en FROM {$table} WHERE {$idField} = ?{$suffix}"
+        "SELECT `{$idField}` AS id, {$fields}{$dateSelect}
+         FROM `{$table}`
+         WHERE `{$idField}` = ?
+         LIMIT 1{$suffix}"
     );
     $statement->execute([$id]);
     $row = $statement->fetch();
     if (!$row) return null;
-    $row[$idField] = (int)$row[$idField];
-    $row['activo'] = (bool)$row['activo'];
-    $row['cantidad_usos'] = configuracion_cantidad_usos_actuales($db, $definition, $id);
-    $row['cantidad_usos_protegidos'] = configuracion_cantidad_usos($db, $definition, $id);
+
+    $row['id'] = (int)$row['id'];
+    $row['cantidad_usos'] = configuracion_cantidad_usos($db, $definition, $id);
     return $row;
-}
-
-function configuracion_relaciones_uso_actual(array $definition): array
-{
-    // Estas relaciones representan el uso que el usuario espera ver en la
-    // tabla de Configuración. No incluyen auditorías ni historial de cambios,
-    // porque sumar esas referencias duplica/triplica visualmente una misma
-    // asociación (por ejemplo, una categoría asignada a un socio).
-    return match ((string)$definition['lista']) {
-        'categoria' => [
-            ['tabla' => 'socios', 'columna' => 'id_categoria'],
-        ],
-        'cobrador' => [
-            ['tabla' => 'socios', 'columna' => 'id_cobrador'],
-        ],
-        'estado' => [
-            ['tabla' => 'socios', 'columna' => 'id_estado'],
-        ],
-        'grupo_sanguineo' => [
-            ['tabla' => 'socios', 'columna' => 'id_grupo_sanguineo'],
-        ],
-        'medios_pago' => [
-            ['tabla' => 'pagos', 'columna' => 'id_medio_pago'],
-            ['tabla' => 'pagos_inscripcion', 'columna' => 'id_medio_pago'],
-            ['tabla' => 'contable_ingresos', 'columna' => 'id_medio_pago'],
-            ['tabla' => 'contable_egresos', 'columna' => 'id_medio_pago'],
-        ],
-        'periodo' => [
-            ['tabla' => 'pagos', 'columna' => 'id_periodo'],
-        ],
-        default => [],
-    };
-}
-
-function configuracion_relaciones(array $definition): array
-{
-    // Relaciones que protegen la integridad referencial/histórica. Esta lista
-    // puede ser más amplia que la que se muestra como "Uso actual" en UI.
-    $relations = configuracion_relaciones_uso_actual($definition);
-
-    if ((string)$definition['lista'] === 'estado') {
-        $relations[] = ['tabla' => 'socios_historial_estados', 'columna' => 'id_estado_anterior'];
-        $relations[] = ['tabla' => 'socios_historial_estados', 'columna' => 'id_estado_nuevo'];
-    }
-
-    return $relations;
-}
-
-function configuracion_tabla_columna_existe(PDO $db, string $table, string $column): bool
-{
-    $statement = $db->prepare(
-        'SELECT COUNT(*) FROM information_schema.COLUMNS
-         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
-    );
-    $statement->execute([$table, $column]);
-    return (int)$statement->fetchColumn() === 1;
-}
-
-function configuracion_cantidad_usos_actuales(PDO $db, array $definition, int $id): int
-{
-    $total = 0;
-    foreach (configuracion_relaciones_uso_actual($definition) as $relation) {
-        $table = (string)$relation['tabla'];
-        $column = (string)$relation['columna'];
-        if (!configuracion_tabla_columna_existe($db, $table, $column)) continue;
-        if ($table === 'socios'
-            && configuracion_tabla_columna_existe($db, 'socios_eliminados', 'id_socio')) {
-            $statement = $db->prepare(
-                "SELECT COUNT(*)
-"
-                . "FROM `socios` s
-"
-                . "WHERE s.`{$column}` = ?
-"
-                . "  AND NOT EXISTS (
-"
-                . "      SELECT 1 FROM socios_eliminados se WHERE se.id_socio = s.id_socio
-"
-                . "  )"
-            );
-        } else {
-            $statement = $db->prepare("SELECT COUNT(*) FROM `{$table}` WHERE `{$column}` = ?");
-        }
-        $statement->execute([$id]);
-        $total += (int)$statement->fetchColumn();
-    }
-    return $total;
 }
 
 function configuracion_cantidad_usos(PDO $db, array $definition, int $id): int
 {
     $total = 0;
-    foreach (configuracion_relaciones($definition) as $relation) {
+    foreach ($definition['relaciones'] ?? [] as $relation) {
         $table = (string)$relation['tabla'];
         $column = (string)$relation['columna'];
-        if (!configuracion_tabla_columna_existe($db, $table, $column)) continue;
         $statement = $db->prepare("SELECT COUNT(*) FROM `{$table}` WHERE `{$column}` = ?");
         $statement->execute([$id]);
         $total += (int)$statement->fetchColumn();
     }
-
-    // Categoría, cobrador y grupo se guardan también dentro de la auditoría de
-    // Socios. Aunque hoy ya no haya socios apuntando al catálogo, eliminarlo
-    // haría perder la etiqueta al reconstruir informes históricos.
-    $historicalField = match ((string)$definition['lista']) {
-        'categoria' => 'id_categoria',
-        'cobrador' => 'id_cobrador',
-        'grupo_sanguineo' => 'id_grupo_sanguineo',
-        default => null,
-    };
-    if ($historicalField !== null
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'datos_anteriores')
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'datos_nuevos')) {
-        $jsonPath = '$.' . $historicalField;
-        $statement = $db->prepare(
-            "SELECT COUNT(*)
-             FROM auditoria
-             WHERE tabla = 'socios'
-               AND (
-                    CAST(JSON_UNQUOTE(JSON_EXTRACT(datos_anteriores, ?)) AS UNSIGNED) = ?
-                 OR CAST(JSON_UNQUOTE(JSON_EXTRACT(datos_nuevos, ?)) AS UNSIGNED) = ?
-               )"
-        );
-        $statement->execute([$jsonPath, $id, $jsonPath, $id]);
-        $total += (int)$statement->fetchColumn();
-    }
-
-    // Los pagos no guardan id_categoria como columna propia, pero las altas
-    // creadas por Cuotas sí conservan ese dato en auditoría. Esto evita borrar
-    // una categoría que ya no usa ningún socio actual pero que sí clasificó
-    // movimientos financieros históricos.
-    if ((string)$definition['lista'] === 'categoria'
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'datos_anteriores')
-        && configuracion_tabla_columna_existe($db, 'auditoria', 'datos_nuevos')) {
-        $statement = $db->prepare(
-            "SELECT COUNT(*)
-             FROM auditoria
-             WHERE tabla = 'pagos'
-               AND (
-                    CAST(JSON_UNQUOTE(JSON_EXTRACT(datos_anteriores, '$.id_categoria')) AS UNSIGNED) = ?
-                 OR CAST(JSON_UNQUOTE(JSON_EXTRACT(datos_nuevos, '$.id_categoria')) AS UNSIGNED) = ?
-               )"
-        );
-        $statement->execute([$id, $id]);
-        $total += (int)$statement->fetchColumn();
-    }
-
     return $total;
 }
 
-function configuracion_auditar(PDO $db, array $auth, array $definition, int $id, string $action, mixed $before, mixed $after): void
+function configuracion_normalizar_campos(array $definition, array $body): array
 {
-    if (!in_array($action, ['INSERT', 'UPDATE', 'DELETE'], true)) {
-        throw new LogicException('Acción de auditoría de configuración no permitida.');
+    $data = [];
+    foreach ($definition['campos'] as $key => $field) {
+        $max = (int)($field['max'] ?? 255);
+        $value = clean_text($body[$key] ?? '', $max, true);
+        if ($value === '') {
+            api_error(
+                'El campo ' . (string)$field['label'] . ' es obligatorio.',
+                'VALIDATION_ERROR',
+                422,
+                ['campo' => $key]
+            );
+        }
+        $data[$key] = $value;
     }
-    $encode = static function (mixed $value): ?string {
-        if ($value === null) return null;
-        $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_PRESERVE_ZERO_FRACTION);
-        return is_string($json) ? $json : '{"error":"No se pudo serializar la auditoría."}';
-    };
-    $statement = $db->prepare(
-        "INSERT INTO auditoria (tabla, id_registro, accion, datos_anteriores, datos_nuevos, id_usuario, origen)
-         VALUES (?, ?, ?, ?, ?, ?, 'SISTEMA')"
+    return $data;
+}
+
+function configuracion_validar_duplicados(
+    PDO $db,
+    array $definition,
+    array $data,
+    ?int $excludeId
+): void {
+    $table = (string)$definition['tabla'];
+    $idField = (string)$definition['id_campo'];
+
+    foreach ($definition['campos'] as $key => $field) {
+        // En tipos de documento tanto descripción como sigla son únicas.
+        // En las otras tablas el único campo editable también tiene índice UNIQUE.
+        $column = (string)$field['columna'];
+        $sql = "SELECT `{$idField}` FROM `{$table}` WHERE UPPER(`{$column}`) = UPPER(?)";
+        $params = [$data[$key]];
+        if ($excludeId !== null) {
+            $sql .= " AND `{$idField}` <> ?";
+            $params[] = $excludeId;
+        }
+        $sql .= ' LIMIT 1';
+        $statement = $db->prepare($sql);
+        $statement->execute($params);
+        if ($statement->fetchColumn() !== false) {
+            api_error(
+                'Ya existe una opción con ese ' . (string)$field['label'] . '.',
+                'OPCION_DUPLICADA',
+                409
+            );
+        }
+    }
+}
+
+function configuracion_auditar(
+    PDO $db,
+    array $auth,
+    array $definition,
+    int $id,
+    string $action,
+    mixed $before,
+    mixed $after
+): void {
+    audit_change(
+        $db,
+        $auth,
+        'CONFIGURACION',
+        $action,
+        (string)$definition['tabla'],
+        $id,
+        'Se actualizó una tabla auxiliar desde Configuración.',
+        $before,
+        $after
     );
-    $statement->execute([
-        $definition['tabla'], $id, $action, $encode($before), $encode($after), $auth['id_usuario'],
-    ]);
 }

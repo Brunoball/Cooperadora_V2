@@ -14,7 +14,6 @@ import Resumen from "./components/Contable/secciones/Resumen";
 import Configuracion from "./components/Configuracion/Configuracion";
 import Usuarios from "./components/Configuracion/secciones/Usuarios";
 import CatalogosConfiguracion from "./components/Configuracion/secciones/CatalogosConfiguracion";
-import ContableConfiguracion from "./components/Configuracion/secciones/ContableConfiguracion";
 import {
   AUTH_SESSION_CHANGED_EVENT,
   isAuthenticated,
@@ -82,7 +81,7 @@ export default function App() {
           />
           <Route
             path="/configuracion/contable"
-            element={<ContableConfiguracion />}
+            element={<Navigate to="/configuracion/catalogos?lista=contable_categoria" replace />}
           />
         </Route>
 

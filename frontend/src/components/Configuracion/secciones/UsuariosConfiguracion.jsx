@@ -4,7 +4,6 @@ import {
   faArrowLeft,
   faArrowRotateLeft,
   faCheck,
-  faEnvelope,
   faGear,
   faKey,
   faLock,
@@ -23,7 +22,7 @@ import ModalEliminarGlobal from "../../Global/Modales/ModalEliminarGlobal";
 import ModuleFeedback from "../../Global/ModuleFeedback";
 import { useSmartScrollRefresh } from "../../Global/useSmartScrollRefresh";
 import { FloatingField } from "../../Global/Formularios/TabbedForm";
-import { emailInput, usernameInput } from "../../Global/Formularios/inputSanitizers";
+import { usernameInput } from "../../Global/Formularios/inputSanitizers";
 import { getSession, saveSession } from "../../_shared/auth/session";
 import { configuracionApi } from "../api/configuracionApi";
 import { useTableScrollbarCompensation } from "../hooks/useTableScrollbarCompensation";
@@ -33,7 +32,7 @@ const EMPTY_SUMMARY = { total: 0, activos: 0, bajas: 0, admins: 0 };
 const EMPTY_FORM = {
   id: "",
   usuario: "",
-  email: "",
+  nombre_completo: "",
   rol: "vista",
   contrasena: "",
   confirmar_contrasena: "",
@@ -80,7 +79,6 @@ export default function UsuariosConfiguracion({ onBack }) {
   const [data, setData] = useState({
     usuarios: [],
     resumen: EMPTY_SUMMARY,
-    capacidades: { email: true, fecha_creacion: true },
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -113,10 +111,6 @@ export default function UsuariosConfiguracion({ onBack }) {
       setData({
         usuarios: response.usuarios || [],
         resumen: { ...EMPTY_SUMMARY, ...(response.resumen || {}) },
-        capacidades: {
-          email: response.capacidades?.email !== false,
-          fecha_creacion: response.capacidades?.fecha_creacion !== false,
-        },
       });
     } catch (error) {
       setFeedback({
@@ -143,7 +137,7 @@ export default function UsuariosConfiguracion({ onBack }) {
       if (statusFilter === "activos" && !user.activo) return false;
       if (statusFilter === "bajas" && user.activo) return false;
       if (!term) return true;
-      return [user.usuario, user.email, ROLE_LABELS[user.rol], user.rol]
+      return [user.usuario, user.nombre_completo, ROLE_LABELS[user.rol], user.rol]
         .filter(Boolean)
         .some((value) =>
           String(value).toLocaleLowerCase("es-AR").includes(term),
@@ -162,7 +156,7 @@ export default function UsuariosConfiguracion({ onBack }) {
     setForm({
       id: String(user.id),
       usuario: user.usuario || "",
-      email: user.email || "",
+      nombre_completo: user.nombre_completo || "",
       rol: user.rol || "vista",
       contrasena: "",
       confirmar_contrasena: "",
@@ -179,6 +173,10 @@ export default function UsuariosConfiguracion({ onBack }) {
     event.preventDefault();
     if (!usernameInput(form.usuario, 100)) {
       setFeedback({ type: "error", message: "Completá un usuario válido usando letras, números, punto, guion o guion bajo. Los datos cargados se conservaron." });
+      return;
+    }
+    if (!String(form.nombre_completo || "").trim()) {
+      setFeedback({ type: "error", message: "Completá el nombre completo. Los datos cargados se conservaron." });
       return;
     }
     if (form.contrasena !== form.confirmar_contrasena) {
@@ -206,7 +204,7 @@ export default function UsuariosConfiguracion({ onBack }) {
       const response = await configuracionApi.guardarUsuario({
         id: form.id || null,
         usuario: usernameInput(form.usuario, 100).trim(),
-        email: emailInput(form.email, 190).trim() || null,
+        nombre_completo: String(form.nombre_completo || "").trim().slice(0, 120),
         rol: form.rol,
         contrasena: form.contrasena,
         confirmar_contrasena: form.confirmar_contrasena,
@@ -217,7 +215,8 @@ export default function UsuariosConfiguracion({ onBack }) {
           ...currentSession,
           usuario: {
             ...currentSession.usuario,
-            nombre: response.usuario.usuario,
+            nombre: response.usuario.nombre_completo || response.usuario.usuario,
+            usuario: response.usuario.usuario,
             rol: response.usuario.rol,
           },
         });
@@ -326,13 +325,6 @@ export default function UsuariosConfiguracion({ onBack }) {
           onClose={() => setFeedback(null)}
         />
 
-        {!data.capacidades.email || !data.capacidades.fecha_creacion ? (
-          <div className="config-usersSchemaNotice">
-            Ejecutá el SQL incluido en el ZIP sobre rh_neg_v2 para completar la
-            estructura de usuarios.
-          </div>
-        ) : null}
-
         <section className="config-usersStats" aria-label="Resumen de usuarios">
           {stats.map((stat) => (
             <UserStat key={stat.label} {...stat} />
@@ -387,7 +379,7 @@ export default function UsuariosConfiguracion({ onBack }) {
             ) : null}
             <div className="config-usersTable__head" role="row">
               <span role="columnheader">Usuario</span>
-              <span role="columnheader">Email</span>
+              <span role="columnheader">Nombre completo</span>
               <span role="columnheader">Rol</span>
               <span role="columnheader">Estado</span>
               <span role="columnheader">Creación</span>
@@ -427,9 +419,9 @@ export default function UsuariosConfiguracion({ onBack }) {
                     <div
                       className="config-usersEmail"
                       role="cell"
-                      data-label="Email"
+                      data-label="Nombre completo"
                     >
-                      {user.email || <span>Sin email</span>}
+                      {user.nombre_completo || <span>Sin nombre</span>}
                     </div>
                     <div role="cell" data-label="Rol">
                       <span
@@ -558,20 +550,21 @@ export default function UsuariosConfiguracion({ onBack }) {
             <FloatingField
               label={
                 <>
-                  <FontAwesomeIcon icon={faEnvelope} aria-hidden="true" />
-                  Email
+                  <FontAwesomeIcon icon={faUser} aria-hidden="true" />
+                  Nombre completo *
                 </>
               }
-              active={Boolean(form.email)}
+              active={Boolean(form.nombre_completo)}
             >
               <input
-                type="email"
-                value={form.email}
+                value={form.nombre_completo}
                 placeholder=" "
-                onChange={(event) => updateForm("email", emailInput(event.target.value, 190))}
-                maxLength={190}
-                autoComplete="off"
-                disabled={!data.capacidades.email}
+                onChange={(event) =>
+                  updateForm("nombre_completo", event.target.value.slice(0, 120))
+                }
+                maxLength={120}
+                autoComplete="name"
+                required
               />
             </FloatingField>
             <fieldset className="config-usersForm__rolePicker">

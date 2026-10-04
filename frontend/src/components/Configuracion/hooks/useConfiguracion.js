@@ -2,24 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { configuracionApi } from "../api/configuracionApi";
 
 const initialLists = {
-  categoria: [],
-  cobrador: [],
-  estado: [],
-  grupo_sanguineo: [],
-  medios_pago: [],
-  periodo: [],
+  contable_categoria: [],
+  contable_descripcion: [],
+  contable_proveedor: [],
+  sexo: [],
+  tipo_documento: [],
 };
 
 const initialState = {
   listas: initialLists,
-  resumen: {
-    categoria_activos: 0,
-    cobrador_activos: 0,
-    estado_activos: 0,
-    grupo_sanguineo_activos: 0,
-    medios_pago_activos: 0,
-    periodo_activos: 0,
-  },
+  resumen: { total: 0 },
 };
 
 export function useConfiguracion() {
@@ -53,7 +45,9 @@ export function useConfiguracion() {
 
   useEffect(() => {
     cargar();
-    return () => { requestId.current += 1; };
+    return () => {
+      requestId.current += 1;
+    };
   }, [cargar]);
 
   return { ...data, loading, error, cargar };
