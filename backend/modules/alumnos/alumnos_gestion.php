@@ -796,25 +796,141 @@ trait AlumnosGestion
     private static function eliminarDefinitivoDatos(array $auth, int $id, string $reason): array
     {
         $db = $auth['db'];
-        return transaction($db, static function () use ($db, $auth, $id, $reason): array {
-            $before = self::alumnoSimple($db, $id, true);
-            if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
-            if ((bool)$before['activo']) api_error('Primero debés dar de baja al alumno antes de eliminarlo definitivamente.', 'ALUMNO_ACTIVO', 409);
 
-            $references = $db->prepare('SELECT (SELECT COUNT(*) FROM pagos WHERE id_alumno = ?) AS pagos, (SELECT COUNT(*) FROM alumnos_egresados WHERE id_alumno_original = ?) AS egresos');
-            $references->execute([$id, $id]);
-            $referenceCounts = $references->fetch() ?: [];
-            if ((int)($referenceCounts['pagos'] ?? 0) > 0 || (int)($referenceCounts['egresos'] ?? 0) > 0) {
-                api_error('No se puede eliminar definitivamente porque el alumno posee historial de pagos o egreso. Mantenelo dado de baja para conservar la trazabilidad.', 'ALUMNO_CON_HISTORIAL', 409);
+        try {
+            return transaction($db, static function () use ($db, $auth, $id, $reason): array {
+                $before = self::alumnoSimple($db, $id, true);
+                if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+
+                // Un alumno con pagos no puede desaparecer físicamente de alumnos:
+                // pagos.id_alumno conserva la relación histórica y la FK es restrictiva.
+                $payments = $db->prepare(
+                    'SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto_pago), 0) AS total
+                     FROM pagos
+                     WHERE id_alumno = ?'
+                );
+                $payments->execute([$id]);
+                $paymentHistory = $payments->fetch() ?: ['cantidad' => 0, 'total' => 0];
+                if ((int)($paymentHistory['cantidad'] ?? 0) > 0) {
+                    api_error(
+                        'No se puede eliminar definitivamente este alumno porque tiene pagos registrados. Para conservar el historial financiero, mantenelo en Bajas o Egresados.',
+                        'ALUMNO_CON_PAGOS',
+                        409
+                    );
+                }
+
+                $graduateStatement = $db->prepare('SELECT * FROM alumnos_egresados WHERE id_alumno_original = ? LIMIT 1 FOR UPDATE');
+                $graduateStatement->execute([$id]);
+                $graduate = $graduateStatement->fetch() ?: null;
+
+                $contextStatement = $db->prepare(
+                    'SELECT
+                        td.sigla AS tipo_documento_sigla,
+                        td.descripcion AS tipo_documento,
+                        f.nombre_familia,
+                        an.nombre_anio,
+                        d.nombre_division,
+                        c.nombre_categoria,
+                        cm.nombre_categoria AS categoria_monto
+                     FROM alumnos a
+                     LEFT JOIN tipos_documentos td ON td.id_tipo_documento = a.id_tipo_documento
+                     LEFT JOIN familias f ON f.id_familia = a.id_familia
+                     LEFT JOIN anio an ON an.id_anio = a.id_anio
+                     LEFT JOIN division d ON d.id_division = a.id_division
+                     LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
+                     LEFT JOIN categoria_monto cm ON cm.id_cat_monto = a.id_cat_monto
+                     WHERE a.id_alumno = ?
+                     LIMIT 1'
+                );
+                $contextStatement->execute([$id]);
+                $context = $contextStatement->fetch() ?: [];
+
+                $salesStatement = $db->prepare('SELECT id_persona FROM ventas_personas WHERE id_alumno = ? ORDER BY id_persona');
+                $salesStatement->execute([$id]);
+                $salesPersonIds = array_map('intval', $salesStatement->fetchAll(PDO::FETCH_COLUMN));
+
+                $expensesStatement = $db->prepare('SELECT id_egreso FROM egresos WHERE id_alumno_origen = ? ORDER BY id_egreso');
+                $expensesStatement->execute([$id]);
+                $expenseIds = array_map('intval', $expensesStatement->fetchAll(PDO::FETCH_COLUMN));
+
+                $previousStatus = (bool)$before['activo'] ? 'ACTIVO' : ($graduate ? 'EGRESADO' : 'BAJA');
+                $snapshotData = [
+                    'alumno' => $before,
+                    'estado_anterior' => $previousStatus,
+                    'egreso' => $graduate,
+                    'catalogos' => $context,
+                    'referencias' => [
+                        'pagos' => [
+                            'cantidad' => (int)($paymentHistory['cantidad'] ?? 0),
+                            'total' => (float)($paymentHistory['total'] ?? 0),
+                        ],
+                        'ventas_personas_ids' => $salesPersonIds,
+                        'egresos_contables_ids' => $expenseIds,
+                    ],
+                    'eliminacion' => [
+                        'motivo' => $reason,
+                        'id_usuario' => (int)($auth['id_usuario'] ?? 0),
+                        'fecha' => date('Y-m-d H:i:s'),
+                    ],
+                ];
+                $snapshot = json_encode($snapshotData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+                if ($snapshot === false) $snapshot = '{}';
+
+                $archive = $db->prepare(
+                    'INSERT INTO alumnos_eliminados
+                     (id_alumno_original, apellido, nombre, num_documento, tipo_documento_sigla,
+                      estado_anterior, familia_original, motivo_eliminacion, snapshot_json, id_usuario)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                );
+                $archive->execute([
+                    $id,
+                    $before['apellido'] ?? null,
+                    $before['nombre'] ?? null,
+                    $before['num_documento'] ?? null,
+                    $context['tipo_documento_sigla'] ?? null,
+                    $previousStatus,
+                    $context['nombre_familia'] ?? null,
+                    $reason,
+                    $snapshot,
+                    $auth['id_usuario'] ?? null,
+                ]);
+                $archiveId = (int)$db->lastInsertId();
+
+                // El egreso es parte del snapshot. Se retira primero porque su FK
+                // al alumno es restrictiva; el resto de relaciones históricas que
+                // admiten SET NULL quedan preservadas por sus propias tablas.
+                $db->prepare('DELETE FROM alumnos_egresados WHERE id_alumno_original = ?')->execute([$id]);
+                $db->prepare('DELETE FROM alumnos WHERE id_alumno = ?')->execute([$id]);
+
+                audit_change(
+                    $db,
+                    $auth,
+                    'ALUMNOS',
+                    'DELETE',
+                    'alumnos',
+                    $id,
+                    'Eliminación definitiva con respaldo en alumnos_eliminados #' . $archiveId,
+                    $before,
+                    null
+                );
+
+                return [
+                    'id_alumno' => $id,
+                    'id_eliminado' => $archiveId,
+                    'estado_anterior' => $previousStatus,
+                ];
+            });
+        } catch (PDOException $error) {
+            $driverCode = (int)($error->errorInfo[1] ?? 0);
+            if ($driverCode === 1451) {
+                api_error(
+                    'No se puede eliminar definitivamente porque el alumno todavía tiene información histórica relacionada. Mantenelo en Bajas o Egresados.',
+                    'ALUMNO_CON_HISTORIAL',
+                    409
+                );
             }
-
-            $snapshot = json_encode($before, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
-            $db->prepare('INSERT INTO alumnos_eliminados (id_alumno_original, apellido, nombre, num_documento, motivo_eliminacion, snapshot_json, id_usuario) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                ->execute([$id, $before['apellido'] ?? null, $before['nombre'] ?? null, $before['num_documento'] ?? null, $reason, $snapshot ?: '{}', $auth['id_usuario']]);
-            $db->prepare('DELETE FROM alumnos WHERE id_alumno = ?')->execute([$id]);
-            audit_change($db, $auth, 'ALUMNOS', 'DELETE', 'alumnos', $id, 'Eliminación definitiva', $before, null);
-            return ['id_alumno' => $id];
-        });
+            throw $error;
+        }
     }
 
     private static function alumnoSimple(PDO $db, int $id, bool $lock = false): ?array

@@ -85,7 +85,7 @@ final class Alumnos
         $reason = required_text($body, 'motivo', 'motivo de eliminación', 1000);
         api_success(
             self::eliminarDefinitivoDatos($auth, $id, $reason),
-            'Alumno eliminado definitivamente. Se conservó una copia de auditoría.'
+            'Alumno eliminado correctamente. La trazabilidad quedó guardada en alumnos_eliminados.'
         );
     }
 

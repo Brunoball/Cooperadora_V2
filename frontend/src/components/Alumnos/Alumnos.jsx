@@ -11,6 +11,7 @@ import {
   faIdCard,
   faPen,
   faRotateLeft,
+  faTrashCan,
   faUser,
   faUserSlash,
   faUsers,
@@ -19,6 +20,7 @@ import { ModulePage } from "../Global/ModulePage";
 import GlobalDivTable from "../Global/GlobalDivTable";
 import CrudModal from "../Global/Modales/CrudModal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
+import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
 import InfoModal, {
   InfoEmpty,
   InfoRow,
@@ -419,6 +421,7 @@ export default function Alumnos() {
   const [detailModal, setDetailModal] = useState(null);
   const [detailTab, setDetailTab] = useState(INFO_TAB_GENERAL);
   const [stateModal, setStateModal] = useState(null);
+  const [deleteModal, setDeleteModal] = useState(null);
   const [reason, setReason] = useState("");
   const [bajaTipo, setBajaTipo] = useState("BAJA");
   const [importing, setImporting] = useState(false);
@@ -547,6 +550,23 @@ export default function Alumnos() {
       setFeedback({ type: "error", message: requestError.message });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const eliminarAlumno = async ({ motivo }) => {
+    if (!deleteModal) return { ok: false, mensaje: "No hay un alumno seleccionado." };
+    setSavingId(deleteModal.id_alumno);
+    try {
+      const response = await alumnosApi.eliminarDefinitivo({
+        id: deleteModal.id_alumno,
+        motivo,
+      });
+      await cargar({ silent: true });
+      return response;
+    } catch (requestError) {
+      throw requestError;
+    } finally {
+      setSavingId(null);
     }
   };
 
@@ -855,6 +875,17 @@ export default function Alumnos() {
                         <FontAwesomeIcon icon={faUserSlash} />
                       </button>
                     ) : null}
+                    {writable ? (
+                      <button
+                        className="mov-iconBtn mov-iconBtn--danger"
+                        type="button"
+                        title="Eliminar alumno"
+                        disabled={savingId === item.id_alumno}
+                        onClick={() => setDeleteModal(item)}
+                      >
+                        <FontAwesomeIcon icon={faTrashCan} />
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))
@@ -912,6 +943,17 @@ export default function Alumnos() {
                         onClick={() => reactivarAlumno(item)}
                       >
                         <FontAwesomeIcon icon={faRotateLeft} />
+                      </button>
+                    ) : null}
+                    {writable ? (
+                      <button
+                        className="mov-iconBtn mov-iconBtn--danger"
+                        type="button"
+                        title="Eliminar alumno"
+                        disabled={savingId === item.id_alumno}
+                        onClick={() => setDeleteModal(item)}
+                      >
+                        <FontAwesomeIcon icon={faTrashCan} />
                       </button>
                     ) : null}
                   </div>
@@ -1058,6 +1100,34 @@ export default function Alumnos() {
           <p>El alumno volverá a aparecer entre los activos.</p>
         )}
       </CrudModal>
+
+      <ModalEliminarGlobal
+        open={Boolean(deleteModal)}
+        operacion="eliminar"
+        row={deleteModal}
+        title="Eliminar alumno"
+        message="El alumno se eliminará del padrón y se guardará una copia completa en alumnos_eliminados para conservar la trazabilidad."
+        warning="Si el alumno tiene pagos registrados, la eliminación será bloqueada para no romper su historial financiero. En ese caso debe permanecer como Baja o Egresado."
+        details={[
+          { label: "Alumno", value: deleteModal?.nombre_completo || "—" },
+          { label: "Documento", value: [deleteModal?.tipo_documento_sigla, deleteModal?.num_documento].filter(Boolean).join(" ") || "—" },
+          { label: "Estado actual", value: deleteModal ? (deleteModal.activo ? "ACTIVO" : (view === "egresados" ? "EGRESADO" : "BAJA")) : "—" },
+        ]}
+        showReason
+        reasonRequired
+        reasonLabel="Motivo de eliminación *"
+        reasonPlaceholder="Ej.: registro duplicado, alumno cargado por error..."
+        confirmLabel="Eliminar alumno"
+        loadingLabel="Eliminando..."
+        successMessage="Alumno eliminado correctamente. La trazabilidad quedó guardada."
+        errorMessage="No se pudo eliminar el alumno."
+        onConfirm={eliminarAlumno}
+        onClose={() => setDeleteModal(null)}
+        onToast={(tipo, mensaje) => {
+          if (tipo === "exito") setFeedback({ type: "success", message: mensaje });
+          if (tipo === "error") setFeedback({ type: "error", message: mensaje });
+        }}
+      />
 
       <CrudModal
         open={importModalOpen}
