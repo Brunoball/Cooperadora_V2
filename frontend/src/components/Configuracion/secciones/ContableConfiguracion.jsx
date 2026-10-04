@@ -23,7 +23,7 @@ import { useSmartScrollRefresh } from "../../Global/useSmartScrollRefresh";
 import { canWrite } from "../../_shared/auth/session";
 import { upperCatalogName, upperLettersOnly } from "../../Global/Formularios/inputSanitizers";
 import { contableApi } from "../../Contable/api/contableApi";
-import { useTableScrollbarCompensation } from "../hooks/useTableScrollbarCompensation";
+import { useTableScrollbarCompensation } from "../../Global/useTableScrollbarCompensation";
 import "../configuracion.css";
 import "./ContableConfiguracion.css";
 
@@ -94,7 +94,7 @@ const initialLists = Object.keys(LIST_META).reduce((result, key) => {
 function OptionList({ items, meta, writable, onEdit, onState, onDelete, bodyRef }) {
   if (!items.length) {
     return (
-      <div ref={bodyRef} className="config-contableTable__body">
+      <div ref={bodyRef} className="config-contableTable__body global-scrollAwareTable__body">
         <div className="config-contableEmpty">
           <span aria-hidden="true"><FontAwesomeIcon icon={meta.icon} /></span>
           <strong>Sin registros</strong>
@@ -105,7 +105,7 @@ function OptionList({ items, meta, writable, onEdit, onState, onDelete, bodyRef 
   }
 
   return (
-    <div ref={bodyRef} className="config-contableTable__body">
+    <div ref={bodyRef} className="config-contableTable__body global-scrollAwareTable__body">
       {items.map((item) => {
         const active = Boolean(item.activo);
         const usageCount = Number(item.cantidad_usos || 0);
@@ -167,7 +167,7 @@ function OptionList({ items, meta, writable, onEdit, onState, onDelete, bodyRef 
 
 function ContableSkeleton({ bodyRef }) {
   return (
-    <div ref={bodyRef} className="config-contableTable__body" aria-hidden="true">
+    <div ref={bodyRef} className="config-contableTable__body global-scrollAwareTable__body" aria-hidden="true">
       {Array.from({ length: 6 }).map((_, index) => (
         <div className="config-contableTable__skeletonRow" key={index}>
           <span className="config-contableSkeleton config-contableSkeleton--name" />
@@ -446,10 +446,10 @@ export default function ContableConfiguracion() {
           </div>
 
           <div
-            className={`config-contableTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
-            style={{ "--config-table-scrollbar-width": `${scrollbarWidth}px` }}
+            className={`config-contableTable global-scrollAwareTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
+            style={{ "--global-table-scrollbar-width": `${scrollbarWidth}px` }}
           >
-            <div className="config-contableTable__head"><span>Nombre</span><span>Estado</span><span>Uso</span><span>Acciones</span></div>
+            <div className="config-contableTable__head global-scrollAwareTable__head"><span>Nombre</span><span>Estado</span><span>Uso</span><span>Acciones</span></div>
             {loading ? <ContableSkeleton bodyRef={setTableBodyRef} /> : (
               <OptionList
                 items={filteredItems}

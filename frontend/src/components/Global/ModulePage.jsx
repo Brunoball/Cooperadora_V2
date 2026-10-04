@@ -92,7 +92,9 @@ function ModuleTitleTabs({ filter }) {
 
 function ModuleFilter({ filter }) {
   const value = filter.value ?? "";
-  const active = filter.type !== "search" || String(value).trim() !== "";
+  // Los buscadores mantienen siempre el floating label arriba para que
+  // el placeholder nunca compita visualmente con la etiqueta.
+  const active = ["search", "select"].includes(filter.type) || String(value).trim() !== "";
 
   if (filter.type === "tabs") {
     return (

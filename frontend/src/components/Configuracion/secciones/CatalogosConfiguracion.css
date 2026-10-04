@@ -107,7 +107,7 @@
 }
 
 .config-catalogStat--usage {
-  --config-catalogStat-tone: var(--secondary-600, #7c3aed);
+  --config-catalogStat-tone: var(--secondary-600);
 }
 
 .config-catalogPanel {
@@ -223,7 +223,7 @@
 }
 
 .config-catalogTable.has-y-scroll > .config-catalogTable__head {
-  padding-right: calc(16px + var(--config-table-scrollbar-width, 0px));
+  padding-right: calc(16px + var(--global-table-scrollbar-width, 0px));
 }
 
 .config-catalogTable__head {

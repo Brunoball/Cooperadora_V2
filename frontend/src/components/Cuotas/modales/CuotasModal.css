@@ -2149,12 +2149,12 @@ html[data-theme="oscuro"] .cuotas-registration-paid__delete:focus-visible {
 .cuotas-v2-period-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .cuotas-v2-special-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .cuotas-v2-period { min-width: 0; border: 1px solid var(--border-color, #dbe3ec); border-radius: 13px; background: var(--card-bg, #fff); overflow: hidden; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
-.cuotas-v2-period.is-selected { border-color: color-mix(in srgb, var(--balto-action, var(--primary-color, #2563eb)) 55%, transparent); background: color-mix(in srgb, var(--balto-action, var(--primary-color, #2563eb)) 5%, var(--card-bg, #fff)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--balto-action, var(--primary-color, #2563eb)) 8%, transparent); }
+.cuotas-v2-period.is-selected { border-color: color-mix(in srgb, var(--balto-action, var(--primary-color)) 55%, transparent); background: color-mix(in srgb, var(--balto-action, var(--primary-color)) 5%, var(--card-bg, #fff)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--balto-action, var(--primary-color)) 8%, transparent); }
 .cuotas-v2-period.is-disabled { opacity: .62; }
 .cuotas-v2-period__select { width: 100%; min-height: 74px; border: 0; background: transparent; padding: 10px; display: grid; grid-template-columns: 23px minmax(0, 1fr); grid-template-areas: "check title" "check status"; column-gap: 8px; text-align: left; color: inherit; cursor: pointer; }
 .cuotas-v2-period__select:disabled { cursor: default; }
 .cuotas-v2-period__check { grid-area: check; align-self: center; display: inline-flex; width: 21px; height: 21px; align-items: center; justify-content: center; border: 1px solid var(--border-color, #cbd5e1); border-radius: 6px; color: #fff; font-size: .7rem; }
-.cuotas-v2-period.is-selected .cuotas-v2-period__check { background: var(--balto-action, var(--primary-color, #2563eb)); border-color: var(--balto-action, var(--primary-color, #2563eb)); }
+.cuotas-v2-period.is-selected .cuotas-v2-period__check { background: var(--balto-action, var(--primary-color)); border-color: var(--balto-action, var(--primary-color)); }
 .cuotas-v2-period__title { grid-area: title; align-self: end; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; font-weight: 820; }
 .cuotas-v2-period__status { grid-area: status; color: #16a34a; font-size: .68rem; font-weight: 750; }
 .cuotas-v2-period__status.is-resolved { color: var(--text-secondary, #64748b); }
@@ -2171,7 +2171,7 @@ html[data-theme="oscuro"] .cuotas-registration-paid__delete:focus-visible {
 .cuotas-v2-registration-editor input { min-height: 36px; width: 120px; text-align: right; }
 .cuotas-v2-family-section { border-top: 1px solid var(--border-color, #e2e8f0); padding-top: 15px; }
 .cuotas-v2-family-toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text-primary, #0f172a); font-size: .78rem; font-weight: 800; }
-.cuotas-v2-family-toggle input { accent-color: var(--balto-action, var(--primary-color, #2563eb)); }
+.cuotas-v2-family-toggle input { accent-color: var(--balto-action, var(--primary-color)); }
 .cuotas-v2-family-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .cuotas-v2-family-member { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 10px; padding: 9px 10px; font-size: .76rem; }
 .cuotas-v2-family-member span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 750; }
@@ -2194,9 +2194,9 @@ html[data-theme="oscuro"] .cuotas-registration-paid__delete:focus-visible {
   .cuotas-v2-family-member small, .cuotas-v2-family-member b { grid-column: 2; }
 }
 .cuotas-v2-free-amount { display: grid; grid-template-columns: auto 150px minmax(0, 1fr); align-items: center; gap: 10px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 11px; padding: 9px 11px; }
-.cuotas-v2-free-amount.is-active { border-color: color-mix(in srgb, var(--balto-action, var(--primary-color, #2563eb)) 35%, transparent); background: color-mix(in srgb, var(--balto-action, var(--primary-color, #2563eb)) 4%, transparent); }
+.cuotas-v2-free-amount.is-active { border-color: color-mix(in srgb, var(--balto-action, var(--primary-color)) 35%, transparent); background: color-mix(in srgb, var(--balto-action, var(--primary-color)) 4%, transparent); }
 .cuotas-v2-free-amount label { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 750; }
-.cuotas-v2-free-amount input[type="checkbox"] { accent-color: var(--balto-action, var(--primary-color, #2563eb)); }
+.cuotas-v2-free-amount input[type="checkbox"] { accent-color: var(--balto-action, var(--primary-color)); }
 .cuotas-v2-free-amount input[type="text"] { min-height: 36px; border: 1px solid var(--border-color, #dbe3ec); border-radius: 9px; background: var(--card-bg, #fff); color: var(--text-primary, #0f172a); padding: 6px 9px; text-align: right; font: inherit; font-weight: 750; }
 .cuotas-v2-free-amount small { color: var(--text-secondary, #64748b); font-size: .68rem; line-height: 1.3; }
 @media (max-width: 700px) { .cuotas-v2-free-amount { grid-template-columns: 1fr; } .cuotas-v2-free-amount input[type="text"] { width: 100%; } }

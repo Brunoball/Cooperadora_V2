@@ -25,7 +25,7 @@ import { useSmartScrollRefresh } from "../../Global/useSmartScrollRefresh";
 import { canWrite } from "../../_shared/auth/session";
 import { configuracionApi } from "../api/configuracionApi";
 import { useConfiguracion } from "../hooks/useConfiguracion";
-import { useTableScrollbarCompensation } from "../hooks/useTableScrollbarCompensation";
+import { useTableScrollbarCompensation } from "../../Global/useTableScrollbarCompensation";
 import "../configuracion.css";
 import "./CatalogosConfiguracion.css";
 
@@ -198,19 +198,19 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
 
   return (
     <div
-      className={`config-catalogTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
+      className={`config-catalogTable global-scrollAwareTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
       role="table"
       aria-label={meta.title}
       aria-busy={loading}
-      style={{ "--config-table-scrollbar-width": `${scrollbarWidth}px` }}
+      style={{ "--global-table-scrollbar-width": `${scrollbarWidth}px` }}
     >
-      <div className="config-catalogTable__head" role="row">
+      <div className="config-catalogTable__head global-scrollAwareTable__head" role="row">
         <span role="columnheader">Opción</span>
         <span role="columnheader">Uso</span>
         <span role="columnheader">Creación</span>
         <span className="config-catalogTable__actionsHeading" role="columnheader">Acciones</span>
       </div>
-      <div ref={setBodyRef} className="config-catalogTable__body" role="rowgroup">
+      <div ref={setBodyRef} className="config-catalogTable__body global-scrollAwareTable__body" role="rowgroup">
         {loading ? (
           <DataTableSkeleton
             actionColumnIndex={3}

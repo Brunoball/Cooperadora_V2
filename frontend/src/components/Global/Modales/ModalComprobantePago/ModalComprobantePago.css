@@ -144,8 +144,8 @@
 .payment-receipt-actions .payment-receipt-actions__pdf {
   min-width: 74px;
   color: #fff !important;
-  border-color: #b52d35 !important;
-  background: #b52d35 !important;
+  border-color: var(--primary-500) !important;
+  background: var(--primary-500) !important;
 }
 
 .payment-receipt-actions .mov-btn:hover:not(:disabled) {
@@ -164,9 +164,9 @@
 }
 
 .payment-receipt-actions .payment-receipt-actions__pdf:hover:not(:disabled) {
-  border-color: #941e28 !important;
-  background: #941e28 !important;
-  box-shadow: 0 9px 20px -15px rgba(181, 45, 53, 0.95);
+  border-color: var(--primary-600) !important;
+  background: var(--primary-600) !important;
+  box-shadow: 0 9px 20px -15px color-mix(in srgb, var(--primary-500) 95%, transparent);
 }
 
 html[data-theme="oscuro"] .payment-receipt-info-summary,

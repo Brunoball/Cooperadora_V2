@@ -25,7 +25,7 @@ import { FloatingField } from "../../Global/Formularios/TabbedForm";
 import { usernameInput } from "../../Global/Formularios/inputSanitizers";
 import { getSession, saveSession } from "../../_shared/auth/session";
 import { configuracionApi } from "../api/configuracionApi";
-import { useTableScrollbarCompensation } from "../hooks/useTableScrollbarCompensation";
+import { useTableScrollbarCompensation } from "../../Global/useTableScrollbarCompensation";
 import "./UsuariosConfiguracion.css";
 
 const EMPTY_SUMMARY = { total: 0, activos: 0, bajas: 0, admins: 0 };
@@ -362,11 +362,11 @@ export default function UsuariosConfiguracion({ onBack }) {
           </header>
 
           <div
-            className={`config-usersTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
+            className={`config-usersTable global-scrollAwareTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
             role="table"
             aria-label="Usuarios del sistema"
             aria-busy={loading}
-            style={{ "--config-table-scrollbar-width": `${scrollbarWidth}px` }}
+            style={{ "--global-table-scrollbar-width": `${scrollbarWidth}px` }}
           >
             {loading ? (
               <span
@@ -377,7 +377,7 @@ export default function UsuariosConfiguracion({ onBack }) {
                 Cargando usuarios...
               </span>
             ) : null}
-            <div className="config-usersTable__head" role="row">
+            <div className="config-usersTable__head global-scrollAwareTable__head" role="row">
               <span role="columnheader">Usuario</span>
               <span role="columnheader">Nombre completo</span>
               <span role="columnheader">Rol</span>
@@ -390,7 +390,7 @@ export default function UsuariosConfiguracion({ onBack }) {
                 Acciones
               </span>
             </div>
-            <div ref={setTableBodyRef} className="config-usersTable__body" role="rowgroup">
+            <div ref={setTableBodyRef} className="config-usersTable__body global-scrollAwareTable__body" role="rowgroup">
               {loading ? (
                 <DataTableSkeleton
                   actionColumnIndex={5}

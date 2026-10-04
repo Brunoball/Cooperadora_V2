@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faEye,
+  faCircleInfo,
   faHouse,
   faPen,
   faRotateLeft,
@@ -87,13 +87,20 @@ function MemberPicker({ catalog = [], selected = [], familyId, onChange }) {
           <strong>Integrantes</strong>
           <span>{selected.length} seleccionados</span>
         </div>
-        <input
-          className="familias-member-input"
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Buscar alumno por nombre o documento..."
-        />
+        <FloatingField
+          label="Buscar integrante"
+          active
+          placeholderOnFloat
+          className="familias-memberSearch"
+        >
+          <input
+            className="familias-member-input"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Nombre o documento..."
+          />
+        </FloatingField>
       </div>
 
       <div className="familias-memberPicker-list">
@@ -267,6 +274,7 @@ export default function Familias() {
         tabsInTitle
         headFiltersInActions
         primaryActionLabel="Nueva familia"
+        primaryActionClassName="familias-headAction familias-headAction--new"
         onPrimaryAction={writable ? openCreate : undefined}
         canCreate={writable}
         className="familias-page"
@@ -310,7 +318,7 @@ export default function Familias() {
                   </div>
                   <div className="mov-gridCell mov-actionsInline is-center">
                     <button className="mov-iconBtn" type="button" title="Ver familia" onClick={() => openDetail(item)}>
-                      <FontAwesomeIcon icon={faEye} />
+                      <FontAwesomeIcon icon={faCircleInfo} />
                     </button>
                     {writable ? (
                       <button className="mov-iconBtn" type="button" title="Editar" onClick={() => openEdit(item)}>
@@ -357,7 +365,7 @@ export default function Familias() {
       >
         <div className="familias-modal__layout">
           <section className="familias-modal__data">
-            <FloatingField label="Nombre de familia *" active={Boolean(form.nombre_familia)} wide>
+            <FloatingField label="Nombre de familia *" active={Boolean(form.nombre_familia)} wide className="familias-field familias-field--name">
               <input
                 value={form.nombre_familia}
                 maxLength={120}
@@ -366,7 +374,7 @@ export default function Familias() {
                 placeholder=" "
               />
             </FloatingField>
-            <FloatingField label="Observaciones" active={Boolean(form.observaciones)} wide textarea>
+            <FloatingField label="Observaciones" active={Boolean(form.observaciones)} wide textarea className="familias-field familias-field--notes">
               <textarea
                 value={form.observaciones}
                 maxLength={5000}

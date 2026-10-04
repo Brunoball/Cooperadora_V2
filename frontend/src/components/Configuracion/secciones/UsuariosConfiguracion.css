@@ -122,7 +122,7 @@
 }
 
 .config-usersStat--admin {
-  --config-usersStat-tone: var(--secondary-600, #7c3aed);
+  --config-usersStat-tone: var(--secondary-600);
 }
 
 .config-usersPanel {
@@ -223,7 +223,7 @@
 }
 
 .config-usersTable.has-y-scroll > .config-usersTable__head {
-  padding-right: calc(16px + var(--config-table-scrollbar-width, 0px));
+  padding-right: calc(16px + var(--global-table-scrollbar-width, 0px));
 }
 
 .config-usersTable__head {

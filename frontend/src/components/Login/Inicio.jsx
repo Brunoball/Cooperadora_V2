@@ -5,7 +5,7 @@ import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { apiPost } from "../_shared/api/apiClient";
 import { saveSession } from "../_shared/auth/session";
 import Toast from "../Global/Toast";
-import bannerCooperadora from "../../imagenes/Escudo_ipet50.png";
+import bannerCooperadora from "../../imagenes/logo_ipet50.png";
 import "./inicio.css";
 
 const APP_NAME = "Cooperadora IPET N° 50";

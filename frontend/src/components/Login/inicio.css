@@ -2,8 +2,8 @@
 
 .ini_contenedor-principal {
   --ini-primary: var(--text-primary, #0f172a);
-  --ini-action: var(--primary-color, #2563eb);
-  --ini-action-soft: color-mix(in srgb, var(--primary-color, #2563eb) 12%, transparent);
+  --ini-action: var(--primary-color, var(--primary-500));
+  --ini-action-soft: color-mix(in srgb, var(--primary-color, var(--primary-500)) 12%, transparent);
   --ini-bg: var(--background-color, #f8fafc);
   --ini-text: var(--text-secondary, #475569);
   --ini-muted: var(--gray-500, #64748b);
@@ -433,7 +433,7 @@
   background: var(--ini-action);
   border: 1px solid var(--ini-action);
   border-radius: 14px;
-  box-shadow: 0 14px 28px -18px rgb(37 99 235 / .65);
+  box-shadow: 0 14px 28px -18px color-mix(in srgb, var(--primary-500) 65%, transparent);
   font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
   font-size: .96rem;
   font-weight: 600;
@@ -445,7 +445,7 @@
 .ini_boton:hover:not(:disabled) {
   transform: translateY(-2px);
   background: color-mix(in srgb, var(--ini-action) 88%, var(--ini-primary));
-  box-shadow: 0 18px 34px -18px rgb(37 99 235 / .72);
+  box-shadow: 0 18px 34px -18px color-mix(in srgb, var(--primary-500) 72%, transparent);
 }
 
 .ini_boton:active:not(:disabled) {
@@ -622,7 +622,7 @@
 .ini_modal-btn-pri {
   color: #fff;
   background: var(--ini-action);
-  box-shadow: 0 14px 28px -18px rgb(37 99 235 / .68);
+  box-shadow: 0 14px 28px -18px color-mix(in srgb, var(--primary-500) 68%, transparent);
 }
 
 .ini_modal-btn-pri:hover:not(:disabled) {

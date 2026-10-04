@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import DataTableSkeleton from "./DataTableSkeleton";
+import { useTableScrollbarCompensation } from "./useTableScrollbarCompensation";
 
 const SKELETON_ROW_HEIGHT = 67;
 const LARGE_SCREEN_BREAKPOINT = 1500;
@@ -28,19 +29,23 @@ export default function GlobalDivTable({
 }) {
   const bodyRef = useRef(null);
   const minimumSkeletonRows = Math.max(1, Number(skeletonRows) || 1);
+  const {
+    bodyRef: compensationBodyRef,
+    hasVerticalScroll,
+    scrollbarWidth,
+  } = useTableScrollbarCompensation({ disabled: loading || empty });
   const setBodyRef = useCallback(
     (node) => {
       bodyRef.current = node;
+      compensationBodyRef(node);
       if (typeof externalBodyRef === "function") {
         externalBodyRef(node);
       } else if (externalBodyRef) {
         externalBodyRef.current = node;
       }
     },
-    [externalBodyRef],
+    [compensationBodyRef, externalBodyRef],
   );
-  const [hasVerticalScroll, setHasVerticalScroll] = useState(false);
-  const [scrollbarWidth, setScrollbarWidth] = useState(0);
   const [visibleSkeletonRows, setVisibleSkeletonRows] = useState(() =>
     typeof window !== "undefined" && window.innerWidth > LARGE_SCREEN_BREAKPOINT
       ? LARGE_SCREEN_SKELETON_ROWS
@@ -71,17 +76,7 @@ export default function GlobalDivTable({
 
         if (loading || empty) {
           body.scrollTop = 0;
-          setHasVerticalScroll(false);
-          setScrollbarWidth(0);
-          return;
         }
-
-        const hasOverflow = body.scrollHeight > body.clientHeight + 1;
-        const width = hasOverflow
-          ? Math.max(0, body.offsetWidth - body.clientWidth)
-          : 0;
-        setHasVerticalScroll(hasOverflow);
-        setScrollbarWidth(width);
       });
     };
 
@@ -114,7 +109,7 @@ export default function GlobalDivTable({
 
   return (
     <div
-      className={`global-divTable ${empty ? "is-empty" : ""} ${loading ? "is-loading" : ""} ${!loading && hasVerticalScroll ? "has-y-scroll" : ""} ${className}`.trim()}
+      className={`global-divTable global-scrollAwareTable ${empty ? "is-empty" : ""} ${loading ? "is-loading" : ""} ${!loading && hasVerticalScroll ? "has-y-scroll" : ""} ${className}`.trim()}
       role="table"
       aria-label={ariaLabel}
       aria-busy={loading}
@@ -126,7 +121,7 @@ export default function GlobalDivTable({
         </span>
       ) : null}
       <div
-        className={`mov-gridTable mov-gridTable--head global-divTable__head ${gridClassName}`.trim()}
+        className={`mov-gridTable mov-gridTable--head global-divTable__head global-scrollAwareTable__head ${gridClassName}`.trim()}
         role="row"
       >
         {columns.map((column, index) => {
@@ -157,7 +152,7 @@ export default function GlobalDivTable({
 
       <div
         ref={setBodyRef}
-        className={`mov-tableWrap global-divTable__wrap global-divTable__body ${bodyClassName}`.trim()}
+        className={`mov-tableWrap global-divTable__wrap global-divTable__body global-scrollAwareTable__body ${bodyClassName}`.trim()}
         role="rowgroup"
       >
         {loading ? (

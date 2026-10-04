@@ -1,53 +1,54 @@
 /* =========================================================
-   PALETA GLOBAL
-   Migrada desde Globalviejo/roots.css.
+   PALETA GLOBAL · IPET 50
 
-   Este archivo vive en la raíz de components/Global y es la
-   única fuente de color para toda la aplicación.
+   Bordo institucional como color principal, amarillo/dorado
+   como secundario y neutros compartidos por toda la aplicación.
+   Este archivo es la única fuente canónica de color.
    ========================================================= */
 :root {
-  /* Azul principal del diseño anterior */
-  --primary-50: #eff6ff;
-  --primary-100: #dbeafe;
-  --primary-200: #bfdbfe;
-  --primary-300: #93c5fd;
-  --primary-400: #3b82f6;
-  --primary-500: #2563eb;
-  --primary-600: #1d4ed8;
-  --primary-700: #1e40af;
-  --primary-800: #1e3a8a;
-  --primary-900: #172554;
-  --primary-950: #0f172a;
+  /* Identidad IPET 50: bordo institucional como color principal */
+  --primary-50: #fdf4f5;
+  --primary-100: #fbe7e9;
+  --primary-200: #f5cbd0;
+  --primary-300: #eba3aa;
+  --primary-400: #d96b74;
+  --primary-500: #b52d35;
+  --primary-600: #941e28;
+  --primary-700: #7d1822;
+  --primary-800: #65151d;
+  --primary-900: #4d1117;
+  --primary-950: #2d090d;
 
   --primary-color: var(--primary-500);
   --primary-hover: var(--primary-600);
   --primary-light: var(--primary-100);
   --primary-dark: var(--primary-700);
 
-  /* Violeta secundario y rosa de acento del diseño anterior */
-  --secondary-50: #f5f3ff;
-  --secondary-100: #ede9fe;
-  --secondary-200: #ddd6fe;
-  --secondary-300: #c4b5fd;
-  --secondary-400: #a78bfa;
-  --secondary-500: #8b5cf6;
-  --secondary-600: #7c3aed;
-  --secondary-700: #6d28d9;
-  --secondary-800: #5b21b6;
-  --secondary-900: #4c1d95;
-  --secondary-950: #2e1065;
+  /* Amarillo/dorado del logo como secundario institucional */
+  --secondary-50: #fffbea;
+  --secondary-100: #fff4bf;
+  --secondary-200: #ffe87a;
+  --secondary-300: #ffdc42;
+  --secondary-400: #f7cc1c;
+  --secondary-500: #e6bd00;
+  --secondary-600: #c59c00;
+  --secondary-700: #a17a00;
+  --secondary-800: #805f08;
+  --secondary-900: #684d0d;
+  --secondary-950: #3d2b03;
 
-  --accent-50: #fdf2f8;
-  --accent-100: #fce7f3;
-  --accent-200: #fbcfe8;
-  --accent-300: #f9a8d4;
-  --accent-400: #f472b6;
-  --accent-500: #ec4899;
-  --accent-600: #db2777;
-  --accent-700: #be185d;
-  --accent-800: #9d174d;
-  --accent-900: #831843;
-  --primary-accent: var(--accent-500);
+  /* Rojo vivo del logo reservado para acentos puntuales */
+  --accent-50: #fff1f2;
+  --accent-100: #ffe4e6;
+  --accent-200: #fecdd3;
+  --accent-300: #fda4af;
+  --accent-400: #fb7185;
+  --accent-500: #e31e24;
+  --accent-600: #c9151b;
+  --accent-700: #a81218;
+  --accent-800: #891217;
+  --accent-900: #711317;
+  --primary-accent: var(--secondary-500);
 
   /* Estados */
   --success-50: #ecfdf5;
@@ -157,11 +158,11 @@
   --mov-radius: 16px;
   --mov-shadow-sm: var(--shadow-sm);
   --mov-shadow-md: 0 14px 34px -22px rgb(15 23 42 / 0.28);
-  --mov-focus: 0 0 0 4px rgb(37 99 235 / 0.14);
+  --mov-focus: 0 0 0 4px color-mix(in srgb, var(--primary-500) 14%, transparent);
   --mov-trans: 160ms cubic-bezier(0.4, 0, 0.2, 1);
 
   --cc-muted: color-mix(in srgb, var(--balto-text) 82%, #fff);
-  --cc-focus: rgb(37 99 235 / 0.18);
+  --cc-focus: color-mix(in srgb, var(--primary-500) 18%, transparent);
   --cc-transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
   --cc-shadow-sm: var(--shadow-sm);
 

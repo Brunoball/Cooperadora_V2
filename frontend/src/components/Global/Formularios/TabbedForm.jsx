@@ -12,6 +12,7 @@ const ALWAYS_FLOATING_INPUT_TYPES = new Set([
   "file",
   "month",
   "range",
+  "search",
   "time",
   "week",
 ]);

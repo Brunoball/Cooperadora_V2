@@ -4,12 +4,13 @@ import {
   faArrowRightArrowLeft,
   faBookOpen,
   faCheck,
-  faEye,
+  faCircleInfo,
   faFileExcel,
   faFileImport,
   faHouse,
   faIdCard,
   faPen,
+  faPlus,
   faRotateLeft,
   faTrashCan,
   faUser,
@@ -21,6 +22,7 @@ import GlobalDivTable from "../Global/GlobalDivTable";
 import CrudModal from "../Global/Modales/CrudModal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
 import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
+import ModalCambioEstadoGlobal from "../Global/Modales/ModalCambioEstadoGlobal";
 import InfoModal, {
   InfoEmpty,
   InfoRow,
@@ -253,8 +255,9 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
           idPrefix="alumnos-form"
           title="Identificación y contacto"
           icon={faIdCard}
+          bodyClassName="alumnos-formGrid alumnos-formGrid--personal"
         >
-          <FloatingField label="Apellido *" active={active("apellido")}>
+          <FloatingField label="Apellido *" active={active("apellido")} className="alumnos-field--span-6">
             <input
               value={form.apellido}
               maxLength={100}
@@ -263,7 +266,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Nombre" active={active("nombre")}>
+          <FloatingField label="Nombre" active={active("nombre")} className="alumnos-field--span-6">
             <input
               value={form.nombre}
               maxLength={100}
@@ -271,7 +274,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Tipo de documento *" active={active("id_tipo_documento")}>
+          <FloatingField label="Tipo de documento *" active={active("id_tipo_documento")} className="alumnos-field--span-4">
             <select
               value={form.id_tipo_documento}
               onChange={(event) => set("id_tipo_documento", event.target.value)}
@@ -285,7 +288,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="Número de documento *" active={active("num_documento")}>
+          <FloatingField label="Número de documento *" active={active("num_documento")} className="alumnos-field--span-4">
             <input
               value={form.num_documento}
               maxLength={20}
@@ -294,7 +297,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Sexo" active={active("id_sexo")}>
+          <FloatingField label="Sexo" active={active("id_sexo")} className="alumnos-field--span-4">
             <select value={form.id_sexo} onChange={(event) => set("id_sexo", event.target.value)}>
               <option value="">Sin especificar</option>
               {(catalogs.sexos || []).map((item) => (
@@ -302,7 +305,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="Fecha de nacimiento" active={active("fecha_nacimiento")}>
+          <FloatingField label="Fecha de nacimiento" active={active("fecha_nacimiento")} className="alumnos-field--span-4">
             <input
               type="date"
               max={localToday()}
@@ -310,7 +313,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               onChange={(event) => set("fecha_nacimiento", event.target.value)}
             />
           </FloatingField>
-          <FloatingField label="Lugar de nacimiento" active={active("lugar_nacimiento")}>
+          <FloatingField label="Lugar de nacimiento" active={active("lugar_nacimiento")} className="alumnos-field--span-8">
             <input
               value={form.lugar_nacimiento}
               maxLength={100}
@@ -318,7 +321,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Domicilio" active={active("domicilio")} wide>
+          <FloatingField label="Domicilio" active={active("domicilio")} wide className="alumnos-field--span-12">
             <input
               value={form.domicilio}
               maxLength={150}
@@ -326,7 +329,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Localidad" active={active("localidad")}>
+          <FloatingField label="Localidad" active={active("localidad")} className="alumnos-field--span-5">
             <input
               value={form.localidad}
               maxLength={100}
@@ -334,7 +337,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Código postal" active={active("cp")}>
+          <FloatingField label="Código postal" active={active("cp")} className="alumnos-field--span-3">
             <input
               value={form.cp}
               maxLength={10}
@@ -342,7 +345,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               placeholder=" "
             />
           </FloatingField>
-          <FloatingField label="Teléfono" active={active("telefono")}>
+          <FloatingField label="Teléfono" active={active("telefono")} className="alumnos-field--span-4">
             <input
               value={form.telefono}
               maxLength={20}
@@ -359,8 +362,9 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
           idPrefix="alumnos-form"
           title="Curso, cuota y familia"
           icon={faUsers}
+          bodyClassName="alumnos-formGrid alumnos-formGrid--school"
         >
-          <FloatingField label="Año" active={active("id_anio")}>
+          <FloatingField label="Año" active={active("id_anio")} className="alumnos-field--span-3">
             <select value={form.id_anio} onChange={(event) => set("id_anio", event.target.value)}>
               <option value="">Sin asignar</option>
               {(catalogs.anios || []).map((item) => (
@@ -368,7 +372,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="División" active={active("id_division")}>
+          <FloatingField label="División" active={active("id_division")} className="alumnos-field--span-3">
             <select value={form.id_division} onChange={(event) => set("id_division", event.target.value)}>
               <option value="">Sin asignar</option>
               {(catalogs.divisiones || []).map((item) => (
@@ -376,7 +380,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="Categoría" active={active("id_categoria")}>
+          <FloatingField label="Categoría" active={active("id_categoria")} className="alumnos-field--span-6">
             <select value={form.id_categoria} onChange={(event) => setCategoria(event.target.value)}>
               <option value="">Sin asignar</option>
               {(catalogs.categorias || []).map((item) => (
@@ -384,7 +388,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="Categoría de monto" active={active("id_cat_monto")}>
+          <FloatingField label="Categoría de monto" active={active("id_cat_monto")} className="alumnos-field--span-6">
             <select value={form.id_cat_monto} onChange={(event) => setCategoriaMonto(event.target.value)}>
               <option value="">Sin asignar</option>
               {(catalogs.categorias_monto || []).map((item) => (
@@ -394,7 +398,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="Familia" active={active("id_familia")} wide>
+          <FloatingField label="Familia" active={active("id_familia")} className="alumnos-field--span-6">
             <select value={form.id_familia} onChange={(event) => set("id_familia", event.target.value)}>
               <option value="">Sin familia</option>
               {(catalogs.familias || []).map((item) => (
@@ -404,7 +408,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               ))}
             </select>
           </FloatingField>
-          <FloatingField label="Fecha de ingreso *" active={active("ingreso")}>
+          <FloatingField label="Fecha de ingreso *" active={active("ingreso")} className="alumnos-field--span-6">
             <input
               type="date"
               max={localToday()}
@@ -413,7 +417,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               required
             />
           </FloatingField>
-          <label className="entity-field entity-field--wide">
+          <label className={`entity-field alumnos-cobradorCheck alumnos-field--span-6 ${form.es_cobrador ? "is-selected" : ""}`}>
             <span className="entity-checkRow">
               <input
                 type="checkbox"
@@ -423,7 +427,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
               <b>Marcar como cobrador</b>
             </span>
           </label>
-          <FloatingField label="Observaciones" active={active("observaciones")} wide textarea>
+          <FloatingField label="Observaciones" active={active("observaciones")} wide textarea className="alumnos-field--span-12">
             <textarea
               value={form.observaciones}
               maxLength={5000}
@@ -457,8 +461,6 @@ export default function Alumnos() {
   const [detailTab, setDetailTab] = useState(INFO_TAB_GENERAL);
   const [stateModal, setStateModal] = useState(null);
   const [deleteModal, setDeleteModal] = useState(null);
-  const [reason, setReason] = useState("");
-  const [bajaTipo, setBajaTipo] = useState("BAJA");
   const [importing, setImporting] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
@@ -565,26 +567,28 @@ export default function Alumnos() {
     }
   };
 
-  const changeState = async (event) => {
-    event.preventDefault();
-    if (!stateModal) return;
-    if (stateModal.activo && !reason.trim()) {
-      setFeedback({ type: "error", message: "Indicá el motivo de baja." });
-      return;
+  const changeState = async ({ row, mode, tipo, motivo }) => {
+    if (!row?.id_alumno) {
+      return { ok: false, mensaje: "No hay un alumno seleccionado." };
     }
-    setSaving(true);
+
+    setSavingId(row.id_alumno);
     try {
-      const response = stateModal.activo
-        ? await alumnosApi.darBaja({ id: stateModal.id_alumno, motivo: reason.trim(), tipo_baja: bajaTipo })
-        : await alumnosApi.reactivar({ id: stateModal.id_alumno });
-      setFeedback({ type: "success", message: response.mensaje });
-      setStateModal(null);
-      setReason("");
-      await cargar();
+      const response = mode === "reactivar"
+        ? await alumnosApi.reactivar({ id: row.id_alumno })
+        : mode === "reclasificar"
+          ? await alumnosApi.reclasificar({ id: row.id_alumno, tipo })
+          : await alumnosApi.darBaja({
+              id: row.id_alumno,
+              motivo: String(motivo || "").trim(),
+              tipo_baja: tipo,
+            });
+      await cargar({ silent: true });
+      return response;
     } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message });
+      throw requestError;
     } finally {
-      setSaving(false);
+      setSavingId(null);
     }
   };
 
@@ -605,34 +609,13 @@ export default function Alumnos() {
     }
   };
 
-  const reactivarAlumno = async (item) => {
-    if (!window.confirm(`¿Reactivar a ${item.nombre_completo}? Volverá al listado de alumnos activos.`)) return;
-    setSavingId(item.id_alumno);
-    try {
-      const response = await alumnosApi.reactivar({ id: item.id_alumno });
-      setFeedback({ type: "success", message: response.mensaje || "Alumno reactivado correctamente." });
-      await cargar();
-    } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message });
-    } finally {
-      setSavingId(null);
-    }
-  };
 
-  const reclasificarAlumno = async (item) => {
-    const target = view === "bajas" ? "EGRESO" : "BAJA";
-    const label = target === "EGRESO" ? "Egresados" : "Bajas";
-    if (!window.confirm(`¿Mover a ${item.nombre_completo} a ${label}? No se eliminarán pagos ni historial.`)) return;
-    setSavingId(item.id_alumno);
-    try {
-      const response = await alumnosApi.reclasificar({ id: item.id_alumno, tipo: target });
-      setFeedback({ type: "success", message: response.mensaje });
-      await cargar();
-    } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message });
-    } finally {
-      setSavingId(null);
-    }
+  const reclasificarAlumno = (item) => {
+    setStateModal({
+      mode: "reclasificar",
+      row: item,
+      initialType: view === "bajas" ? "EGRESO" : "BAJA",
+    });
   };
 
   const fetchAllRows = async (targetView) => {
@@ -821,10 +804,56 @@ export default function Alumnos() {
 
   const pageFilters = [viewTabs, ...(view === "activos" ? activeFilters : inactiveFilters)];
 
-  const activeColumns = ["Apellido y nombre", "Documento", "Domicilio", "Localidad / Teléfono", "Curso", "Acciones"];
-  const bajaColumns = ["Apellido y nombre", "Documento", "Domicilio", "Localidad / Teléfono", "Curso", "Fecha de baja", "Motivo", "Acciones"];
-  const egresoColumns = ["Apellido y nombre", "Documento", "Domicilio", "Localidad / Teléfono", "Curso", "Fecha de egreso", "Promoción", "Acciones"];
+  const activeColumns = [
+    "Apellido y nombre",
+    { label: "Documento", align: "center" },
+    "Domicilio",
+    "Localidad / Teléfono",
+    { label: "Curso", align: "center" },
+    { label: "Acciones", align: "center" },
+  ];
+  const bajaColumns = [
+    "Apellido y nombre",
+    { label: "Documento", align: "center" },
+    "Domicilio",
+    "Localidad / Teléfono",
+    { label: "Curso", align: "center" },
+    "Fecha de baja",
+    "Motivo",
+    { label: "Acciones", align: "center" },
+  ];
+  const egresoColumns = [
+    "Apellido y nombre",
+    { label: "Documento", align: "center" },
+    "Domicilio",
+    "Localidad / Teléfono",
+    { label: "Curso", align: "center" },
+    { label: "Fecha de egreso", align: "center" },
+    { label: "Promoción", align: "center" },
+    { label: "Acciones", align: "center" },
+  ];
   const columns = view === "activos" ? activeColumns : view === "bajas" ? bajaColumns : egresoColumns;
+
+  const fileActions = [
+    {
+      key: "exportar",
+      label: preparingExport ? "Preparando..." : "Exportar Excel",
+      icon: faFileExcel,
+      onClick: openExportModal,
+      disabled: preparingExport || loading,
+      className: "mov-btn--ghost alumnos-headAction alumnos-headAction--export",
+    },
+    ...(writable
+      ? [{
+          key: "importar",
+          label: "Importar alumnos",
+          icon: faFileImport,
+          onClick: openImportModal,
+          disabled: importing,
+          className: "mov-btn--ghost alumnos-headAction alumnos-headAction--import",
+        }]
+      : []),
+  ];
 
   return (
     <>
@@ -836,12 +865,10 @@ export default function Alumnos() {
         headFiltersInActions
         headFiltersClassName="socios-headFilters"
         primaryActionLabel="Nuevo alumno"
+        primaryActionClassName="alumnos-headAction alumnos-headAction--new"
         onPrimaryAction={view === "activos" && writable ? openCreate : undefined}
         canCreate={view === "activos" && writable}
-        secondaryActions={[
-          { key: "exportar", label: preparingExport ? "Preparando..." : "Exportar", icon: faFileExcel, onClick: openExportModal, disabled: preparingExport || loading },
-          ...(writable ? [{ key: "importar", label: "Importar alumnos", icon: faFileImport, onClick: openImportModal, disabled: importing }] : []),
-        ]}
+        secondaryActions={fileActions}
         className="socios-page"
       >
         <GlobalDivTable
@@ -875,9 +902,6 @@ export default function Alumnos() {
                   </div>
                   <div className="mov-gridCell is-center alumnos-documentCell">
                     <strong>{item.num_documento || "—"}</strong>
-                    <span title={item.tipo_documento || item.tipo_documento_sigla || "Tipo de documento"}>
-                      {item.tipo_documento_sigla || "—"}
-                    </span>
                   </div>
                   <div className="mov-gridCell"><span>{item.domicilio || "—"}</span></div>
                   <div className="mov-gridCell is-center alumnos-contactLocationCell">
@@ -888,8 +912,8 @@ export default function Alumnos() {
                     <strong>{[item.nombre_anio, item.nombre_division].filter(Boolean).join(" ") || "SIN CURSO"}</strong>
                   </div>
                   <div className="mov-gridCell mov-actionsInline is-center">
-                    <button className="mov-iconBtn" type="button" title="Ver ficha" onClick={() => openDetail(item)}>
-                      <FontAwesomeIcon icon={faEye} />
+                    <button className="mov-iconBtn" type="button" title="Ver información" onClick={() => openDetail(item)}>
+                      <FontAwesomeIcon icon={faCircleInfo} />
                     </button>
                     {writable ? (
                       <button className="mov-iconBtn" type="button" title="Editar" onClick={() => openEdit(item)}>
@@ -902,9 +926,11 @@ export default function Alumnos() {
                         type="button"
                         title="Dar de baja"
                         onClick={() => {
-                          setReason("");
-                          setBajaTipo(Number(item.id_anio) === 7 ? "EGRESO" : "BAJA");
-                          setStateModal(item);
+                          setStateModal({
+                            mode: "salida",
+                            row: item,
+                            initialType: Number(item.id_anio) === 7 ? "EGRESO" : "BAJA",
+                          });
                         }}
                       >
                         <FontAwesomeIcon icon={faUserSlash} />
@@ -938,9 +964,6 @@ export default function Alumnos() {
                   </div>
                   <div className="mov-gridCell is-center alumnos-documentCell">
                     <strong>{item.num_documento || "—"}</strong>
-                    <span title={item.tipo_documento || item.tipo_documento_sigla || "Tipo de documento"}>
-                      {item.tipo_documento_sigla || "—"}
-                    </span>
                   </div>
                   <div className="mov-gridCell"><span>{item.domicilio || "—"}</span></div>
                   <div className="mov-gridCell is-center alumnos-contactLocationCell">
@@ -955,8 +978,8 @@ export default function Alumnos() {
                     <span>{view === "bajas" ? (item.motivo || "BAJA") : (item.promocion || "—")}</span>
                   </div>
                   <div className="mov-gridCell mov-actionsInline is-center">
-                    <button className="mov-iconBtn" type="button" title="Ver ficha" onClick={() => openDetail(item)}>
-                      <FontAwesomeIcon icon={faEye} />
+                    <button className="mov-iconBtn" type="button" title="Ver información" onClick={() => openDetail(item)}>
+                      <FontAwesomeIcon icon={faCircleInfo} />
                     </button>
                     {writable ? (
                       <button
@@ -975,7 +998,7 @@ export default function Alumnos() {
                         type="button"
                         title="Reactivar"
                         disabled={savingId === item.id_alumno}
-                        onClick={() => reactivarAlumno(item)}
+                        onClick={() => setStateModal({ mode: "reactivar", row: item, initialType: "BAJA" })}
                       >
                         <FontAwesomeIcon icon={faRotateLeft} />
                       </button>
@@ -997,13 +1020,44 @@ export default function Alumnos() {
             : null}
         </GlobalDivTable>
 
-        {paginacion.total_paginas > 1 ? (
-          <div className="socios-pagination">
-            <div className="socios-pagination__left">
+        <div
+          className={`socios-pagination alumnos-tableFooter ${paginacion.total_paginas <= 1 ? "is-single-page" : ""}`}
+        >
+          <div className="socios-pagination__left">
+            <div className="alumnos-footerActions" aria-label="Acciones de alumnos">
+              {view === "activos" && writable ? (
+                <button
+                  type="button"
+                  className="alumnos-footerAction alumnos-footerAction--nuevo"
+                  onClick={openCreate}
+                >
+                  <FontAwesomeIcon icon={faPlus} />
+                  <span>Nuevo alumno</span>
+                </button>
+              ) : null}
+
+              {fileActions.map((action) => (
+                <button
+                  type="button"
+                  className={`alumnos-footerAction alumnos-footerAction--${action.key}`}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  key={`footer-${action.key}`}
+                >
+                  <FontAwesomeIcon icon={action.icon} />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {paginacion.total_paginas > 1 ? (
               <span className="socios-pagination__summary">
                 Mostrando <strong>{paginacion.desde}</strong>–<strong>{paginacion.hasta}</strong> de <strong>{paginacion.total}</strong>
               </span>
-            </div>
+            ) : null}
+          </div>
+
+          {paginacion.total_paginas > 1 ? (
             <div className="socios-pagination__right">
               <div className="socios-pagination__controls">
                 <button type="button" disabled={!paginacion.tiene_anterior} onClick={() => setPage((current) => Math.max(1, current - 1))}>‹</button>
@@ -1011,8 +1065,8 @@ export default function Alumnos() {
                 <button type="button" disabled={!paginacion.tiene_siguiente} onClick={() => setPage((current) => current + 1)}>›</button>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </ModulePage>
 
       <CrudModal
@@ -1024,7 +1078,7 @@ export default function Alumnos() {
         saving={saving}
         submitLabel={form.id_alumno ? "Guardar cambios" : "Crear alumno"}
         wide
-        modalClassName="socios-modal"
+        modalClassName="socios-modal socios-modal--form"
       >
         <AlumnoForm form={form} setForm={setForm} catalogs={catalogos} tab={formTab} setTab={setFormTab} />
       </CrudModal>
@@ -1108,33 +1162,19 @@ export default function Alumnos() {
         ) : null}
       </InfoModal>
 
-      <CrudModal
+      <ModalCambioEstadoGlobal
         open={Boolean(stateModal)}
-        title={stateModal?.activo ? "Registrar salida del alumno" : "Reactivar alumno"}
-        subtitle={stateModal?.nombre_completo || ""}
-        onClose={() => !saving && setStateModal(null)}
-        onSubmit={changeState}
-        saving={saving}
-        submitLabel={stateModal?.activo ? (bajaTipo === "EGRESO" ? "Registrar egreso" : "Dar de baja") : "Reactivar"}
-        danger={Boolean(stateModal?.activo && bajaTipo === "BAJA")}
-      >
-        {stateModal?.activo ? (
-          <>
-            <FloatingField label="Tipo de salida" active wide>
-              <select value={bajaTipo} onChange={(event) => setBajaTipo(event.target.value)}>
-                <option value="BAJA">Baja (cambio de escuela u otro motivo)</option>
-                <option value="EGRESO">Egreso</option>
-              </select>
-            </FloatingField>
-            {Number(stateModal?.id_anio) === 7 ? <p className="alumnos-stateHint">En 7° se propone Egreso por defecto, pero podés elegir Baja si el alumno se cambia de escuela antes de egresar.</p> : null}
-            <FloatingField label="Motivo *" active={Boolean(reason)} wide textarea>
-              <textarea value={reason} rows={4} maxLength={1000} onChange={(event) => setReason(event.target.value.toUpperCase())} required placeholder=" " />
-            </FloatingField>
-          </>
-        ) : (
-          <p>El alumno volverá a aparecer entre los activos.</p>
-        )}
-      </CrudModal>
+        row={stateModal?.row || null}
+        mode={stateModal?.mode || "salida"}
+        initialType={stateModal?.initialType || "BAJA"}
+        loading={Boolean(stateModal?.row && savingId === stateModal.row.id_alumno)}
+        onClose={() => setStateModal(null)}
+        onConfirm={changeState}
+        onToast={(tipo, mensaje) => {
+          if (tipo === "exito") setFeedback({ type: "success", message: mensaje });
+          if (tipo === "error") setFeedback({ type: "error", message: mensaje });
+        }}
+      />
 
       <ModalEliminarGlobal
         open={Boolean(deleteModal)}

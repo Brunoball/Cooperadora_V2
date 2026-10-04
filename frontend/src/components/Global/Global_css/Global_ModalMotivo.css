@@ -13,13 +13,13 @@
   padding: 16px;
   border: 1px solid color-mix(
     in srgb,
-    var(--entity-modal-action, #2563eb) 18%,
+    var(--entity-modal-action, var(--primary-500)) 18%,
     var(--entity-modal-border, #e5e7eb)
   );
   border-radius: 14px;
   background: color-mix(
     in srgb,
-    var(--entity-modal-action, #2563eb) 4%,
+    var(--entity-modal-action, var(--primary-500)) 4%,
     var(--surface-color, #fff)
   );
 }
@@ -27,7 +27,7 @@
 .global-reason-modal__content > span {
   color: color-mix(
     in srgb,
-    var(--entity-modal-action, #2563eb) 82%,
+    var(--entity-modal-action, var(--primary-500)) 82%,
     var(--entity-modal-ink, #1f2937)
   );
   font-size: 0.7rem;
@@ -82,7 +82,7 @@
 .global-reason-preview:hover {
   background: color-mix(
     in srgb,
-    var(--entity-modal-action, #2563eb) 8%,
+    var(--entity-modal-action, var(--primary-500)) 8%,
     transparent
   );
 }
@@ -92,7 +92,7 @@
   box-shadow: 0 0 0 3px
     color-mix(
       in srgb,
-      var(--entity-modal-action, #2563eb) 22%,
+      var(--entity-modal-action, var(--primary-500)) 22%,
       transparent
     );
 }
@@ -100,7 +100,7 @@
 .global-reason-preview small {
   color: color-mix(
     in srgb,
-    var(--entity-modal-action, #2563eb) 86%,
+    var(--entity-modal-action, var(--primary-500)) 86%,
     var(--entity-modal-ink, #1f2937)
   );
   font-size: 0.68rem;

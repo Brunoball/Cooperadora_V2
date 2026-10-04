@@ -759,7 +759,7 @@
 }
 
 .admin-dashboard__indicator.is-people {
-  --indicator-tone: #2563eb;
+  --indicator-tone: var(--primary-500);
 }
 
 .admin-dashboard__indicator.is-muted {
