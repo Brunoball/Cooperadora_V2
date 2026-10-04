@@ -1,0 +1,186 @@
+/* Header flexible de Familias: las acciones conservan su ancho y el buscador es quien cede espacio. */
+.familias-page .module-card__head {
+  min-width: 0;
+}
+
+.familias-page .module-card__headLeft {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.familias-page .module-card__actions {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
+}
+
+.familias-page .module-headFilters {
+  flex: 0 1 250px;
+  width: clamp(110px, 20vw, 250px);
+  min-width: 110px;
+  max-width: 250px;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: end;
+}
+
+.familias-page .familias-mainSearch {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+@media (min-width: 1021px) and (max-width: 1350px) {
+  .familias-page .module-headFilters {
+    flex-basis: 210px;
+    width: clamp(105px, 16vw, 210px);
+    min-width: 105px;
+    max-width: 210px;
+  }
+}
+
+/* Medidas y alineaciones exclusivas de la tabla de Familias. */
+.familias-grid {
+  grid-template-columns:
+    minmax(0, 1.25fr)
+    minmax(0, 2fr)
+    minmax(0, 0.65fr)
+    minmax(0, 0.75fr);
+  width: 100%;
+  min-width: 0;
+}
+
+.familias-table,
+.familias-table .entity-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.familias-table .entity-table-wrap {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.familias-grid > .mov-gridCell--head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.familias-grid .mov-actionsInline {
+  max-width: 100%;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.familias-grid > :nth-child(3),
+.familias-grid > :nth-child(4) {
+  justify-content: center;
+  text-align: center;
+}
+
+@media (max-width: 1040px) {
+  .familias-table .entity-table-wrap {
+    overflow-x: hidden;
+  }
+
+  .familias-grid {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* El buscador de Familias pertenece al bloque derecho del header. */
+.familias-page .module-card__actions {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.familias-page .module-card__actions .module-headFilters {
+  flex: 0 1 250px;
+  width: clamp(110px, 20vw, 250px);
+}
+
+/* Cooperadora V2: selector de alumnos dentro del modal de familias. */
+.familias-members-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.familias-members-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.familias-members-panel__head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.familias-members-panel__head span {
+  font-size: 12px;
+  opacity: .72;
+}
+
+.familias-memberPicker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.familias-member-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft, #dce3ea);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, transform .16s ease;
+}
+
+.familias-member-option:hover,
+.familias-member-option.is-selected {
+  border-color: var(--primary, #205493);
+  background: var(--surface-soft, #f6f8fb);
+}
+
+.familias-member-option:active {
+  transform: scale(.997);
+}
+
+.familias-member-option > input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.familias-member-option__identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.familias-member-option__identity strong,
+.familias-member-option__identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .familias-members-panel__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
