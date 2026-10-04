@@ -110,6 +110,13 @@ abstract class CuotasRegistros extends CuotasConsultas
         $amountOverrides = self::montosPayload($body);
         $condone = $forceCondone || !empty($body['condonar']);
         $paymentMediumId = $condone ? null : positive_id($body['id_medio_pago'] ?? null, 'medio de pago');
+        if ($paymentMediumId !== null) {
+            $medium = $db->prepare('SELECT COUNT(*) FROM medio_pago WHERE id_medio_pago = ?');
+            $medium->execute([$paymentMediumId]);
+            if ((int)$medium->fetchColumn() !== 1) {
+                api_error('El medio de pago seleccionado no existe.', 'MEDIO_PAGO_INVALIDO', 422);
+            }
+        }
         $applyFamily = !empty($body['aplicar_familia']) || !empty($body['aplicar_a_familia']);
         $explicitFamilyIds = id_list($body['ids_familia'] ?? []);
         $targets = self::activeFamilyTargets($db, $student, $applyFamily, $explicitFamilyIds);
@@ -150,6 +157,23 @@ abstract class CuotasRegistros extends CuotasConsultas
             &$insertedIds, &$details, &$skipped, &$groupAllocations,
             &$totalGross, &$totalNet, &$totalCommission
         ): void {
+            // Serializa cualquier cobro/condonación que afecte a los mismos alumnos.
+            // Así dos peticiones simultáneas no pueden leer ambas el período como libre.
+            $lockedTargets = array_values(array_unique(array_map('intval', $targets)));
+            sort($lockedTargets, SORT_NUMERIC);
+            $lockPlaceholders = implode(',', array_fill(0, count($lockedTargets), '?'));
+            $lock = $db->prepare(
+                "SELECT id_alumno FROM alumnos
+                 WHERE id_alumno IN ({$lockPlaceholders})
+                 ORDER BY id_alumno
+                 FOR UPDATE"
+            );
+            $lock->execute($lockedTargets);
+            $lockedIds = array_map('intval', $lock->fetchAll(PDO::FETCH_COLUMN));
+            if (count($lockedIds) !== count($lockedTargets)) {
+                api_error('Uno de los alumnos seleccionados ya no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+            }
+
             $insert = $db->prepare(
                 'INSERT INTO pagos
                  (id_alumno, id_mes, anio_aplicado, fecha_pago, estado,
@@ -351,40 +375,61 @@ abstract class CuotasRegistros extends CuotasConsultas
         if (!in_array($expectedState, ['pagado', 'condonado'], true)) $expectedState = null;
 
         $paymentId = isset($body['id_pago']) && (int)$body['id_pago'] > 0 ? (int)$body['id_pago'] : null;
-        $payment = null;
+        $studentId = null;
+        $periodId = null;
+        $year = null;
+
         if ($paymentId !== null) {
-            $statement = $db->prepare(
-                'SELECT p.*, m.nombre AS periodo, mp.medio_pago
-                 FROM pagos p
-                 INNER JOIN meses m ON m.id_mes = p.id_mes
-                 LEFT JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
-                 WHERE p.id_pago = ? LIMIT 1'
-            );
-            $statement->execute([$paymentId]);
-            $payment = $statement->fetch(PDO::FETCH_ASSOC);
-            if (!$payment) api_error('El pago seleccionado ya no existe.', 'PAGO_NO_ENCONTRADO', 404);
-            if ($expectedState !== null && strtolower((string)$payment['estado']) !== $expectedState) {
-                api_error('El registro cambió de estado y no se eliminó.', 'PAGO_ESTADO_CAMBIO', 409);
-            }
+            // Lectura mínima previa únicamente para conocer qué alumno bloquear.
+            // El pago se vuelve a leer y validar dentro de la transacción.
+            $owner = $db->prepare('SELECT id_alumno FROM pagos WHERE id_pago = ? LIMIT 1');
+            $owner->execute([$paymentId]);
+            $studentId = (int)$owner->fetchColumn();
+            if ($studentId <= 0) api_error('El pago seleccionado ya no existe.', 'PAGO_NO_ENCONTRADO', 404);
         } else {
             $studentId = positive_id($body['id_alumno'] ?? $body['id_socio'] ?? null, 'alumno');
             $periodId = positive_id($body['id_mes_real'] ?? $body['mes'] ?? $body['id_mes'] ?? null, 'período');
             $year = self::validarAnio($body['anio'] ?? $body['anio_aplicado'] ?? date('Y'));
-            $resolved = self::pagoRealParaEliminar($db, $studentId, $periodId, $year, $expectedState);
-            $paymentId = (int)$resolved['id_pago'];
+        }
+
+        $payment = transaction($db, function () use (
+            $db,
+            $auth,
+            &$paymentId,
+            $studentId,
+            $periodId,
+            $year,
+            $expectedState
+        ): array {
+            // Mismo lock que usa registrarPagosDatos(): cualquier alta/baja del
+            // mismo alumno queda serializada y no trabaja con un estado viejo.
+            $lock = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_alumno = ? FOR UPDATE');
+            $lock->execute([$studentId]);
+            if ((int)$lock->fetchColumn() !== $studentId) {
+                api_error('El alumno seleccionado ya no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+            }
+
+            if ($paymentId === null) {
+                $resolved = self::pagoRealParaEliminar($db, $studentId, (int)$periodId, (int)$year, $expectedState);
+                $paymentId = (int)$resolved['id_pago'];
+            }
+
             $statement = $db->prepare(
                 'SELECT p.*, m.nombre AS periodo, mp.medio_pago
                  FROM pagos p
                  INNER JOIN meses m ON m.id_mes = p.id_mes
                  LEFT JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
-                 WHERE p.id_pago = ? LIMIT 1'
+                 WHERE p.id_pago = ? AND p.id_alumno = ?
+                 LIMIT 1
+                 FOR UPDATE'
             );
-            $statement->execute([$paymentId]);
-            $payment = $statement->fetch(PDO::FETCH_ASSOC);
-        }
+            $statement->execute([$paymentId, $studentId]);
+            $current = $statement->fetch(PDO::FETCH_ASSOC);
+            if (!$current) api_error('El pago seleccionado ya no existe.', 'PAGO_NO_ENCONTRADO', 404);
+            if ($expectedState !== null && strtolower((string)$current['estado']) !== $expectedState) {
+                api_error('El registro cambió de estado y no se eliminó.', 'PAGO_ESTADO_CAMBIO', 409);
+            }
 
-        $before = $payment;
-        transaction($db, function () use ($db, $auth, $paymentId, $before): void {
             // La FK id_pago_origen ya tiene ON DELETE CASCADE, pero se borra de
             // forma explícita para que el comportamiento siga siendo evidente y
             // funcione incluso en dumps antiguos sin esa regla.
@@ -392,6 +437,7 @@ abstract class CuotasRegistros extends CuotasConsultas
             $delete = $db->prepare('DELETE FROM pagos WHERE id_pago = ? LIMIT 1');
             $delete->execute([$paymentId]);
             if ($delete->rowCount() !== 1) api_error('No se pudo eliminar el pago.', 'DELETE_FAILED', 409);
+
             audit_change(
                 $db,
                 $auth,
@@ -400,9 +446,11 @@ abstract class CuotasRegistros extends CuotasConsultas
                 'pagos',
                 $paymentId,
                 'Eliminación de pago/condonación',
-                $before,
+                $current,
                 null
             );
+
+            return $current;
         });
 
         return [

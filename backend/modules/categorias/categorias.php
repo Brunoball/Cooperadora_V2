@@ -38,24 +38,17 @@ final class Categorias
         self::db($auth);
         $result = self::guardarDatos($auth, request_body());
         $created = (bool)$result['creada'];
-        unset($result['creada']);
-        api_success($result, $created ? 'Categoría creada correctamente.' : 'Categoría actualizada correctamente.');
+        api_success(['item' => $result['item']], $created
+            ? 'Categoría creada correctamente.'
+            : 'Categoría actualizada correctamente.');
     }
 
-    public static function darBaja(): never
+    public static function eliminar(): never
     {
         $auth = require_admin();
         self::db($auth);
         $id = positive_id(request_body()['id'] ?? null, 'categoría');
-        api_success(self::cambiarEstadoDatos($auth, $id, false), 'Categoría dada de baja correctamente.');
-    }
-
-    public static function reactivar(): never
-    {
-        $auth = require_admin();
-        self::db($auth);
-        $id = positive_id(request_body()['id'] ?? null, 'categoría');
-        api_success(self::cambiarEstadoDatos($auth, $id, true), 'Categoría reactivada correctamente.');
+        api_success(self::eliminarDatos($auth, $id), 'Categoría eliminada correctamente.');
     }
 
     public static function historial(): never
@@ -65,28 +58,49 @@ final class Categorias
         api_success(self::historialDatos(self::db($auth), $id));
     }
 
-    public static function listarDescuentos(): never
+    public static function listarHermanos(): never
     {
         $auth = auth_context();
-        api_success(['items' => self::listarDescuentosDatos(self::db($auth), $_GET)]);
+        api_success(['items' => self::listarHermanosDatos(self::db($auth), $_GET)]);
     }
 
-    public static function guardarDescuento(): never
+    public static function guardarHermanos(): never
     {
         $auth = require_admin();
         self::db($auth);
-        $result = self::guardarDescuentoDatos($auth, request_body());
-        $created = (bool)$result['creado'];
-        unset($result['creado']);
-        api_success($result, $created ? 'Descuento familiar creado correctamente.' : 'Descuento familiar actualizado correctamente.');
+        $result = self::guardarHermanosDatos($auth, request_body());
+        $created = (bool)$result['creada'];
+        api_success(['item' => $result['item']], $created
+            ? 'Valor por hermanos creado correctamente.'
+            : 'Valor por hermanos actualizado correctamente.');
     }
 
-    public static function eliminarDescuento(): never
+    public static function desactivarHermanos(): never
     {
         $auth = require_admin();
         self::db($auth);
-        $id = positive_id(request_body()['id'] ?? null, 'descuento familiar');
-        self::eliminarDescuentoDatos($auth, $id);
-        api_success([], 'Descuento familiar enviado al historial correctamente.');
+        $id = positive_id(request_body()['id'] ?? null, 'regla por hermanos');
+        api_success(
+            self::cambiarEstadoHermanosDatos($auth, $id, false),
+            'Valor por hermanos enviado al historial correctamente.'
+        );
+    }
+
+    public static function reactivarHermanos(): never
+    {
+        $auth = require_admin();
+        self::db($auth);
+        $id = positive_id(request_body()['id'] ?? null, 'regla por hermanos');
+        api_success(
+            self::cambiarEstadoHermanosDatos($auth, $id, true),
+            'Valor por hermanos reactivado correctamente.'
+        );
+    }
+
+    public static function historialHermanos(): never
+    {
+        $auth = auth_context();
+        $id = positive_id($_GET['id'] ?? null, 'regla por hermanos');
+        api_success(self::historialHermanosDatos(self::db($auth), $id));
     }
 }

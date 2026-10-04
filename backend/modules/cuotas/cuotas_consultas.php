@@ -284,6 +284,22 @@ abstract class CuotasConsultas extends CuotasSoporte
         return round($amount, 2);
     }
 
+
+    protected static function precioHistoricoBaseDesdeFilas(array $history, string $date, float $fallback): float
+    {
+        if ($history === []) return round($fallback, 2);
+
+        $amount = (float)($history[0]['precio_anterior'] ?? 0);
+        foreach ($history as $change) {
+            if (substr((string)$change['fecha_cambio'], 0, 10) <= $date) {
+                $amount = (float)($change['precio_nuevo'] ?? 0);
+                continue;
+            }
+            break;
+        }
+        return round($amount, 2);
+    }
+
     /**
      * Calcula únicamente el importe que necesita la página visible.
      * Antes se ejecutaban varias consultas por cada deudor del padrón completo;
@@ -327,7 +343,7 @@ abstract class CuotasConsultas extends CuotasSoporte
             $statement = $db->prepare(
                 "SELECT id_familia, COUNT(*) AS cantidad
                  FROM alumnos
-                 WHERE id_familia IN ($placeholders)
+                 WHERE id_familia IN ($placeholders) AND activo = 1
                  GROUP BY id_familia"
             );
             $statement->execute($familyIds);
@@ -356,6 +372,21 @@ abstract class CuotasConsultas extends CuotasSoporte
         }
 
         $historyType = self::esMensual($periodId) ? 'MENSUAL' : 'ANUAL';
+        $baseHistories = [];
+        if ($periodId !== self::MES_MATRICULA && $categoryIds !== []) {
+            $placeholders = implode(',', array_fill(0, count($categoryIds), '?'));
+            $statement = $db->prepare(
+                "SELECT id_cat_monto, tipo, precio_anterior, precio_nuevo, fecha_cambio, id_historico
+                 FROM precios_historicos
+                 WHERE id_cat_monto IN ($placeholders) AND tipo = ?
+                 ORDER BY id_cat_monto, fecha_cambio ASC, id_historico ASC"
+            );
+            $statement->execute([...$categoryIds, $historyType]);
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $historyRow) {
+                $baseHistories[(int)$historyRow['id_cat_monto']][] = $historyRow;
+            }
+        }
+
         $histories = [];
         if ($periodId !== self::MES_MATRICULA && $familyRules !== []) {
             $ruleIds = array_values(array_unique(array_map(
@@ -400,10 +431,14 @@ abstract class CuotasConsultas extends CuotasSoporte
                 $base = round($registration, 2);
                 $suggested = $base;
             } elseif (self::esMensual($periodId)) {
-                $base = round((float)$category['monto_mensual'], 2);
+                $date = sprintf('%04d-%02d-01', $year, $periodId);
+                $base = self::precioHistoricoBaseDesdeFilas(
+                    $baseHistories[$categoryId] ?? [],
+                    $date,
+                    (float)$category['monto_mensual']
+                );
                 $suggested = $base;
                 if ($rule) {
-                    $date = sprintf('%04d-%02d-01', $year, $periodId);
                     $suggested = self::precioHistoricoHermanosDesdeFilas(
                         $histories[(int)$rule['id_cat_hermanos']] ?? [],
                         $date,
@@ -411,12 +446,17 @@ abstract class CuotasConsultas extends CuotasSoporte
                     );
                 }
             } else {
-                $baseAnnual = round((float)$category['monto_anual'], 2);
+                $annualDate = sprintf('%04d-12-31', $year);
+                $baseAnnual = self::precioHistoricoBaseDesdeFilas(
+                    $baseHistories[$categoryId] ?? [],
+                    $annualDate,
+                    (float)$category['monto_anual']
+                );
                 $suggestedAnnual = $baseAnnual;
                 if ($rule) {
                     $suggestedAnnual = self::precioHistoricoHermanosDesdeFilas(
                         $histories[(int)$rule['id_cat_hermanos']] ?? [],
-                        sprintf('%04d-12-31', $year),
+                        $annualDate,
                         (float)$rule['monto_anual']
                     );
                 }
@@ -439,7 +479,7 @@ abstract class CuotasConsultas extends CuotasSoporte
             $row['monto_base'] = $base;
             $row['porcentaje_descuento_familiar'] = self::porcentajeDescuento($base, $suggested);
             $row['aviso_monto'] = $familyCount >= 2 && !$rule
-                ? "No existe una configuración de {$familyCount} hermanos para {$category['nombre_categoria']}. Se usará el monto base."
+                ? "No existe una configuración de {$familyCount} hermanos activos para {$category['nombre_categoria']}. Se usará el monto base."
                 : null;
         }
         unset($row);

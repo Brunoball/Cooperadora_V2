@@ -48,7 +48,7 @@ const NAV_ITEMS = [
       { key: "categorias-listado", label: "Categorías", path: "/categorias" },
       {
         key: "categorias-descuentos",
-        label: "Descuentos familiares",
+        label: "Valores por hermanos",
         path: "/categorias/descuentos",
       },
     ],

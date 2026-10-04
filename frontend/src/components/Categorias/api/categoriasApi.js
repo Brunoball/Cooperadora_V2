@@ -4,13 +4,15 @@ export const categoriasApi = {
   listar: (params) => apiGet("categorias_listar", params),
   obtener: (id) => apiGet("categorias_obtener", { id }),
   guardar: (payload) => apiPost("categorias_guardar", payload),
-  darBaja: (id) => apiPost("categorias_eliminar", { id }),
-  reactivar: (id) => apiPost("categorias_reactivar", { id }),
+  eliminar: (id) => apiPost("categorias_eliminar", { id }),
   historial: (id) => apiGet("categorias_historial", { id }),
-  listarDescuentosFamiliares: (params) =>
-    apiGet("descuentos_familiares_listar", params),
-  guardarDescuentoFamiliar: (payload) =>
-    apiPost("descuentos_familiares_guardar", payload),
-  eliminarDescuentoFamiliar: (id) =>
-    apiPost("descuentos_familiares_eliminar", { id }),
+
+  listarHermanos: (params) => apiGet("categorias_hermanos_listar", params),
+  guardarHermanos: (payload) => apiPost("categorias_hermanos_guardar", payload),
+  desactivarHermanos: (id) =>
+    apiPost("categorias_hermanos_desactivar", { id }),
+  reactivarHermanos: (id) =>
+    apiPost("categorias_hermanos_reactivar", { id }),
+  historialHermanos: (id) =>
+    apiGet("categorias_hermanos_historial", { id }),
 };

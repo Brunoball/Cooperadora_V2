@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { categoriasApi } from "../api/categoriasApi";
 
+// Se conserva el nombre del hook para no romper imports históricos del módulo.
+// Ahora administra las reglas reales de categoria_hermanos.
 export function useDescuentosFamiliares(filtros = {}, enabled = true) {
   const query = useMemo(() => JSON.stringify(filtros), [filtros]);
   const requestId = useRef(0);
@@ -14,19 +16,18 @@ export function useDescuentosFamiliares(filtros = {}, enabled = true) {
       setError("");
       return null;
     }
-
     const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
     try {
-      const result = await categoriasApi.listarDescuentosFamiliares(
-        JSON.parse(query),
-      );
+      const result = await categoriasApi.listarHermanos(JSON.parse(query));
       if (currentRequest === requestId.current) setItems(result.items || []);
       return result;
-    } catch (err) {
+    } catch (requestError) {
       if (currentRequest === requestId.current) {
-        setError(err.message || "No se pudieron cargar los descuentos familiares.");
+        setError(
+          requestError.message || "No se pudieron cargar los valores por hermanos.",
+        );
       }
       return null;
     } finally {

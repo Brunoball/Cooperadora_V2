@@ -3,13 +3,7 @@ import { categoriasApi } from "../api/categoriasApi";
 
 const initialResponse = {
   items: [],
-  resumen: {
-    total: 0,
-    activas: 0,
-    inactivas: 0,
-    promedio_mensual: "0.00",
-    promedio_anual: "0.00",
-  },
+  resumen: { total: 0, alumnos_activos: 0, reglas_hermanos: 0 },
 };
 
 export function useCategorias(filtros = {}, enabled = true) {
@@ -25,21 +19,15 @@ export function useCategorias(filtros = {}, enabled = true) {
       setError("");
       return null;
     }
-
     const currentRequest = ++requestId.current;
     setLoading(true);
     setError("");
-
     try {
       const result = await categoriasApi.listar(JSON.parse(query));
       if (currentRequest !== requestId.current) return null;
-
       setResponse({
         items: result.items || [],
-        resumen: {
-          ...initialResponse.resumen,
-          ...(result.resumen || {}),
-        },
+        resumen: { ...initialResponse.resumen, ...(result.resumen || {}) },
       });
       return result;
     } catch (requestError) {

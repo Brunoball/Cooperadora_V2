@@ -3,157 +3,201 @@ declare(strict_types=1);
 
 trait CategoriasConsultas
 {
+    private static function castCategoria(array $row): array
+    {
+        return [
+            'id_cat_monto' => (int)$row['id_cat_monto'],
+            'nombre' => (string)$row['nombre_categoria'],
+            'monto_mensual' => (float)$row['monto_mensual'],
+            'monto_anual' => (float)$row['monto_anual'],
+            'fecha_creacion' => (string)$row['fecha_creacion'],
+            'cantidad_alumnos' => (int)($row['cantidad_alumnos'] ?? 0),
+            'cantidad_alumnos_activos' => (int)($row['cantidad_alumnos_activos'] ?? 0),
+            'cantidad_egresados' => (int)($row['cantidad_egresados'] ?? 0),
+            'cantidad_reglas_hermanos' => (int)($row['cantidad_reglas_hermanos'] ?? 0),
+            'ultimo_cambio' => $row['ultimo_cambio'] !== null
+                ? substr((string)$row['ultimo_cambio'], 0, 10)
+                : (string)$row['fecha_creacion'],
+        ];
+    }
+
+    private static function categoriaDetalle(PDO $db, int $id, bool $lock = false): ?array
+    {
+        $sql =
+            'SELECT cm.id_cat_monto, cm.nombre_categoria, cm.monto_mensual, cm.monto_anual,
+                    cm.fecha_creacion,
+                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto) AS cantidad_alumnos,
+                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto AND a.activo = 1) AS cantidad_alumnos_activos,
+                    (SELECT COUNT(*) FROM alumnos_egresados ae WHERE ae.id_cat_monto_final = cm.id_cat_monto) AS cantidad_egresados,
+                    (SELECT COUNT(*) FROM categoria_hermanos ch WHERE ch.id_cat_monto = cm.id_cat_monto) AS cantidad_reglas_hermanos,
+                    (SELECT MAX(ph.fecha_cambio) FROM precios_historicos ph WHERE ph.id_cat_monto = cm.id_cat_monto) AS ultimo_cambio
+             FROM categoria_monto cm
+             WHERE cm.id_cat_monto = ?
+             LIMIT 1' . ($lock ? ' FOR UPDATE' : '');
+        $statement = $db->prepare($sql);
+        $statement->execute([$id]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        return $row ? self::castCategoria($row) : null;
+    }
+
     private static function listarDatos(PDO $db, array $filters): array
     {
-        $socioOperativo = self::filtroSocioOperativoCategoria($db, 's');
-        $status = trim((string)($filters['estado'] ?? 'activo'));
-        if (!in_array($status, ['', 'activo', 'inactivo'], true)) {
-            api_error('El estado solicitado no es válido.', 'FILTRO_INVALIDO');
-        }
-
-        $where = [];
-        $params = [];
-        $searchFilter = build_search_filter(
+        $search = build_search_filter(
             $filters['buscar'] ?? '',
-            ['c.nombre LIKE {param}'],
-            100,
-            'buscar_categoria'
+            ['cm.nombre_categoria LIKE {param}'],
+            80,
+            'categoria'
         );
-        if ($searchFilter['sql'] !== '') {
-            $where[] = $searchFilter['sql'];
-            $params = array_merge($params, $searchFilter['params']);
-        }
-        if ($status === 'activo') $where[] = 'c.activo = 1';
-        if ($status === 'inactivo') $where[] = 'c.activo = 0';
-        $sqlWhere = $where === [] ? '' : 'WHERE ' . implode(' AND ', $where);
 
+        $where = $search['sql'] !== '' ? 'WHERE ' . $search['sql'] : '';
         $statement = $db->prepare(
-            "SELECT c.id_categoria,
-                    c.nombre,
-                    c.monto_mensual,
-                    c.monto_anual,
-                    c.activo,
-                    c.creado_en AS created_at,
-                    COALESCE(MAX(ph.fecha_cambio), c.creado_en) AS updated_at,
-                    COUNT(DISTINCT CASE WHEN s.vigente = 1 THEN s.id_socio END) AS cantidad_socios
-             FROM categoria c
-             LEFT JOIN socios s ON s.id_categoria = c.id_categoria AND {$socioOperativo}
-             LEFT JOIN precios_historicos ph ON ph.id_categoria = c.id_categoria
-             {$sqlWhere}
-             GROUP BY c.id_categoria, c.nombre, c.monto_mensual, c.monto_anual,
-                      c.activo, c.creado_en
-             ORDER BY c.activo DESC, c.nombre ASC"
+            "SELECT cm.id_cat_monto, cm.nombre_categoria, cm.monto_mensual, cm.monto_anual,
+                    cm.fecha_creacion,
+                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto) AS cantidad_alumnos,
+                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto AND a.activo = 1) AS cantidad_alumnos_activos,
+                    (SELECT COUNT(*) FROM alumnos_egresados ae WHERE ae.id_cat_monto_final = cm.id_cat_monto) AS cantidad_egresados,
+                    (SELECT COUNT(*) FROM categoria_hermanos ch WHERE ch.id_cat_monto = cm.id_cat_monto) AS cantidad_reglas_hermanos,
+                    (SELECT MAX(ph.fecha_cambio) FROM precios_historicos ph WHERE ph.id_cat_monto = cm.id_cat_monto) AS ultimo_cambio
+             FROM categoria_monto cm
+             {$where}
+             ORDER BY cm.nombre_categoria ASC, cm.id_cat_monto ASC"
         );
-        $statement->execute($params);
-        $items = $statement->fetchAll();
-        foreach ($items as &$item) self::castCategoria($item);
-        unset($item);
-
-        $summary = $db->query(
-            'SELECT COUNT(*) AS total,
-                    COALESCE(SUM(activo = 1), 0) AS activas,
-                    COALESCE(SUM(activo = 0), 0) AS inactivas,
-                    COALESCE(AVG(CASE WHEN activo = 1 THEN monto_mensual END), 0) AS promedio_mensual,
-                    COALESCE(AVG(CASE WHEN activo = 1 THEN monto_anual END), 0) AS promedio_anual
-             FROM categoria'
-        )->fetch();
+        $statement->execute($search['params']);
+        $items = array_map(
+            static fn(array $row): array => self::castCategoria($row),
+            $statement->fetchAll(PDO::FETCH_ASSOC)
+        );
 
         return [
             'items' => $items,
             'resumen' => [
-                'total' => (int)($summary['total'] ?? 0),
-                'activas' => (int)($summary['activas'] ?? 0),
-                'inactivas' => (int)($summary['inactivas'] ?? 0),
-                'promedio_mensual' => number_format((float)($summary['promedio_mensual'] ?? 0), 2, '.', ''),
-                'promedio_anual' => number_format((float)($summary['promedio_anual'] ?? 0), 2, '.', ''),
+                'total' => count($items),
+                'alumnos_activos' => array_sum(array_column($items, 'cantidad_alumnos_activos')),
+                'reglas_hermanos' => array_sum(array_column($items, 'cantidad_reglas_hermanos')),
             ],
         ];
     }
 
     private static function obtenerDatos(PDO $db, int $id): array
     {
-        $category = self::detalle($db, $id);
-        if (!$category) api_error('La categoría no existe.', 'CATEGORIA_NO_ENCONTRADA', 404);
-        return ['item' => $category];
+        $item = self::categoriaDetalle($db, $id);
+        if (!$item) api_error('La categoría no existe.', 'CATEGORIA_NO_ENCONTRADA', 404);
+        return ['item' => $item];
     }
 
     private static function historialDatos(PDO $db, int $id): array
     {
-        if (!self::detalle($db, $id)) {
-            api_error('La categoría no existe.', 'CATEGORIA_NO_ENCONTRADA', 404);
-        }
+        $category = self::categoriaDetalle($db, $id);
+        if (!$category) api_error('La categoría no existe.', 'CATEGORIA_NO_ENCONTRADA', 404);
 
         $statement = $db->prepare(
-            'SELECT id_historial,
-                    tipo,
-                    precio_viejo AS monto_anterior,
-                    precio_nuevo AS monto_nuevo,
-                    fecha_cambio,
-                    fecha_cambio AS vigente_desde
+            'SELECT id_historico, tipo, precio_anterior, precio_nuevo, fecha_cambio
              FROM precios_historicos
-             WHERE id_categoria = ?
-             ORDER BY fecha_cambio DESC, id_historial DESC'
+             WHERE id_cat_monto = ?
+             ORDER BY fecha_cambio DESC, id_historico DESC'
         );
         $statement->execute([$id]);
-        $items = $statement->fetchAll();
-        foreach ($items as &$item) {
-            $item['id_historial'] = (int)$item['id_historial'];
-            $item['tipo'] = strtolower((string)$item['tipo']);
-            $item['monto_anterior'] = number_format((float)$item['monto_anterior'], 2, '.', '');
-            $item['monto_nuevo'] = number_format((float)$item['monto_nuevo'], 2, '.', '');
-        }
-        unset($item);
+        $items = array_map(static function (array $row): array {
+            return [
+                'id_historico' => (int)$row['id_historico'],
+                'tipo' => (string)$row['tipo'],
+                'precio_anterior' => (float)$row['precio_anterior'],
+                'precio_nuevo' => (float)$row['precio_nuevo'],
+                'fecha_cambio' => (string)$row['fecha_cambio'],
+            ];
+        }, $statement->fetchAll(PDO::FETCH_ASSOC));
 
-        return ['items' => $items];
+        return ['categoria' => $category, 'items' => $items];
     }
 
-    private static function detalle(PDO $db, int $id): ?array
+    private static function castReglaHermanos(array $row): array
     {
-        $socioOperativo = self::filtroSocioOperativoCategoria($db, 's');
+        return [
+            'id_cat_hermanos' => (int)$row['id_cat_hermanos'],
+            'id_cat_monto' => (int)$row['id_cat_monto'],
+            'categoria' => (string)$row['nombre_categoria'],
+            'cantidad_hermanos' => (int)$row['cantidad_hermanos'],
+            'monto_mensual' => (float)$row['monto_mensual'],
+            'monto_anual' => (float)$row['monto_anual'],
+            'activo' => (int)$row['activo'] === 1,
+            'creado_en' => (string)$row['creado_en'],
+            'actualizado_en' => (string)$row['actualizado_en'],
+            'ultimo_cambio' => $row['ultimo_cambio'] !== null ? (string)$row['ultimo_cambio'] : null,
+        ];
+    }
+
+    private static function reglaHermanosDetalle(PDO $db, int $id, bool $lock = false): ?array
+    {
         $statement = $db->prepare(
-            "SELECT c.id_categoria,
-                    c.nombre,
-                    c.monto_mensual,
-                    c.monto_anual,
-                    c.activo,
-                    c.creado_en AS created_at,
-                    COALESCE(MAX(ph.fecha_cambio), c.creado_en) AS updated_at,
-                    COUNT(DISTINCT CASE WHEN s.vigente = 1 THEN s.id_socio END) AS cantidad_socios
-             FROM categoria c
-             LEFT JOIN socios s ON s.id_categoria = c.id_categoria AND {$socioOperativo}
-             LEFT JOIN precios_historicos ph ON ph.id_categoria = c.id_categoria
-             WHERE c.id_categoria = ?
-             GROUP BY c.id_categoria, c.nombre, c.monto_mensual, c.monto_anual,
-                      c.activo, c.creado_en"
+            'SELECT ch.*, cm.nombre_categoria,
+                    (SELECT MAX(chh.fecha_cambio)
+                     FROM categoria_hermanos_historial chh
+                     WHERE chh.id_cat_hermanos = ch.id_cat_hermanos) AS ultimo_cambio
+             FROM categoria_hermanos ch
+             INNER JOIN categoria_monto cm ON cm.id_cat_monto = ch.id_cat_monto
+             WHERE ch.id_cat_hermanos = ?
+             LIMIT 1' . ($lock ? ' FOR UPDATE' : '')
         );
         $statement->execute([$id]);
-        $category = $statement->fetch();
-        if (!$category) return null;
-        self::castCategoria($category);
-        return $category;
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        return $row ? self::castReglaHermanos($row) : null;
     }
 
-    private static function filtroSocioOperativoCategoria(PDO $db, string $alias = 's'): string
+    private static function listarHermanosDatos(PDO $db, array $filters): array
     {
-        try {
-            $db->query('SELECT 1 FROM socios_eliminados LIMIT 0');
-        } catch (Throwable) {
-            return '1 = 1';
+        $state = strtolower(trim((string)($filters['estado'] ?? 'activo')));
+        $active = $state === 'inactivo' ? 0 : 1;
+        $categoryId = filter_var(
+            $filters['id_cat_monto'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+
+        $sql =
+            'SELECT ch.*, cm.nombre_categoria,
+                    (SELECT MAX(chh.fecha_cambio)
+                     FROM categoria_hermanos_historial chh
+                     WHERE chh.id_cat_hermanos = ch.id_cat_hermanos) AS ultimo_cambio
+             FROM categoria_hermanos ch
+             INNER JOIN categoria_monto cm ON cm.id_cat_monto = ch.id_cat_monto
+             WHERE ch.activo = :activo';
+        $params = ['activo' => $active];
+        if ($categoryId !== false && $categoryId !== null) {
+            $sql .= ' AND ch.id_cat_monto = :categoria';
+            $params['categoria'] = (int)$categoryId;
         }
-        if (!preg_match('/^[A-Za-z0-9_]+$/D', $alias)) $alias = 's';
-        return "NOT EXISTS (SELECT 1 FROM socios_eliminados se_arch WHERE se_arch.id_socio = {$alias}.id_socio)";
+        $sql .= ' ORDER BY cm.nombre_categoria, ch.cantidad_hermanos, ch.id_cat_hermanos';
+
+        $statement = $db->prepare($sql);
+        $statement->execute($params);
+        return array_map(
+            static fn(array $row): array => self::castReglaHermanos($row),
+            $statement->fetchAll(PDO::FETCH_ASSOC)
+        );
     }
 
-    private static function castCategoria(array &$category): void
+    private static function historialHermanosDatos(PDO $db, int $id): array
     {
-        $category['id_categoria'] = (int)$category['id_categoria'];
-        $category['cantidad_socios'] = (int)$category['cantidad_socios'];
-        $category['activo'] = (bool)$category['activo'];
-        $category['monto_mensual'] = number_format((float)$category['monto_mensual'], 2, '.', '');
-        $category['monto_anual'] = number_format((float)$category['monto_anual'], 2, '.', '');
+        $rule = self::reglaHermanosDetalle($db, $id);
+        if (!$rule) api_error('La regla por hermanos no existe.', 'REGLA_HERMANOS_NO_ENCONTRADA', 404);
 
-        // Alias temporal para no romper consumidores antiguos mientras el resto
-        // del sistema termina de migrar a monto_mensual/monto_anual.
-        $category['monto_actual'] = $category['monto_mensual'];
+        $statement = $db->prepare(
+            'SELECT id_hist, tipo, precio_anterior, precio_nuevo, fecha_cambio
+             FROM categoria_hermanos_historial
+             WHERE id_cat_hermanos = ?
+             ORDER BY fecha_cambio DESC, id_hist DESC'
+        );
+        $statement->execute([$id]);
+        $items = array_map(static function (array $row): array {
+            return [
+                'id_hist' => (int)$row['id_hist'],
+                'tipo' => (string)$row['tipo'],
+                'precio_anterior' => $row['precio_anterior'] === null ? null : (float)$row['precio_anterior'],
+                'precio_nuevo' => (float)$row['precio_nuevo'],
+                'fecha_cambio' => (string)$row['fecha_cambio'],
+            ];
+        }, $statement->fetchAll(PDO::FETCH_ASSOC));
+
+        return ['regla' => $rule, 'items' => $items];
     }
 }

@@ -205,11 +205,21 @@ final class Dashboard
         $paymentRow = self::fetchOne(
             $db,
             "SELECT
-                COALESCE(SUM(CASE WHEN estado = 'pagado' THEN COALESCE(monto_pago, monto_base, 0) ELSE 0 END), 0) AS total,
-                SUM(estado = 'pagado') AS cobros,
-                SUM(estado = 'condonado') AS condonaciones
-             FROM pagos
-             WHERE fecha_pago >= ? AND fecha_pago < ?",
+                COALESCE(SUM(
+                    CASE WHEN p.estado = 'pagado'
+                         THEN COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(ec.comision, 0)
+                         ELSE 0 END
+                ), 0) AS total,
+                SUM(p.estado = 'pagado') AS cobros,
+                SUM(p.estado = 'condonado') AS condonaciones
+             FROM pagos p
+             LEFT JOIN (
+                SELECT id_pago_origen, SUM(importe) AS comision
+                FROM egresos
+                WHERE id_pago_origen IS NOT NULL
+                GROUP BY id_pago_origen
+             ) ec ON ec.id_pago_origen = p.id_pago
+             WHERE p.fecha_pago >= ? AND p.fecha_pago < ?",
             $range
         );
         $incomeRow = self::fetchOne(

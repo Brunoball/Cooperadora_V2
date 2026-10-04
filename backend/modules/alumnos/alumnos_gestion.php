@@ -981,6 +981,33 @@ trait AlumnosGestion
             $statement->execute([$value]);
             if (!(int)$statement->fetchColumn()) api_error("El {$label} seleccionado no existe.", 'CATALOGO_INVALIDO', 422);
         }
+
+        $categoryId = $data['id_categoria'];
+        $amountCategoryId = $data['id_cat_monto'];
+        if (($categoryId === null) !== ($amountCategoryId === null)) {
+            api_error(
+                'La categoría y la categoría de monto deben asignarse juntas.',
+                'CATEGORIA_INCONSISTENTE',
+                422
+            );
+        }
+        if ($categoryId !== null && $amountCategoryId !== null) {
+            $pair = $db->prepare(
+                'SELECT COUNT(*)
+                 FROM categoria c
+                 INNER JOIN categoria_monto cm
+                   ON UPPER(TRIM(cm.nombre_categoria)) = UPPER(TRIM(c.nombre_categoria))
+                 WHERE c.id_categoria = ? AND cm.id_cat_monto = ?'
+            );
+            $pair->execute([$categoryId, $amountCategoryId]);
+            if ((int)$pair->fetchColumn() !== 1) {
+                api_error(
+                    'La categoría seleccionada no coincide con su categoría de monto.',
+                    'CATEGORIA_INCONSISTENTE',
+                    422
+                );
+            }
+        }
     }
 
     private static function resolverErrorAlumno(PDOException $error): never

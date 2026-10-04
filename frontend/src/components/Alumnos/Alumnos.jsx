@@ -202,6 +202,41 @@ function normalizePayload(form) {
 
 function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const catalogKey = (value) => String(value || "").trim().toLocaleUpperCase("es-AR");
+  const setCategoria = (value) => {
+    if (!value) {
+      setForm((current) => ({ ...current, id_categoria: "", id_cat_monto: "" }));
+      return;
+    }
+    const category = (catalogs.categorias || []).find(
+      (item) => String(item.id_categoria) === String(value),
+    );
+    const amountCategory = (catalogs.categorias_monto || []).find(
+      (item) => catalogKey(item.nombre_categoria) === catalogKey(category?.nombre_categoria),
+    );
+    setForm((current) => ({
+      ...current,
+      id_categoria: String(value),
+      id_cat_monto: amountCategory ? String(amountCategory.id_cat_monto) : "",
+    }));
+  };
+  const setCategoriaMonto = (value) => {
+    if (!value) {
+      setForm((current) => ({ ...current, id_categoria: "", id_cat_monto: "" }));
+      return;
+    }
+    const amountCategory = (catalogs.categorias_monto || []).find(
+      (item) => String(item.id_cat_monto) === String(value),
+    );
+    const category = (catalogs.categorias || []).find(
+      (item) => catalogKey(item.nombre_categoria) === catalogKey(amountCategory?.nombre_categoria),
+    );
+    setForm((current) => ({
+      ...current,
+      id_cat_monto: String(value),
+      id_categoria: category ? String(category.id_categoria) : "",
+    }));
+  };
   const active = (key) => Boolean(String(form[key] ?? "").trim());
   const tabs = [
     { value: FORM_TAB_PERSONAL, label: "Datos personales", icon: faUser },
@@ -342,7 +377,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
             </select>
           </FloatingField>
           <FloatingField label="Categoría" active={active("id_categoria")}>
-            <select value={form.id_categoria} onChange={(event) => set("id_categoria", event.target.value)}>
+            <select value={form.id_categoria} onChange={(event) => setCategoria(event.target.value)}>
               <option value="">Sin asignar</option>
               {(catalogs.categorias || []).map((item) => (
                 <option key={item.id_categoria} value={item.id_categoria}>{item.nombre_categoria}</option>
@@ -350,7 +385,7 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
             </select>
           </FloatingField>
           <FloatingField label="Categoría de monto" active={active("id_cat_monto")}>
-            <select value={form.id_cat_monto} onChange={(event) => set("id_cat_monto", event.target.value)}>
+            <select value={form.id_cat_monto} onChange={(event) => setCategoriaMonto(event.target.value)}>
               <option value="">Sin asignar</option>
               {(catalogs.categorias_monto || []).map((item) => (
                 <option key={item.id_cat_monto} value={item.id_cat_monto}>

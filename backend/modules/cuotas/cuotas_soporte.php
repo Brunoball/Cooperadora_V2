@@ -216,6 +216,19 @@ abstract class CuotasSoporte
         return max(1, (int)$statement->fetchColumn());
     }
 
+    /**
+     * Los descuentos familiares se calculan sólo con alumnos activos.
+     * Mantener el total separado permite seguir mostrando integrantes históricos
+     * sin cobrar como hermano a un alumno que ya fue dado de baja/egresó.
+     */
+    protected static function cantidadFamiliaActiva(PDO $db, ?int $familyId): int
+    {
+        if (!$familyId) return 1;
+        $statement = $db->prepare('SELECT COUNT(*) FROM alumnos WHERE id_familia = ? AND activo = 1');
+        $statement->execute([$familyId]);
+        return max(1, (int)$statement->fetchColumn());
+    }
+
     protected static function miembrosFamilia(PDO $db, ?int $familyId): array
     {
         if (!$familyId) return [];
@@ -272,16 +285,20 @@ abstract class CuotasSoporte
     protected static function montosAlumno(PDO $db, array $student, int $year): array
     {
         $category = self::categoriaMontoAlumno($db, $student);
-        $familyCount = self::cantidadFamilia($db, isset($student['id_familia']) ? (int)$student['id_familia'] : null);
+        $familyId = isset($student['id_familia']) && $student['id_familia'] !== null
+            ? (int)$student['id_familia']
+            : null;
+        $familyCount = self::cantidadFamilia($db, $familyId);
+        $activeFamilyCount = self::cantidadFamiliaActiva($db, $familyId);
         $familyRule = null;
-        if ($familyCount >= 2) {
+        if ($activeFamilyCount >= 2) {
             $statement = $db->prepare(
                 'SELECT id_cat_hermanos, monto_mensual, monto_anual
                  FROM categoria_hermanos
                  WHERE id_cat_monto = ? AND cantidad_hermanos = ? AND activo = 1
                  LIMIT 1'
             );
-            $statement->execute([$category['id_cat_monto'], $familyCount]);
+            $statement->execute([$category['id_cat_monto'], $activeFamilyCount]);
             $row = $statement->fetch(PDO::FETCH_ASSOC);
             if ($row) {
                 $familyRule = [
@@ -293,25 +310,35 @@ abstract class CuotasSoporte
         }
 
         $monthly = [];
+        $baseMonthly = [];
         foreach (self::MESES_ESCOLARES as $month) {
             $date = sprintf('%04d-%02d-01', $year, $month);
-            if ($familyRule) {
-                $monthly[$month] = self::precioHistoricoHermanos(
+            $baseMonthly[$month] = self::precioHistoricoBase(
+                $db,
+                $category['id_cat_monto'],
+                'MENSUAL',
+                $date,
+                $category['monto_mensual']
+            );
+            $monthly[$month] = $familyRule
+                ? self::precioHistoricoHermanos(
                     $db,
                     $familyRule['id_cat_hermanos'],
                     'MENSUAL',
                     $date,
                     $familyRule['monto_mensual']
-                );
-            } else {
-                // El módulo original sólo aplicaba histórico a las reglas de
-                // hermanos. Para una categoría base usaba el monto configurado
-                // actualmente, incluso al consultar años anteriores.
-                $monthly[$month] = round($category['monto_mensual'], 2);
-            }
+                )
+                : $baseMonthly[$month];
         }
 
         $endDate = sprintf('%04d-12-31', $year);
+        $baseAnnual = self::precioHistoricoBase(
+            $db,
+            $category['id_cat_monto'],
+            'ANUAL',
+            $endDate,
+            $category['monto_anual']
+        );
         $annual = $familyRule
             ? self::precioHistoricoHermanos(
                 $db,
@@ -320,22 +347,19 @@ abstract class CuotasSoporte
                 $endDate,
                 $familyRule['monto_anual']
             )
-            : round($category['monto_anual'], 2);
+            : $baseAnnual;
 
         $registration = (float)$db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn();
         $halfOne = round($annual / 2, 2);
         $halfTwo = round($annual - $halfOne, 2);
-
-        $baseMonthly = [];
-        foreach (self::MESES_ESCOLARES as $month) {
-            $baseMonthly[$month] = round($category['monto_mensual'], 2);
-        }
-        $baseAnnual = round($category['monto_anual'], 2);
+        $baseHalfOne = round($baseAnnual / 2, 2);
+        $baseHalfTwo = round($baseAnnual - $baseHalfOne, 2);
 
         return [
             'id_cat_monto' => $category['id_cat_monto'],
             'categoria_nombre' => $category['nombre_categoria'],
             'family_count' => $familyCount,
+            'family_count_activos' => $activeFamilyCount,
             'family_rule' => $familyRule,
             'montos_por_periodo' => $monthly + [
                 self::MES_ANUAL => $annual,
@@ -346,11 +370,11 @@ abstract class CuotasSoporte
             'montos_base_por_periodo' => $baseMonthly + [
                 self::MES_ANUAL => $baseAnnual,
                 self::MES_MATRICULA => $registration,
-                self::MES_MITAD_1 => round($baseAnnual / 2, 2),
-                self::MES_MITAD_2 => round($baseAnnual - round($baseAnnual / 2, 2), 2),
+                self::MES_MITAD_1 => $baseHalfOne,
+                self::MES_MITAD_2 => $baseHalfTwo,
             ],
-            'warning' => $familyCount >= 2 && !$familyRule
-                ? "No existe una configuración de {$familyCount} hermanos para {$category['nombre_categoria']}. Se usará el monto base."
+            'warning' => $activeFamilyCount >= 2 && !$familyRule
+                ? "No existe una configuración de {$activeFamilyCount} hermanos activos para {$category['nombre_categoria']}. Se usará el monto base."
                 : null,
         ];
     }

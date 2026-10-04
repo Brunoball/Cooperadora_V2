@@ -5,15 +5,10 @@
     minmax(0, 0.9fr)
     minmax(0, 0.9fr)
     minmax(0, 0.72fr)
-    minmax(0, 0.85fr)
-    minmax(0, 0.72fr);
+    minmax(0, 0.82fr)
+    minmax(0, 0.68fr);
   width: 100%;
   min-width: 0;
-}
-
-.categorias-grid > :not(:first-child) {
-  justify-content: center;
-  text-align: center;
 }
 
 .categorias-grid > :first-child {
@@ -27,41 +22,42 @@
   text-align: right;
 }
 
+.categorias-grid > :nth-child(n + 4) {
+  justify-content: center;
+  text-align: center;
+}
+
 .categorias-money-cell {
   font-variant-numeric: tabular-nums;
 }
 
 .categorias-discountsGrid {
   grid-template-columns:
-    minmax(0, 0.72fr)
-    minmax(0, 1.1fr)
-    minmax(0, 0.5fr)
-    minmax(0, 0.9fr)
-    minmax(0, 1.65fr)
+    minmax(0, 1fr)
     minmax(0, 0.62fr)
-    minmax(0, 0.52fr);
+    minmax(0, 1.02fr)
+    minmax(0, 1.02fr)
+    minmax(0, 0.82fr)
+    minmax(0, 0.72fr)
+    minmax(0, 0.72fr);
   width: 100%;
   min-width: 0;
 }
 
-.categorias-discountsGrid--history {
-  grid-template-columns:
-    minmax(0, 0.78fr)
-    minmax(0, 1.2fr)
-    minmax(0, 0.58fr)
-    minmax(0, 1fr)
-    minmax(0, 1.9fr)
-    minmax(0, 0.62fr);
-}
-
-.categorias-discountsGrid > :not(:nth-child(5)) {
-  justify-content: center;
-  text-align: center;
-}
-
-.categorias-discountsGrid > :nth-child(5) {
+.categorias-discountsGrid > :first-child {
   justify-content: flex-start;
   text-align: left;
+}
+
+.categorias-discountsGrid > :nth-child(3),
+.categorias-discountsGrid > :nth-child(4) {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.categorias-discountsGrid > :not(:first-child):not(:nth-child(3)):not(:nth-child(4)) {
+  justify-content: center;
+  text-align: center;
 }
 
 .categorias-table,
@@ -92,13 +88,6 @@
   gap: 4px;
 }
 
-.categorias-discount-vigencia {
-  display: grid;
-  gap: 2px;
-  font-size: 0.82rem;
-}
-
-/* La acción principal permanece en el encabezado, incluso en vista compacta. */
 .categorias-page .categorias-primaryAction {
   display: inline-flex !important;
 }
