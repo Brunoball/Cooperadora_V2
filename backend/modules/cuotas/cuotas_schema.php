@@ -15,7 +15,7 @@ function ensure_cuotas_schema(PDO $db): void
         'alumnos' => [
             'id_alumno', 'apellido', 'nombre', 'num_documento', 'domicilio',
             'localidad', 'telefono', 'id_anio', 'id_division', 'id_categoria',
-            'id_cat_monto', 'es_cobrador', 'activo', 'ingreso', 'id_familia',
+            'id_cat_monto', 'es_cobrador', 'activo', 'ingreso', 'id_familia', 'actualizado_en',
         ],
         'anio' => ['id_anio', 'nombre_anio'],
         'division' => ['id_division', 'nombre_division'],
@@ -36,7 +36,9 @@ function ensure_cuotas_schema(PDO $db): void
             'precio_nuevo', 'fecha_cambio',
         ],
         'familias' => ['id_familia', 'nombre_familia', 'activo'],
+        'alumnos_egresados' => ['id_egresado', 'id_alumno_original', 'fecha_egreso'],
         'meses' => ['id_mes', 'nombre', 'monto'],
+        'meses_historial' => ['id_hist', 'id_mes', 'monto_anterior', 'monto_nuevo', 'fecha_cambio'],
         'pagos' => [
             'id_pago', 'id_alumno', 'id_mes', 'anio_aplicado', 'fecha_pago',
             'estado', 'monto_base', 'monto_pago', 'id_medio_pago', 'tipo_pago',

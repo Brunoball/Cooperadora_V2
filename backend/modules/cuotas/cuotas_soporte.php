@@ -135,21 +135,21 @@ abstract class CuotasSoporte
 
     protected static function alumnoElegible(array $student, int $periodId, int $year): bool
     {
-        if ((int)($student['activo'] ?? 0) === 1) return true;
         $entry = trim((string)($student['ingreso'] ?? ''));
         if ($entry === '') return true;
+
         try {
-            $date = new DateTimeImmutable($entry);
+            $entryDate = new DateTimeImmutable($entry);
+            $reference = new DateTimeImmutable(self::fechaReferenciaPeriodo($year, $periodId));
         } catch (Throwable) {
+            // La columna ingreso es DATE NOT NULL. Si llegara un dato heredado inválido,
+            // se conserva la compatibilidad y no se oculta un pago ya existente.
             return true;
         }
-        $referenceMonth = self::esMensual($periodId)
-            ? $periodId
-            : ($periodId === self::MES_MATRICULA
-                ? 1
-                : ($periodId === self::MES_MITAD_1 ? 7 : 12));
-        return (int)$date->format('Y') < $year
-            || ((int)$date->format('Y') === $year && (int)$date->format('n') <= $referenceMonth);
+
+        // Un alumno activo hoy no necesariamente pertenecía al padrón del período
+        // consultado. La elegibilidad se determina por su fecha real de ingreso.
+        return $entryDate <= $reference;
     }
 
     protected static function precioHistoricoBase(PDO $db, int $categoryAmountId, string $type, string $date, float $fallback): float
@@ -164,7 +164,10 @@ abstract class CuotasSoporte
         $history = $statement->fetchAll(PDO::FETCH_ASSOC);
         if ($history === []) return round($fallback, 2);
 
-        $amount = (float)$history[0]['precio_anterior'];
+        $firstPrevious = (float)($history[0]['precio_anterior'] ?? 0);
+        $amount = $firstPrevious > 0
+            ? $firstPrevious
+            : (float)($history[0]['precio_nuevo'] ?? $fallback);
         foreach ($history as $change) {
             if ((string)$change['fecha_cambio'] <= $date) {
                 $amount = (float)$change['precio_nuevo'];
@@ -172,11 +175,15 @@ abstract class CuotasSoporte
             }
             break;
         }
-        return round($amount, 2);
+        return round($amount > 0 ? $amount : $fallback, 2);
     }
 
-    protected static function precioHistoricoHermanos(PDO $db, int $familyCategoryId, string $type, string $date, float $fallback): float
-    {
+    protected static function precioHistoricoHermanos(
+        PDO $db,
+        int $familyCategoryId,
+        string $type,
+        string $date
+    ): ?float {
         $statement = $db->prepare(
             'SELECT precio_anterior, precio_nuevo, fecha_cambio
              FROM categoria_hermanos_historial
@@ -185,27 +192,157 @@ abstract class CuotasSoporte
         );
         $statement->execute([$familyCategoryId, $type]);
         $history = $statement->fetchAll(PDO::FETCH_ASSOC);
-        if ($history === []) return round($fallback, 2);
+        if ($history === []) return null;
 
-        // Replica la regla del sistema anterior: antes del primer cambio se usa
-        // precio_anterior si es válido; si ese primer histórico nació con NULL/0,
-        // se conserva el valor actual configurado como fallback.
-        $firstDate = substr((string)$history[0]['fecha_cambio'], 0, 10);
-        if ($date < $firstDate) {
-            $previous = (float)($history[0]['precio_anterior'] ?? 0);
-            return round($previous > 0 ? $previous : $fallback, 2);
-        }
-
-        $amount = $fallback;
-        foreach ($history as $change) {
-            if (substr((string)$change['fecha_cambio'], 0, 10) <= $date) {
+        $amount = null;
+        foreach ($history as $index => $change) {
+            $changeDate = substr((string)$change['fecha_cambio'], 0, 10);
+            if ($index === 0 && $date < $changeDate) {
+                $previous = $change['precio_anterior'] !== null
+                    ? (float)$change['precio_anterior']
+                    : 0.0;
+                return $previous > 0 ? round($previous, 2) : null;
+            }
+            if ($changeDate <= $date) {
                 $next = (float)($change['precio_nuevo'] ?? 0);
                 if ($next > 0) $amount = $next;
                 continue;
             }
             break;
         }
-        return round($amount, 2);
+
+        return $amount !== null ? round($amount, 2) : null;
+    }
+
+    protected static function precioHistoricoMes(PDO $db, int $periodId, string $date, float $fallback): float
+    {
+        $statement = $db->prepare(
+            'SELECT monto_anterior, monto_nuevo, fecha_cambio
+             FROM meses_historial
+             WHERE id_mes = ?
+             ORDER BY fecha_cambio ASC, id_hist ASC'
+        );
+        $statement->execute([$periodId]);
+        $history = $statement->fetchAll(PDO::FETCH_ASSOC);
+        if ($history === []) return round($fallback, 2);
+
+        $amount = null;
+        foreach ($history as $index => $change) {
+            $changeDate = (string)$change['fecha_cambio'];
+            if ($index === 0 && $date < $changeDate) {
+                $previous = $change['monto_anterior'] !== null
+                    ? (float)$change['monto_anterior']
+                    : 0.0;
+                return round($previous > 0 ? $previous : $fallback, 2);
+            }
+            if ($changeDate <= $date) {
+                $amount = (float)$change['monto_nuevo'];
+                continue;
+            }
+            break;
+        }
+        return round($amount !== null ? $amount : $fallback, 2);
+    }
+
+    protected static function cantidadFamiliaEnFecha(PDO $db, ?int $familyId, string $date): int
+    {
+        if (!$familyId) return 1;
+        $statement = $db->prepare(
+            'SELECT COUNT(*)
+             FROM alumnos a
+             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno
+             WHERE a.id_familia = ?
+               AND a.ingreso <= ?
+               AND (
+                    a.activo = 1
+                    OR (ae.fecha_egreso IS NOT NULL AND ae.fecha_egreso >= ?)
+                    OR (
+                        a.activo = 0 AND ae.id_egresado IS NULL
+                        AND (
+                            (a.actualizado_en IS NOT NULL AND DATE(a.actualizado_en) > ?)
+                            OR (a.actualizado_en IS NULL AND ? < ?)
+                        )
+                    )
+               )'
+        );
+        $statement->execute([$familyId, $date, $date, $date, $date, date('Y-01-01')]);
+        return max(1, (int)$statement->fetchColumn());
+    }
+
+    protected static function idsFamiliaEnFecha(PDO $db, ?int $familyId, string $date): array
+    {
+        if (!$familyId) return [];
+        $statement = $db->prepare(
+            'SELECT a.id_alumno
+             FROM alumnos a
+             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno
+             WHERE a.id_familia = ?
+               AND a.ingreso <= ?
+               AND (
+                    a.activo = 1
+                    OR (ae.fecha_egreso IS NOT NULL AND ae.fecha_egreso >= ?)
+                    OR (
+                        a.activo = 0 AND ae.id_egresado IS NULL
+                        AND (
+                            (a.actualizado_en IS NOT NULL AND DATE(a.actualizado_en) > ?)
+                            OR (a.actualizado_en IS NULL AND ? < ?)
+                        )
+                    )
+               )
+             ORDER BY a.id_alumno ASC'
+        );
+        $statement->execute([$familyId, $date, $date, $date, $date, date('Y-01-01')]);
+        return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    protected static function idsFamiliaActivaActualEnFecha(PDO $db, ?int $familyId, string $date): array
+    {
+        if (!$familyId) return [];
+        $statement = $db->prepare(
+            'SELECT id_alumno
+             FROM alumnos
+             WHERE id_familia = ? AND activo = 1 AND ingreso <= ?
+             ORDER BY id_alumno ASC'
+        );
+        $statement->execute([$familyId, $date]);
+        return array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    protected static function reglaHermanosParaFecha(
+        PDO $db,
+        int $categoryAmountId,
+        int $familyCount,
+        string $type,
+        string $date
+    ): ?array {
+        if ($familyCount < 2) return null;
+        $statement = $db->prepare(
+            'SELECT id_cat_hermanos, monto_mensual, monto_anual, activo
+             FROM categoria_hermanos
+             WHERE id_cat_monto = ? AND cantidad_hermanos = ?
+             LIMIT 1'
+        );
+        $statement->execute([$categoryAmountId, $familyCount]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        if (!$row) return null;
+
+        $historicalAmount = self::precioHistoricoHermanos(
+            $db,
+            (int)$row['id_cat_hermanos'],
+            $type,
+            $date
+        );
+        if ($historicalAmount === null) return null;
+
+        // Para fechas actuales/futuras una regla dada de baja no debe volver a aplicarse.
+        // Para fechas históricas, el historial de precios conserva la regla que sí existía.
+        if ($date >= date('Y-m-d') && (int)$row['activo'] !== 1) return null;
+
+        return [
+            'id_cat_hermanos' => (int)$row['id_cat_hermanos'],
+            'monto' => $historicalAmount,
+            'activo' => (bool)$row['activo'],
+        ];
     }
 
     protected static function cantidadFamilia(PDO $db, ?int $familyId): int
@@ -290,92 +427,128 @@ abstract class CuotasSoporte
             : null;
         $familyCount = self::cantidadFamilia($db, $familyId);
         $activeFamilyCount = self::cantidadFamiliaActiva($db, $familyId);
-        $familyRule = null;
-        if ($activeFamilyCount >= 2) {
-            $statement = $db->prepare(
-                'SELECT id_cat_hermanos, monto_mensual, monto_anual
-                 FROM categoria_hermanos
-                 WHERE id_cat_monto = ? AND cantidad_hermanos = ? AND activo = 1
-                 LIMIT 1'
-            );
-            $statement->execute([$category['id_cat_monto'], $activeFamilyCount]);
-            $row = $statement->fetch(PDO::FETCH_ASSOC);
-            if ($row) {
-                $familyRule = [
-                    'id_cat_hermanos' => (int)$row['id_cat_hermanos'],
-                    'monto_mensual' => (float)$row['monto_mensual'],
-                    'monto_anual' => (float)$row['monto_anual'],
-                ];
-            }
-        }
 
-        $monthly = [];
-        $baseMonthly = [];
+        $amounts = [];
+        $baseAmounts = [];
+        $familyCountByPeriod = [];
+        $familyRuleByPeriod = [];
+        $familyDiscountByPeriod = [];
+        $familyMemberIdsByPeriod = [];
+        $familyTargetIdsByPeriod = [];
+        $warnings = [];
+
+        $resolveFamily = static function (
+            int $periodId,
+            string $type,
+            string $date
+        ) use (
+            $db,
+            $familyId,
+            $category,
+            &$familyCountByPeriod,
+            &$familyRuleByPeriod,
+            &$familyDiscountByPeriod,
+            &$familyMemberIdsByPeriod,
+            &$familyTargetIdsByPeriod,
+            &$warnings
+        ): ?array {
+            $periodFamilyCount = self::cantidadFamiliaEnFecha($db, $familyId, $date);
+            $memberIds = self::idsFamiliaEnFecha($db, $familyId, $date);
+            $targetIds = self::idsFamiliaActivaActualEnFecha($db, $familyId, $date);
+            $rule = self::reglaHermanosParaFecha(
+                $db,
+                $category['id_cat_monto'],
+                $periodFamilyCount,
+                $type,
+                $date
+            );
+
+            $familyCountByPeriod[$periodId] = $periodFamilyCount;
+            $familyMemberIdsByPeriod[$periodId] = $memberIds;
+            $familyTargetIdsByPeriod[$periodId] = $targetIds;
+            $familyRuleByPeriod[$periodId] = $rule;
+            $familyDiscountByPeriod[$periodId] = $rule !== null;
+
+            if ($periodFamilyCount >= 2 && $rule === null) {
+                $key = $type . ':' . $periodFamilyCount . ':' . $date;
+                $warnings[$key] =
+                    "No hay un valor histórico verificable para {$periodFamilyCount} hermanos en uno de los períodos seleccionados; se usa el monto base y puede editarse manualmente.";
+            }
+            return $rule;
+        };
+
         foreach (self::MESES_ESCOLARES as $month) {
-            $date = sprintf('%04d-%02d-01', $year, $month);
-            $baseMonthly[$month] = self::precioHistoricoBase(
+            $date = self::fechaReferenciaPeriodo($year, $month);
+            $base = self::precioHistoricoBase(
                 $db,
                 $category['id_cat_monto'],
                 'MENSUAL',
                 $date,
                 $category['monto_mensual']
             );
-            $monthly[$month] = $familyRule
-                ? self::precioHistoricoHermanos(
-                    $db,
-                    $familyRule['id_cat_hermanos'],
-                    'MENSUAL',
-                    $date,
-                    $familyRule['monto_mensual']
-                )
-                : $baseMonthly[$month];
+            $rule = $resolveFamily($month, 'MENSUAL', $date);
+            $baseAmounts[$month] = $base;
+            $amounts[$month] = $rule !== null ? (float)$rule['monto'] : $base;
         }
 
-        $endDate = sprintf('%04d-12-31', $year);
-        $baseAnnual = self::precioHistoricoBase(
-            $db,
-            $category['id_cat_monto'],
-            'ANUAL',
-            $endDate,
-            $category['monto_anual']
-        );
-        $annual = $familyRule
-            ? self::precioHistoricoHermanos(
+        foreach ([self::MES_ANUAL, self::MES_MITAD_1, self::MES_MITAD_2] as $periodId) {
+            $date = self::fechaReferenciaPeriodo($year, $periodId);
+            $baseAnnualAtDate = self::precioHistoricoBase(
                 $db,
-                $familyRule['id_cat_hermanos'],
+                $category['id_cat_monto'],
                 'ANUAL',
-                $endDate,
-                $familyRule['monto_anual']
-            )
-            : $baseAnnual;
+                $date,
+                $category['monto_anual']
+            );
+            $rule = $resolveFamily($periodId, 'ANUAL', $date);
+            $annualAtDate = $rule !== null ? (float)$rule['monto'] : $baseAnnualAtDate;
 
-        $registration = (float)$db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn();
-        $halfOne = round($annual / 2, 2);
-        $halfTwo = round($annual - $halfOne, 2);
-        $baseHalfOne = round($baseAnnual / 2, 2);
-        $baseHalfTwo = round($baseAnnual - $baseHalfOne, 2);
+            if ($periodId === self::MES_MITAD_1) {
+                $baseAmounts[$periodId] = round($baseAnnualAtDate / 2, 2);
+                $amounts[$periodId] = round($annualAtDate / 2, 2);
+            } elseif ($periodId === self::MES_MITAD_2) {
+                $baseFirst = round($baseAnnualAtDate / 2, 2);
+                $suggestedFirst = round($annualAtDate / 2, 2);
+                $baseAmounts[$periodId] = round($baseAnnualAtDate - $baseFirst, 2);
+                $amounts[$periodId] = round($annualAtDate - $suggestedFirst, 2);
+            } else {
+                $baseAmounts[$periodId] = $baseAnnualAtDate;
+                $amounts[$periodId] = $annualAtDate;
+            }
+        }
+
+        $registrationCurrent = (float)$db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn();
+        $registrationDate = self::fechaReferenciaPeriodo($year, self::MES_MATRICULA);
+        $registration = self::precioHistoricoMes(
+            $db,
+            self::MES_MATRICULA,
+            $registrationDate,
+            $registrationCurrent
+        );
+        $amounts[self::MES_MATRICULA] = $registration;
+        $baseAmounts[self::MES_MATRICULA] = $registration;
+        $familyCountByPeriod[self::MES_MATRICULA] = 1;
+        $familyMemberIdsByPeriod[self::MES_MATRICULA] = [(int)$student['id_alumno']];
+        $familyTargetIdsByPeriod[self::MES_MATRICULA] = [(int)$student['id_alumno']];
+        $familyRuleByPeriod[self::MES_MATRICULA] = null;
+        $familyDiscountByPeriod[self::MES_MATRICULA] = false;
 
         return [
             'id_cat_monto' => $category['id_cat_monto'],
             'categoria_nombre' => $category['nombre_categoria'],
             'family_count' => $familyCount,
             'family_count_activos' => $activeFamilyCount,
-            'family_rule' => $familyRule,
-            'montos_por_periodo' => $monthly + [
-                self::MES_ANUAL => $annual,
-                self::MES_MATRICULA => $registration,
-                self::MES_MITAD_1 => $halfOne,
-                self::MES_MITAD_2 => $halfTwo,
-            ],
-            'montos_base_por_periodo' => $baseMonthly + [
-                self::MES_ANUAL => $baseAnnual,
-                self::MES_MATRICULA => $registration,
-                self::MES_MITAD_1 => $baseHalfOne,
-                self::MES_MITAD_2 => $baseHalfTwo,
-            ],
-            'warning' => $activeFamilyCount >= 2 && !$familyRule
-                ? "No existe una configuración de {$activeFamilyCount} hermanos activos para {$category['nombre_categoria']}. Se usará el monto base."
-                : null,
+            // Compatibilidad con consumidores anteriores. Para decisiones nuevas usar
+            // family_rule_by_period/family_discount_by_period.
+            'family_rule' => $familyRuleByPeriod[self::MES_ANUAL] ?? null,
+            'family_count_by_period' => $familyCountByPeriod,
+            'family_rule_by_period' => $familyRuleByPeriod,
+            'family_discount_by_period' => $familyDiscountByPeriod,
+            'family_member_ids_by_period' => $familyMemberIdsByPeriod,
+            'family_target_ids_by_period' => $familyTargetIdsByPeriod,
+            'montos_por_periodo' => $amounts,
+            'montos_base_por_periodo' => $baseAmounts,
+            'warning' => $warnings !== [] ? implode(' ', array_values($warnings)) : null,
         ];
     }
 

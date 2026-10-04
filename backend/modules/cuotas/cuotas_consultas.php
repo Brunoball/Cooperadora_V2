@@ -235,12 +235,15 @@ abstract class CuotasConsultas extends CuotasSoporte
         $rows = [];
 
         foreach ($students as $student) {
-            if (!self::alumnoElegible($student, $periodId, $year)) continue;
-
             $payments = $paymentsByStudent[(int)$student['id_alumno']] ?? [];
             $status = self::estadoPeriodo($payments, $periodId);
             $resolvedState = $status['estado'];
             $payment = $status['pago'];
+            $eligibleForPeriod = self::alumnoElegible($student, $periodId, $year);
+
+            // Nunca generar deuda antes del ingreso. Si existe un pago/condonación
+            // legado para ese período se conserva visible para trazabilidad.
+            if (!$eligibleForPeriod && $resolvedState === 'deudor') continue;
 
             if ($state === 'DEUDORES') {
                 if ((int)$student['activo'] !== 1 || $resolvedState !== 'deudor') continue;
@@ -262,34 +265,37 @@ abstract class CuotasConsultas extends CuotasSoporte
         return [$rows, $year, $period];
     }
 
-    protected static function precioHistoricoHermanosDesdeFilas(array $history, string $date, float $fallback): float
+    protected static function precioHistoricoHermanosDesdeFilas(array $history, string $date): ?float
     {
-        if ($history === []) return round($fallback, 2);
+        if ($history === []) return null;
 
-        $firstDate = substr((string)$history[0]['fecha_cambio'], 0, 10);
-        if ($date < $firstDate) {
-            $previous = (float)($history[0]['precio_anterior'] ?? 0);
-            return round($previous > 0 ? $previous : $fallback, 2);
-        }
-
-        $amount = $fallback;
-        foreach ($history as $change) {
-            if (substr((string)$change['fecha_cambio'], 0, 10) <= $date) {
+        $amount = null;
+        foreach ($history as $index => $change) {
+            $changeDate = substr((string)$change['fecha_cambio'], 0, 10);
+            if ($index === 0 && $date < $changeDate) {
+                $previous = $change['precio_anterior'] !== null
+                    ? (float)$change['precio_anterior']
+                    : 0.0;
+                return $previous > 0 ? round($previous, 2) : null;
+            }
+            if ($changeDate <= $date) {
                 $next = (float)($change['precio_nuevo'] ?? 0);
                 if ($next > 0) $amount = $next;
                 continue;
             }
             break;
         }
-        return round($amount, 2);
+        return $amount !== null ? round($amount, 2) : null;
     }
-
 
     protected static function precioHistoricoBaseDesdeFilas(array $history, string $date, float $fallback): float
     {
         if ($history === []) return round($fallback, 2);
 
-        $amount = (float)($history[0]['precio_anterior'] ?? 0);
+        $firstPrevious = (float)($history[0]['precio_anterior'] ?? 0);
+        $amount = $firstPrevious > 0
+            ? $firstPrevious
+            : (float)($history[0]['precio_nuevo'] ?? $fallback);
         foreach ($history as $change) {
             if (substr((string)$change['fecha_cambio'], 0, 10) <= $date) {
                 $amount = (float)($change['precio_nuevo'] ?? 0);
@@ -297,7 +303,7 @@ abstract class CuotasConsultas extends CuotasSoporte
             }
             break;
         }
-        return round($amount, 2);
+        return round($amount > 0 ? $amount : $fallback, 2);
     }
 
     /**
@@ -337,28 +343,65 @@ abstract class CuotasConsultas extends CuotasSoporte
             static fn(array $row): int => (int)($row['id_familia'] ?? 0),
             $items
         ))));
-        $familyCounts = [];
+        $familyMembers = [];
         if ($familyIds !== []) {
             $placeholders = implode(',', array_fill(0, count($familyIds), '?'));
             $statement = $db->prepare(
-                "SELECT id_familia, COUNT(*) AS cantidad
-                 FROM alumnos
-                 WHERE id_familia IN ($placeholders) AND activo = 1
-                 GROUP BY id_familia"
+                "SELECT a.id_familia, a.id_alumno, a.ingreso, a.activo, a.actualizado_en,
+                        ae.id_egresado, ae.fecha_egreso
+                 FROM alumnos a
+                 LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno
+                 WHERE a.id_familia IN ($placeholders)
+                 ORDER BY a.id_familia, a.id_alumno"
             );
             $statement->execute($familyIds);
-            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $familyCounts[(int)$row['id_familia']] = max(1, (int)$row['cantidad']);
+            foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $member) {
+                $familyMembers[(int)$member['id_familia']][] = [
+                    'id_alumno' => (int)$member['id_alumno'],
+                    'ingreso' => (string)$member['ingreso'],
+                    'activo' => (int)$member['activo'] === 1,
+                    'actualizado_en' => $member['actualizado_en'] !== null ? substr((string)$member['actualizado_en'], 0, 10) : null,
+                    'es_egresado' => $member['id_egresado'] !== null,
+                    'fecha_egreso' => $member['fecha_egreso'] !== null ? (string)$member['fecha_egreso'] : null,
+                ];
             }
         }
+
+        $referenceDate = self::fechaReferenciaPeriodo($year, $periodId);
+        $familyDataAtDate = static function (int $familyId) use ($familyMembers, $referenceDate): array {
+            if ($familyId <= 0) return ['count' => 1, 'members' => [], 'targets' => []];
+            $eligible = [];
+            $targets = [];
+            foreach ($familyMembers[$familyId] ?? [] as $member) {
+                if ($member['ingreso'] > $referenceDate) continue;
+                $unknownHistoricalExit = !$member['activo']
+                    && !$member['es_egresado']
+                    && (
+                        ($member['actualizado_en'] !== null && $member['actualizado_en'] > $referenceDate)
+                        || ($member['actualizado_en'] === null && $referenceDate < date('Y-01-01'))
+                    );
+                $wasPresent = $member['activo']
+                    || ($member['fecha_egreso'] !== null && $member['fecha_egreso'] >= $referenceDate)
+                    || $unknownHistoricalExit;
+                if ($wasPresent) $eligible[] = (int)$member['id_alumno'];
+                if ($member['activo']) $targets[] = (int)$member['id_alumno'];
+            }
+            sort($eligible, SORT_NUMERIC);
+            sort($targets, SORT_NUMERIC);
+            return [
+                'count' => max(1, count($eligible)),
+                'members' => $eligible,
+                'targets' => $targets,
+            ];
+        };
 
         $familyRules = [];
         if ($categoryIds !== []) {
             $placeholders = implode(',', array_fill(0, count($categoryIds), '?'));
             $statement = $db->prepare(
-                "SELECT id_cat_hermanos, id_cat_monto, cantidad_hermanos, monto_mensual, monto_anual
+                "SELECT id_cat_hermanos, id_cat_monto, cantidad_hermanos, monto_mensual, monto_anual, activo
                  FROM categoria_hermanos
-                 WHERE activo = 1 AND id_cat_monto IN ($placeholders)"
+                 WHERE id_cat_monto IN ($placeholders)"
             );
             $statement->execute($categoryIds);
             foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -367,6 +410,7 @@ abstract class CuotasConsultas extends CuotasSoporte
                     'id_cat_hermanos' => (int)$row['id_cat_hermanos'],
                     'monto_mensual' => (float)$row['monto_mensual'],
                     'monto_anual' => (float)$row['monto_anual'],
+                    'activo' => (int)$row['activo'] === 1,
                 ];
             }
         }
@@ -406,9 +450,16 @@ abstract class CuotasConsultas extends CuotasSoporte
             }
         }
 
-        $registration = $periodId === self::MES_MATRICULA
-            ? (float)$db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn()
-            : 0.0;
+        $registration = 0.0;
+        if ($periodId === self::MES_MATRICULA) {
+            $registrationCurrent = (float)$db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn();
+            $registration = self::precioHistoricoMes(
+                $db,
+                self::MES_MATRICULA,
+                $referenceDate,
+                $registrationCurrent
+            );
+        }
 
         foreach ($items as &$row) {
             $categoryId = (int)($row['id_cat_monto'] ?? 0);
@@ -417,48 +468,52 @@ abstract class CuotasConsultas extends CuotasSoporte
                 $row['monto_sugerido'] = 0.0;
                 $row['monto_base'] = 0.0;
                 $row['porcentaje_descuento_familiar'] = null;
+                $row['cantidad_familia_elegible'] = 1;
+                $row['cantidad_familia_aplicable'] = 1;
                 $row['aviso_monto'] = 'El alumno no tiene una categoría de monto válida.';
                 continue;
             }
 
             $familyId = (int)($row['id_familia'] ?? 0);
-            $familyCount = $familyId > 0 ? ($familyCounts[$familyId] ?? 1) : 1;
+            $familyAtDate = $familyDataAtDate($familyId);
+            $familyCount = (int)$familyAtDate['count'];
             $rule = $familyCount >= 2
                 ? ($familyRules[$categoryId . ':' . $familyCount] ?? null)
                 : null;
+            $historicalRuleAmount = null;
 
             if ($periodId === self::MES_MATRICULA) {
                 $base = round($registration, 2);
                 $suggested = $base;
             } elseif (self::esMensual($periodId)) {
-                $date = sprintf('%04d-%02d-01', $year, $periodId);
                 $base = self::precioHistoricoBaseDesdeFilas(
                     $baseHistories[$categoryId] ?? [],
-                    $date,
+                    $referenceDate,
                     (float)$category['monto_mensual']
                 );
                 $suggested = $base;
                 if ($rule) {
-                    $suggested = self::precioHistoricoHermanosDesdeFilas(
+                    $historicalRuleAmount = self::precioHistoricoHermanosDesdeFilas(
                         $histories[(int)$rule['id_cat_hermanos']] ?? [],
-                        $date,
-                        (float)$rule['monto_mensual']
+                        $referenceDate
                     );
+                    if ($referenceDate >= date('Y-m-d') && !$rule['activo']) $historicalRuleAmount = null;
+                    if ($historicalRuleAmount !== null) $suggested = $historicalRuleAmount;
                 }
             } else {
-                $annualDate = sprintf('%04d-12-31', $year);
                 $baseAnnual = self::precioHistoricoBaseDesdeFilas(
                     $baseHistories[$categoryId] ?? [],
-                    $annualDate,
+                    $referenceDate,
                     (float)$category['monto_anual']
                 );
                 $suggestedAnnual = $baseAnnual;
                 if ($rule) {
-                    $suggestedAnnual = self::precioHistoricoHermanosDesdeFilas(
+                    $historicalRuleAmount = self::precioHistoricoHermanosDesdeFilas(
                         $histories[(int)$rule['id_cat_hermanos']] ?? [],
-                        $annualDate,
-                        (float)$rule['monto_anual']
+                        $referenceDate
                     );
+                    if ($referenceDate >= date('Y-m-d') && !$rule['activo']) $historicalRuleAmount = null;
+                    if ($historicalRuleAmount !== null) $suggestedAnnual = $historicalRuleAmount;
                 }
 
                 if ($periodId === self::MES_MITAD_1) {
@@ -478,8 +533,10 @@ abstract class CuotasConsultas extends CuotasSoporte
             $row['monto_sugerido'] = $suggested;
             $row['monto_base'] = $base;
             $row['porcentaje_descuento_familiar'] = self::porcentajeDescuento($base, $suggested);
-            $row['aviso_monto'] = $familyCount >= 2 && !$rule
-                ? "No existe una configuración de {$familyCount} hermanos activos para {$category['nombre_categoria']}. Se usará el monto base."
+            $row['cantidad_familia_elegible'] = $familyCount;
+            $row['cantidad_familia_aplicable'] = max(1, count($familyAtDate['targets']));
+            $row['aviso_monto'] = $familyCount >= 2 && $periodId !== self::MES_MATRICULA && $historicalRuleAmount === null
+                ? "No hay un valor histórico verificable para {$familyCount} hermanos en ese período. Se usa el monto base y puede editarse manualmente."
                 : null;
         }
         unset($row);
@@ -641,13 +698,22 @@ abstract class CuotasConsultas extends CuotasSoporte
         $annualExact = $exactPayment($payments, self::MES_ANUAL);
         $halfOneExact = $exactPayment($payments, self::MES_MITAD_1);
         $halfTwoExact = $exactPayment($payments, self::MES_MITAD_2);
+        $monthlyExact = [];
+        foreach ($payments as $paymentRow) {
+            $paymentPeriodId = (int)$paymentRow['id_mes'];
+            if (self::esMensual($paymentPeriodId)) $monthlyExact[$paymentPeriodId] = $paymentRow;
+        }
 
         foreach ($periodCatalog as $period) {
             $periodId = (int)$period['id_mes'];
             $status = self::estadoPeriodo($payments, $periodId);
             $payment = $status['pago'];
-            $canPay = $status['estado'] === 'deudor';
+            $eligibleForPeriod = self::alumnoElegible($student, $periodId, $year);
+            $canPay = $status['estado'] === 'deudor' && $eligibleForPeriod;
             $periodPaymentLabel = $payment ? (string)$payment['periodo'] : null;
+            $coverageBlock = $eligibleForPeriod
+                ? null
+                : 'El alumno todavía no había ingresado a la institución en este período.';
 
             // El sistema anterior permitía convertir CONTADO ANUAL en la mitad
             // restante si ya existía una mitad, pero lo bloqueaba si estaban las
@@ -662,12 +728,39 @@ abstract class CuotasConsultas extends CuotasSoporte
                 $canPay = false;
                 $periodPaymentLabel = '1ERA MITAD + 2DA MITAD';
             } elseif ($periodId === self::MES_ANUAL && !$annualExact) {
-                $canPay = true; // sin mitades o con una sola: registra anual/restante
+                $remainingMonths = self::MESES_ESCOLARES;
+                if ($halfOneExact && !$halfTwoExact) $remainingMonths = self::MESES_MITAD_2;
+                if (!$halfOneExact && $halfTwoExact) $remainingMonths = self::MESES_MITAD_1;
+                $hasMonthlyConflict = false;
+                foreach ($remainingMonths as $monthId) {
+                    if (isset($monthlyExact[$monthId])) {
+                        $hasMonthlyConflict = true;
+                        break;
+                    }
+                }
+                $canPay = !$hasMonthlyConflict;
+                if ($hasMonthlyConflict) {
+                    $coverageBlock = 'Ya existen cuotas mensuales registradas que se superponen con este período.';
+                }
             } elseif (in_array($periodId, [self::MES_MITAD_1, self::MES_MITAD_2], true) && $annualExact) {
                 $payment = $annualExact;
                 $status['estado'] = strtolower((string)$annualExact['estado']) === 'condonado' ? 'condonado' : 'pagado';
                 $canPay = false;
                 $periodPaymentLabel = (string)$annualExact['periodo'];
+            } elseif (in_array($periodId, [self::MES_MITAD_1, self::MES_MITAD_2], true) && !$payment) {
+                $months = $periodId === self::MES_MITAD_1 ? self::MESES_MITAD_1 : self::MESES_MITAD_2;
+                foreach ($months as $monthId) {
+                    if (isset($monthlyExact[$monthId])) {
+                        $canPay = false;
+                        $coverageBlock = 'Ya existen cuotas mensuales registradas que se superponen con esta mitad.';
+                        break;
+                    }
+                }
+            }
+
+            if (!$eligibleForPeriod) {
+                $canPay = false;
+                $coverageBlock = 'El alumno todavía no había ingresado a la institución en este período.';
             }
 
             $suggested = (float)($amounts['montos_por_periodo'][$periodId] ?? 0);
@@ -683,10 +776,14 @@ abstract class CuotasConsultas extends CuotasSoporte
                 'monto_sugerido' => $suggested,
                 'monto_base' => $base,
                 'porcentaje_descuento_familiar' => self::porcentajeDescuento($base, $suggested),
+                'cantidad_familia_elegible' => (int)($amounts['family_count_by_period'][$periodId] ?? 1),
+                'cantidad_familia_aplicable' => max(1, count($amounts['family_target_ids_by_period'][$periodId] ?? [])),
+                'descuento_familiar_aplicado' => (bool)($amounts['family_discount_by_period'][$periodId] ?? false),
                 'id_pago_real' => $payment ? (int)$payment['id_pago'] : null,
                 'id_mes_pago' => $payment ? (int)$payment['id_mes'] : null,
                 'periodo_pago' => $periodPaymentLabel,
                 'mitad_parcial' => $periodId === self::MES_ANUAL && !$annualExact && (($halfOneExact && !$halfTwoExact) || (!$halfOneExact && $halfTwoExact)),
+                'motivo_bloqueo' => $coverageBlock,
             ];
         }
 

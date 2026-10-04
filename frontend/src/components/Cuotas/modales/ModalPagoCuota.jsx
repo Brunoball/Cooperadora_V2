@@ -45,6 +45,7 @@ const statusLabel = (period) => {
   if (!period) return "";
   if (period.condonado) return "Condonado";
   if (period.pagado) return period.periodo_pago ? `Pagado por ${period.periodo_pago}` : "Pagado";
+  if (period.motivo_bloqueo) return "No disponible por cobertura previa";
   return "Disponible";
 };
 
@@ -175,11 +176,15 @@ export default function ModalPagoCuota({
     setSelected((current) => Array.from(new Set([...current, ...availableMonthly])));
   };
 
-  const selectedActiveFamily = family
-    ? Number(context?.familia?.integrantes_activos || 1)
-    : 1;
-  const unitTotal = selected.reduce((sum, id) => sum + Number(amounts[String(id)] || 0), 0);
-  const operationTotal = condoning ? 0 : unitTotal * Math.max(1, selectedActiveFamily);
+  const operationTotal = condoning
+    ? 0
+    : selected.reduce((sum, id) => {
+        const period = periodMap.get(Number(id));
+        const applicableFamily = family
+          ? Math.max(1, Number(period?.cantidad_familia_aplicable || 1))
+          : 1;
+        return sum + Number(amounts[String(id)] || 0) * applicableFamily;
+      }, 0);
 
   const applyFreeAmount = (raw) => {
     const normalized = amountInput(raw);

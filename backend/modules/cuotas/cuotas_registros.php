@@ -65,36 +65,50 @@ abstract class CuotasRegistros extends CuotasConsultas
 
     protected static function resolveRequestedPeriod(array $existingPayments, int $requested): ?int
     {
-        // Contado anual: si una mitad ya existe, el sistema viejo registraba
-        // automáticamente la mitad restante. Si están ambas o el anual completo,
-        // ya no queda nada para registrar.
+        $exactPeriods = [];
+        foreach ($existingPayments as $payment) {
+            $exactPeriods[(int)$payment['id_mes']] = true;
+        }
+
+        // Contado anual sólo puede registrarse si no pisa meses ya cobrados/condonados.
+        // Si existe una única mitad, conserva el comportamiento histórico de convertir
+        // el anual en la mitad restante, pero únicamente cuando esa mitad está libre.
         if ($requested === self::MES_ANUAL) {
-            $full = self::pagoQueCubre($existingPayments, self::MES_ANUAL);
-            $hasFull = false;
-            $hasH1 = false;
-            $hasH2 = false;
-            foreach ($existingPayments as $payment) {
-                $id = (int)$payment['id_mes'];
-                if ($id === self::MES_ANUAL) $hasFull = true;
-                if ($id === self::MES_MITAD_1) $hasH1 = true;
-                if ($id === self::MES_MITAD_2) $hasH2 = true;
-            }
+            $hasFull = isset($exactPeriods[self::MES_ANUAL]);
+            $hasH1 = isset($exactPeriods[self::MES_MITAD_1]);
+            $hasH2 = isset($exactPeriods[self::MES_MITAD_2]);
             if ($hasFull || ($hasH1 && $hasH2)) return null;
-            if ($hasH1 && !$hasH2) return self::MES_MITAD_2;
-            if (!$hasH1 && $hasH2) return self::MES_MITAD_1;
+
+            if ($hasH1 xor $hasH2) {
+                $remaining = $hasH1 ? self::MES_MITAD_2 : self::MES_MITAD_1;
+                $months = $remaining === self::MES_MITAD_1 ? self::MESES_MITAD_1 : self::MESES_MITAD_2;
+                foreach ($months as $month) {
+                    if (isset($exactPeriods[$month])) return null;
+                }
+                return $remaining;
+            }
+
+            foreach (self::MESES_ESCOLARES as $month) {
+                if (isset($exactPeriods[$month])) return null;
+            }
             return self::MES_ANUAL;
         }
 
         // Un mes normal queda ocupado también por anual/mitad.
         if (self::esMensual($requested) && self::pagoQueCubre($existingPayments, $requested)) return null;
 
-        // Para matrícula y mitades sólo se bloquea el registro exacto o anual.
-        foreach ($existingPayments as $payment) {
-            $id = (int)$payment['id_mes'];
-            if ($id === $requested) return null;
-            if (in_array($requested, [self::MES_MITAD_1, self::MES_MITAD_2], true) && $id === self::MES_ANUAL) return null;
+        // Las mitades no pueden superponerse con cuotas mensuales ya registradas.
+        if (in_array($requested, [self::MES_MITAD_1, self::MES_MITAD_2], true)) {
+            if (isset($exactPeriods[$requested]) || isset($exactPeriods[self::MES_ANUAL])) return null;
+            $months = $requested === self::MES_MITAD_1 ? self::MESES_MITAD_1 : self::MESES_MITAD_2;
+            foreach ($months as $month) {
+                if (isset($exactPeriods[$month])) return null;
+            }
+            return $requested;
         }
-        return $requested;
+
+        // Matrícula y cualquier otro período exacto se bloquean sólo por igualdad.
+        return isset($exactPeriods[$requested]) ? null : $requested;
     }
 
     protected static function registrarPagosDatos(array $auth, array $body, bool $forceCondone = false): array
@@ -121,6 +135,17 @@ abstract class CuotasRegistros extends CuotasConsultas
         $explicitFamilyIds = id_list($body['ids_familia'] ?? []);
         $targets = self::activeFamilyTargets($db, $student, $applyFamily, $explicitFamilyIds);
         $principalAmounts = self::montosAlumno($db, $student, $year);
+
+        foreach ($periods as $periodId) {
+            if (!self::alumnoElegible($student, $periodId, $year)) {
+                api_error(
+                    'El alumno todavía no había ingresado a la institución en uno de los períodos seleccionados.',
+                    'ALUMNO_NO_ELEGIBLE_PERIODO',
+                    422,
+                    ['id_alumno' => $studentId, 'id_mes' => $periodId, 'anio' => $year]
+                );
+            }
+        }
 
         $freeAmount = isset($body['monto_libre']) && is_numeric($body['monto_libre'])
             ? max(0.0, (float)$body['monto_libre'])
@@ -153,7 +178,7 @@ abstract class CuotasRegistros extends CuotasConsultas
 
         transaction($db, function () use (
             $db, $auth, $studentId, $year, $date, $periods, $requestedAmounts,
-            $paymentMediumId, $condone, $targets, $principalAmounts,
+            $paymentMediumId, $condone, $targets, $principalAmounts, $applyFamily,
             &$insertedIds, &$details, &$skipped, &$groupAllocations,
             &$totalGross, &$totalNet, &$totalCommission
         ): void {
@@ -200,6 +225,16 @@ abstract class CuotasRegistros extends CuotasConsultas
                 ];
 
                 foreach ($periods as $requestedPeriod) {
+                    if (!self::alumnoElegible($targetStudent, $requestedPeriod, $year)) {
+                        $studentDetail['ya_registrados'][] = $requestedPeriod;
+                        $skipped[] = [
+                            'id_alumno' => $targetId,
+                            'id_mes' => $requestedPeriod,
+                            'motivo' => 'ALUMNO_NO_ELEGIBLE_PERIODO',
+                        ];
+                        continue;
+                    }
+
                     $realPeriod = self::resolveRequestedPeriod($existing, $requestedPeriod);
                     if ($realPeriod === null) {
                         $studentDetail['ya_registrados'][] = $requestedPeriod;
@@ -218,17 +253,43 @@ abstract class CuotasRegistros extends CuotasConsultas
                     $normalForTarget = (float)($targetAmounts['montos_por_periodo'][$realPeriod] ?? $normalForPrincipal);
                     $baseForTarget = (float)($targetAmounts['montos_base_por_periodo'][$realPeriod] ?? $normalForTarget);
 
-                    // La UI del sistema viejo define un importe unitario para el grupo.
-                    // Se distribuye el total redondeado una sola vez para evitar $1 de más
-                    // cuando la regla familiar tiene centavos (ej. 6.666,67 x 3).
-                    $allocationKey = $requestedPeriod . ':' . $realPeriod;
-                    if (count($targets) > 1) {
+                    $custom = !$condone && abs($requestedGross - $normalForPrincipal) >= 0.005;
+                    $familyDiscount = !$condone
+                        && !$custom
+                        && (bool)($targetAmounts['family_discount_by_period'][$realPeriod] ?? false);
+
+                    // Para operaciones familiares se excluyen automáticamente los alumnos
+                    // que todavía no habían ingresado en el período solicitado. Si el monto
+                    // normal por hermanos tiene centavos, la distribución se realiza sobre
+                    // todos los integrantes históricos que determinan esa regla para que el
+                    // total familiar redondeado no acumule $1 extra.
+                    $allocationIds = [];
+                    if ($familyDiscount) {
+                        $allocationIds = array_values(array_unique(array_map(
+                            'intval',
+                            $targetAmounts['family_member_ids_by_period'][$realPeriod] ?? []
+                        )));
+                    } elseif ($applyFamily) {
+                        $allowedTargets = array_fill_keys(
+                            array_map('intval', $principalAmounts['family_target_ids_by_period'][$requestedPeriod] ?? []),
+                            true
+                        );
+                        foreach ($targets as $familyStudentId) {
+                            $familyStudentId = (int)$familyStudentId;
+                            if (isset($allowedTargets[$familyStudentId])) $allocationIds[] = $familyStudentId;
+                        }
+                    }
+                    if ($allocationIds === []) $allocationIds = [$targetId];
+                    sort($allocationIds, SORT_NUMERIC);
+
+                    $allocationKey = $requestedPeriod . ':' . $realPeriod . ':' . implode(',', $allocationIds);
+                    if (count($allocationIds) > 1 && in_array($targetId, $allocationIds, true)) {
                         if (!isset($groupAllocations[$allocationKey])) {
-                            $groupTotal = (int)round(max(0.0, $requestedGross) * count($targets));
-                            $basePart = intdiv($groupTotal, count($targets));
-                            $remainder = $groupTotal - ($basePart * count($targets));
+                            $groupTotal = (int)round(max(0.0, $requestedGross) * count($allocationIds));
+                            $basePart = intdiv($groupTotal, count($allocationIds));
+                            $remainder = $groupTotal - ($basePart * count($allocationIds));
                             $allocation = [];
-                            foreach ($targets as $idx => $familyStudentId) {
+                            foreach ($allocationIds as $idx => $familyStudentId) {
                                 $allocation[(int)$familyStudentId] = $basePart + ($idx < $remainder ? 1 : 0);
                             }
                             $groupAllocations[$allocationKey] = $allocation;
@@ -239,11 +300,6 @@ abstract class CuotasRegistros extends CuotasConsultas
                     }
                     if ($condone) $gross = 0.0;
 
-                    $custom = !$condone && abs($requestedGross - $normalForPrincipal) >= 0.005;
-                    $familyDiscount = !$condone
-                        && !$custom
-                        && $principalAmounts['family_rule'] !== null
-                        && count($targets) > 1;
                     $type = $condone
                         ? 'NORMAL'
                         : ($custom ? 'MONTO_PERSONALIZADO' : ($familyDiscount ? 'DESCUENTO_FAMILIAR' : 'NORMAL'));
@@ -474,24 +530,78 @@ abstract class CuotasRegistros extends CuotasConsultas
             api_error('Ingresá un monto válido para matrícula.', 'VALIDATION_ERROR');
         }
         $amount = max(0, (int)round((float)$body['monto']));
-        $beforeStatement = $db->prepare('SELECT id_mes, nombre, monto FROM meses WHERE id_mes = ? LIMIT 1');
-        $beforeStatement->execute([self::MES_MATRICULA]);
-        $before = $beforeStatement->fetch(PDO::FETCH_ASSOC);
-        if (!$before) api_error('No existe el período MATRÍCULA en la tabla meses.', 'PERIODO_INVALIDO', 500);
+        $effectiveDate = valid_date($body['vigente_desde'] ?? date('Y-m-d'), 'vigencia');
+        if ($effectiveDate > date('Y-m-d')) {
+            api_error('La vigencia de matrícula no puede ser futura.', 'VIGENCIA_PRECIO_INVALIDA', 422);
+        }
 
-        $update = $db->prepare('UPDATE meses SET monto = ? WHERE id_mes = ?');
-        $update->execute([$amount, self::MES_MATRICULA]);
-        audit_change(
-            $db,
-            $auth,
-            'CUOTAS',
-            'UPDATE',
-            'meses',
-            self::MES_MATRICULA,
-            'Actualización del monto global de matrícula',
-            $before,
-            ['id_mes' => self::MES_MATRICULA, 'nombre' => 'MATRICULA', 'monto' => $amount]
-        );
-        return ['monto' => $amount];
+        return transaction($db, static function () use ($db, $auth, $amount, $effectiveDate): array {
+            $beforeStatement = $db->prepare(
+                'SELECT id_mes, nombre, monto FROM meses WHERE id_mes = ? LIMIT 1 FOR UPDATE'
+            );
+            $beforeStatement->execute([self::MES_MATRICULA]);
+            $before = $beforeStatement->fetch(PDO::FETCH_ASSOC);
+            if (!$before) api_error('No existe el período MATRÍCULA en la tabla meses.', 'PERIODO_INVALIDO', 500);
+
+            $lastHistory = $db->prepare(
+                'SELECT fecha_cambio FROM meses_historial
+                 WHERE id_mes = ?
+                 ORDER BY fecha_cambio DESC, id_hist DESC LIMIT 1 FOR UPDATE'
+            );
+            $lastHistory->execute([self::MES_MATRICULA]);
+            $lastDate = $lastHistory->fetchColumn();
+            if ($lastDate !== false && $effectiveDate < (string)$lastDate) {
+                api_error(
+                    'La vigencia de matrícula no puede ser anterior al último cambio registrado.',
+                    'VIGENCIA_PRECIO_INVALIDA',
+                    409
+                );
+            }
+
+            $previous = (int)$before['monto'];
+            if ($previous === $amount) {
+                return ['monto' => $amount, 'vigente_desde' => $effectiveDate, 'sin_cambios' => true];
+            }
+
+            $history = $db->prepare(
+                'SELECT id_hist FROM meses_historial
+                 WHERE id_mes = ? AND fecha_cambio = ?
+                 ORDER BY id_hist ASC LIMIT 1 FOR UPDATE'
+            );
+            $history->execute([self::MES_MATRICULA, $effectiveDate]);
+            $historyId = $history->fetchColumn();
+            if ($historyId !== false) {
+                $db->prepare(
+                    'UPDATE meses_historial SET monto_nuevo = ? WHERE id_hist = ?'
+                )->execute([$amount, (int)$historyId]);
+            } else {
+                $db->prepare(
+                    'INSERT INTO meses_historial
+                     (id_mes, monto_anterior, monto_nuevo, fecha_cambio)
+                     VALUES (?, ?, ?, ?)'
+                )->execute([self::MES_MATRICULA, $previous, $amount, $effectiveDate]);
+            }
+
+            $db->prepare('UPDATE meses SET monto = ? WHERE id_mes = ?')
+                ->execute([$amount, self::MES_MATRICULA]);
+
+            audit_change(
+                $db,
+                $auth,
+                'CUOTAS',
+                'UPDATE',
+                'meses',
+                self::MES_MATRICULA,
+                'Actualización del monto global de matrícula',
+                $before,
+                [
+                    'id_mes' => self::MES_MATRICULA,
+                    'nombre' => 'MATRICULA',
+                    'monto' => $amount,
+                    'vigente_desde' => $effectiveDate,
+                ]
+            );
+            return ['monto' => $amount, 'vigente_desde' => $effectiveDate];
+        });
     }
 }
