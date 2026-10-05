@@ -9,6 +9,7 @@ import {
   faGear,
   faReceipt,
   faRightFromBracket,
+  faRobot,
   faTags,
   faUsers,
   faWallet,
@@ -18,6 +19,7 @@ import { clearSession, getSession } from "../_shared/auth/session";
 import { apiPost } from "../_shared/api/apiClient";
 import ModalPerfil from "../Perfil/ModalPerfil";
 import logoRh from "../../imagenes/Escudo_ipet50.png";
+import { BOT_PANEL_URL } from "../../config/config";
 import "./principal.css";
 
 const NAV_ITEMS = [
@@ -80,6 +82,65 @@ const NAV_ITEMS = [
     ],
   },
 ];
+
+const toNum = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const formatBotBadge = (value) => {
+  const number = Math.max(0, toNum(value));
+  if (number <= 0) return "";
+  return number > 99 ? "99+" : String(number);
+};
+
+const calculateBotBadges = (rows) => {
+  const chats = Array.isArray(rows) ? rows : [];
+  let normal = 0;
+  let urgent = 0;
+  let approval = 0;
+
+  for (const chat of chats) {
+    const unread = Math.max(0, toNum(chat?.unread || 0));
+    const pendingQueries = Math.max(
+      0,
+      toNum(chat?.consultas_pendientes || chat?.pending_consultas || 0),
+    );
+    const pendingApprovals = Math.max(
+      0,
+      toNum(chat?.comprobantes_pendientes || chat?.pending_comprobantes || 0),
+    );
+
+    const priority = String(
+      chat?.prioridad || chat?.notificacion_tipo || chat?.tipo_notificacion || "",
+    ).toLowerCase();
+
+    const isApprovalAlert =
+      priority === "aprobacion_comprobante" ||
+      priority === "comprobante_pendiente" ||
+      priority.includes("comprobante");
+
+    const approvalsForChat =
+      pendingApprovals > 0
+        ? pendingApprovals
+        : isApprovalAlert
+          ? Math.max(1, Math.min(unread, 1))
+          : 0;
+
+    const urgentForChat = Math.min(unread, pendingQueries);
+    const classifiedForChat = Math.min(
+      unread,
+      urgentForChat + Math.min(unread, approvalsForChat),
+    );
+    const normalForChat = Math.max(0, unread - classifiedForChat);
+
+    urgent += urgentForChat;
+    approval += approvalsForChat;
+    normal += normalForChat;
+  }
+
+  return { normal, urgent, approval };
+};
 
 const getGroupKeyForPath = (pathname) =>
   NAV_ITEMS.find(
@@ -157,6 +218,41 @@ export default function Principal() {
   );
   const groupClickTimer = useRef(null);
   const logoutInProgress = useRef(false);
+  const [normalUnread, setNormalUnread] = useState(0);
+  const [urgentUnread, setUrgentUnread] = useState(0);
+  const [approvalUnread, setApprovalUnread] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+
+    const tick = async () => {
+      if (!getSession()) return;
+
+      try {
+        const response = await fetch(
+          `${BOT_PANEL_URL}/panel_chats.php?_=${Date.now()}`,
+          { method: "GET", cache: "no-store" },
+        );
+        const data = await response.json().catch(() => null);
+        if (!alive || !response.ok || !data?.success) return;
+
+        const { normal, urgent, approval } = calculateBotBadges(data.chats);
+        setNormalUnread(Math.max(0, toNum(normal)));
+        setUrgentUnread(Math.max(0, toNum(urgent)));
+        setApprovalUnread(Math.max(0, toNum(approval)));
+      } catch {
+        // El estado del bot no debe bloquear la navegación principal.
+      }
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 2000);
+
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (!writable && location.pathname.startsWith("/configuracion")) {
@@ -228,6 +324,10 @@ export default function Principal() {
   const closeOpenGroup = () => {
     clearGroupClickTimer();
     setOpenGroupKey(null);
+  };
+
+  const openBotPanel = () => {
+    navigate("/bot/panel");
   };
 
   const logout = async () => {
@@ -417,6 +517,56 @@ export default function Principal() {
               </div>
             );
           })}
+
+          <div className="pp-navGroup" key="bot-whatsapp">
+            <button
+              className={`pp-nav__item ${location.pathname.startsWith("/bot/panel") ? "is-active" : ""}`}
+              type="button"
+              onClick={() => {
+                closeOpenGroup();
+                setDrawerOpen(false);
+                openBotPanel();
+              }}
+              title="Panel interno del Bot (WhatsApp)"
+              aria-label="Abrir panel interno del bot"
+            >
+              <span className="pp-nav__icon pp-nav__icon--bot">
+                <FontAwesomeIcon icon={faRobot} />
+
+                {approvalUnread > 0 ? (
+                  <span
+                    className="pp-navBotBadge pp-navBotBadge--approval"
+                    aria-label={`Comprobantes pendientes de aprobación: ${approvalUnread}`}
+                    title={`Comprobantes para aprobar: ${approvalUnread}`}
+                  >
+                    {formatBotBadge(approvalUnread)}
+                  </span>
+                ) : null}
+
+                {normalUnread > 0 ? (
+                  <span
+                    className="pp-navBotBadge pp-navBotBadge--normal"
+                    aria-label={`Notificaciones normales: ${normalUnread}`}
+                    title={`Normales: ${normalUnread}`}
+                  >
+                    {formatBotBadge(normalUnread)}
+                  </span>
+                ) : null}
+
+                {urgentUnread > 0 ? (
+                  <span
+                    className="pp-navBotBadge pp-navBotBadge--urgent"
+                    aria-label={`Notificaciones urgentes: ${urgentUnread}`}
+                    title={`Urgentes: ${urgentUnread}`}
+                  >
+                    {formatBotBadge(urgentUnread)}
+                  </span>
+                ) : null}
+              </span>
+
+              <span className="pp-nav__label">Bot WhatsApp</span>
+            </button>
+          </div>
         </nav>
       </aside>
 
