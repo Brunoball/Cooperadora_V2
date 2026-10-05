@@ -486,9 +486,9 @@ export default function Cuotas() {
     { type: "search", label: "Buscar", placeholder: "Alumno, DNI o domicilio...", value: buscar, onChange: changeFilter(setBuscar), className: "cuotas-search-filter" },
     { type: "select", label: "Año aplicado", value: anio, includeEmptyOption: false, options: (catalogos.anios || [CURRENT_YEAR]).map((value) => ({ value: String(value), label: String(value) })), onChange: changeFilter(setAnio), className: "cuotas-year-filter" },
     { type: "select", label: "Período", value: mes, includeEmptyOption: false, options: (catalogos.meses || []).map((item) => ({ value: String(item.id_mes), label: item.nombre })), onChange: changeFilter(setMes), className: "cuotas-month-filter" },
-    { type: "select", label: "Categoría", value: categoria, placeholder: "Todas", options: (catalogos.categorias || []).map((item) => ({ value: String(item.id_categoria), label: item.nombre })), onChange: changeFilter(setCategoria) },
-    { type: "select", label: "Año lectivo", value: anioLectivo, placeholder: "Todos", options: (catalogos.anios_lectivos || []).map((item) => ({ value: String(item.id_anio), label: item.nombre })), onChange: changeFilter(setAnioLectivo) },
-    { type: "select", label: "División", value: division, placeholder: "Todas", options: (catalogos.divisiones || []).map((item) => ({ value: String(item.id_division), label: item.nombre })), onChange: changeFilter(setDivision) },
+    { type: "select", label: "Categoría", value: categoria, placeholder: "Todas", options: (catalogos.categorias || []).map((item) => ({ value: String(item.id_categoria), label: item.nombre })), onChange: changeFilter(setCategoria), className: "cuotas-category-filter" },
+    { type: "select", label: "Año lectivo", value: anioLectivo, placeholder: "Todos", options: (catalogos.anios_lectivos || []).map((item) => ({ value: String(item.id_anio), label: item.nombre })), onChange: changeFilter(setAnioLectivo), className: "cuotas-school-year-filter" },
+    { type: "select", label: "División", value: division, placeholder: "Todas", options: (catalogos.divisiones || []).map((item) => ({ value: String(item.id_division), label: item.nombre })), onChange: changeFilter(setDivision), className: "cuotas-division-filter" },
   ];
 
   if (estado === "PAGADOS") {
@@ -499,6 +499,7 @@ export default function Cuotas() {
       placeholder: "Todos",
       options: (catalogos.medios_pago || []).map((item) => ({ value: String(item.id_medio_pago), label: item.nombre })),
       onChange: changeFilter(setMedioPago),
+      className: "cuotas-medium-filter",
     });
   }
 
@@ -528,7 +529,7 @@ export default function Cuotas() {
             label: collectorMode ? "Salir cobrador" : "Cobrador",
             icon: faUserGroup,
             onClick: toggleCollectorMode,
-            className: collectorMode ? "mov-btn--primary" : "mov-btn--ghost",
+            className: `cuotas-collector-action ${collectorMode ? "mov-btn--primary is-active" : "mov-btn--ghost"}`,
           },
           {
             key: "imprimir",
@@ -536,6 +537,7 @@ export default function Cuotas() {
             icon: faPrint,
             onClick: collectorMode ? printCollectorBook : printAllCurrent,
             disabled: bulkPrinting || loading || !(estado === "PAGADOS" || collectorMode),
+            className: "mov-btn--ghost cuotas-print-action",
           },
         ]}
         headerActions={
@@ -543,6 +545,7 @@ export default function Cuotas() {
             label="Exportar"
             onClick={() => setExportOpen(true)}
             disabled={loading || totalFiltered === 0}
+            className="cuotas-export-action"
           />
         }
         notice={collectorMode ? "Modo cobrador activo: la impresión genera el talonario completo de marzo a diciembre para cada cobrador." : null}
@@ -611,13 +614,44 @@ export default function Cuotas() {
           )}
         </GlobalDivTable>
 
-        {totalPages > 1 ? (
-          <div className="cuotas-pagination">
-            <div className="cuotas-pagination__left">
+        <div className={`cuotas-pagination cuotas-tableFooter-v2 ${totalPages <= 1 ? "is-single-page" : ""}`}>
+          <div className="cuotas-pagination__left">
+            <div className="cuotas-footerActions" aria-label="Acciones de cuotas">
+              <button
+                type="button"
+                className={`cuotas-footerAction cuotas-footerAction--cobrador ${collectorMode ? "is-active" : ""}`}
+                onClick={toggleCollectorMode}
+              >
+                <FontAwesomeIcon icon={faUserGroup} />
+                <span>{collectorMode ? "Salir cobrador" : "Cobrador"}</span>
+              </button>
+
+              <button
+                type="button"
+                className="cuotas-footerAction cuotas-footerAction--imprimir"
+                onClick={collectorMode ? printCollectorBook : printAllCurrent}
+                disabled={bulkPrinting || loading || !(estado === "PAGADOS" || collectorMode)}
+              >
+                <FontAwesomeIcon icon={faPrint} />
+                <span>{collectorMode ? "Talonarios Mar-Dic" : "Imprimir todos"}</span>
+              </button>
+
+              <BotonExportarGlobal
+                label="Exportar"
+                onClick={() => setExportOpen(true)}
+                disabled={loading || totalFiltered === 0}
+                className="cuotas-footerAction cuotas-footerAction--exportar"
+              />
+            </div>
+
+            {totalPages > 1 ? (
               <span className="cuotas-pagination__summary">
                 Mostrando <strong>{paginacion?.desde || 0}</strong>–<strong>{paginacion?.hasta || 0}</strong> de <strong>{totalFiltered}</strong>
               </span>
-            </div>
+            ) : null}
+          </div>
+
+          {totalPages > 1 ? (
             <div className="cuotas-pagination__right">
               <div className="cuotas-pagination__controls">
                 <button
@@ -637,8 +671,8 @@ export default function Cuotas() {
                 </button>
               </div>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </ModulePage>
 
       <ModalPagoCuota

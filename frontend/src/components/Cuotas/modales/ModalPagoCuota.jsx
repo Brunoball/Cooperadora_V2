@@ -332,7 +332,7 @@ export default function ModalPagoCuota({
       danger={condoning}
       submitDisabled={submitDisabled}
       wide
-      modalClassName="cuotas-v2-payment-modal"
+      modalClassName="cuotas-v2-payment-modal cuotas-modal--payment"
       footerStart={
         <div className="cuotas-v2-footer-total">
           <small>{condoning ? "Importe condonado" : "Total operación"}</small>
@@ -341,6 +341,28 @@ export default function ModalPagoCuota({
       }
     >
       <div className="cuotas-v2-payment-body">
+        <section className="cuotas-v2-payment-person" aria-label="Alumno seleccionado">
+          <div className="cuotas-v2-payment-person__identity">
+            <span>Alumno</span>
+            <strong>{alumno?.denominacion || alumno?.nombre_completo || "—"}</strong>
+            <small>DNI {alumno?.documento || alumno?.dni || "—"}</small>
+          </div>
+          <div className="cuotas-v2-payment-person__details">
+            <div>
+              <span>Curso</span>
+              <strong>{alumno?.curso || "Sin curso"}</strong>
+            </div>
+            <div>
+              <span>Categoría</span>
+              <strong>{alumno?.categoria || "Sin categoría"}</strong>
+            </div>
+            <div>
+              <span>Familia</span>
+              <strong>{alumno?.familia || context?.familia?.nombre_familia || "Sin grupo familiar"}</strong>
+            </div>
+          </div>
+        </section>
+
         <section className="cuotas-v2-payment-toolbar">
           <label>
             <span><FontAwesomeIcon icon={faCalendarDays} /> Fecha</span>

@@ -1,53 +1,53 @@
 /* =========================================================
    PALETA GLOBAL · IPET 50
 
-   Bordo institucional como color principal, amarillo/dorado
-   como secundario y neutros compartidos por toda la aplicación.
+   Azul institucional de Cooperadora como color principal y
+   azul de acción como secundario, con neutros compartidos por toda la aplicación.
    Este archivo es la única fuente canónica de color.
    ========================================================= */
 :root {
-  /* Identidad IPET 50: bordo institucional como color principal */
-  --primary-50: #fdf4f5;
-  --primary-100: #fbe7e9;
-  --primary-200: #f5cbd0;
-  --primary-300: #eba3aa;
-  --primary-400: #d96b74;
-  --primary-500: #b52d35;
-  --primary-600: #941e28;
-  --primary-700: #7d1822;
-  --primary-800: #65151d;
-  --primary-900: #4d1117;
-  --primary-950: #2d090d;
+  /* Identidad Cooperadora: paleta azul del sistema anterior */
+  --primary-50: #f3f7ff;
+  --primary-100: #dce8fb;
+  --primary-200: #b6caef;
+  --primary-300: #6f96da;
+  --primary-400: #2e5cbf;
+  --primary-500: #1d428a;
+  --primary-600: #102e6a;
+  --primary-700: #0d285d;
+  --primary-800: #0a204b;
+  --primary-900: #071832;
+  --primary-950: #06152f;
 
   --primary-color: var(--primary-500);
   --primary-hover: var(--primary-600);
   --primary-light: var(--primary-100);
   --primary-dark: var(--primary-700);
 
-  /* Amarillo/dorado del logo como secundario institucional */
-  --secondary-50: #fffbea;
-  --secondary-100: #fff4bf;
-  --secondary-200: #ffe87a;
-  --secondary-300: #ffdc42;
-  --secondary-400: #f7cc1c;
-  --secondary-500: #e6bd00;
-  --secondary-600: #c59c00;
-  --secondary-700: #a17a00;
-  --secondary-800: #805f08;
-  --secondary-900: #684d0d;
-  --secondary-950: #3d2b03;
+  /* Azul de acción del Cooperadora anterior */
+  --secondary-50: #eff6ff;
+  --secondary-100: #dbeafe;
+  --secondary-200: #bfdbfe;
+  --secondary-300: #93c5fd;
+  --secondary-400: #60a5fa;
+  --secondary-500: #0b5ed7;
+  --secondary-600: #0a52bd;
+  --secondary-700: #0846a3;
+  --secondary-800: #073986;
+  --secondary-900: #062f70;
+  --secondary-950: #041e48;
 
-  /* Rojo vivo del logo reservado para acentos puntuales */
-  --accent-50: #fff1f2;
-  --accent-100: #ffe4e6;
-  --accent-200: #fecdd3;
-  --accent-300: #fda4af;
-  --accent-400: #fb7185;
-  --accent-500: #e31e24;
-  --accent-600: #c9151b;
-  --accent-700: #a81218;
-  --accent-800: #891217;
-  --accent-900: #711317;
+  /* Acentos azules: se mantiene toda la interfaz dentro de la misma familia */
+  --accent-50: #eff6ff;
+  --accent-100: #dbeafe;
+  --accent-200: #bfdbfe;
+  --accent-300: #93c5fd;
+  --accent-400: #60a5fa;
+  --accent-500: #0b5ed7;
+  --accent-600: #0a52bd;
+  --accent-700: #0846a3;
+  --accent-800: #073986;
+  --accent-900: #062f70;
   --primary-accent: var(--secondary-500);
 
   /* Estados */

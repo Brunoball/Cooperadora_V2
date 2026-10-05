@@ -395,7 +395,7 @@ export const paymentReceiptHtml = (source) => {
         .legacy-receipt-area--copy { left:110mm; }
         ${receiptStyles}
         .print-actions { position:fixed; top:8mm; right:8mm; z-index:10; display:flex; gap:8px; }
-        .print-actions button, .print-actions a { display:inline-flex; align-items:center; text-decoration:none; font-family:Arial,sans-serif; font-size:14px; min-height:40px; padding:0 16px; border:0; border-radius:8px; color:#fff; background:#b52d35; font-weight:700; cursor:pointer; }
+        .print-actions button, .print-actions a { display:inline-flex; align-items:center; text-decoration:none; font-family:Arial,sans-serif; font-size:14px; min-height:40px; padding:0 16px; border:0; border-radius:8px; color:#fff; background:#1d428a; font-weight:700; cursor:pointer; }
         @media print { .print-actions { display:none !important; } }
       </style>
     </head>

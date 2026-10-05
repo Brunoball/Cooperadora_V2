@@ -2128,3 +2128,374 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
 .cuotas-v2-receipt-summary strong { font-size: .94rem; }
 .cuotas-v2-receipt-actions { display: flex; gap: 8px; }
 @media (max-width: 900px) { .cuotas-v2-receipt-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* =========================================================
+   COOPERADORA V2 · CUOTAS
+   Paridad visual con RH: filtros compactos + acciones de monitor compacto.
+   ========================================================= */
+
+/* Los selects conservan los anchos compactos usados en RH. */
+.cuotas-head-filters .cuotas-category-filter {
+  flex: 0 0 118px;
+  width: 118px;
+  min-width: 118px;
+  max-width: 118px;
+}
+
+.cuotas-head-filters .cuotas-school-year-filter {
+  flex: 0 0 102px;
+  width: 102px;
+  min-width: 102px;
+  max-width: 102px;
+}
+
+.cuotas-head-filters .cuotas-division-filter {
+  flex: 0 0 92px;
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
+}
+
+/* El medio de pago usa el mismo ancho compacto que RH. */
+.cuotas-head-filters .cuotas-medium-filter {
+  flex: 0 0 155px;
+  width: 155px;
+  min-width: 155px;
+  max-width: 155px;
+}
+
+/* Botón Cobrador: acción identificable sin competir con el primario. */
+.cuotas-page .module-card__actions .cuotas-collector-action {
+  border-color: color-mix(in srgb, var(--primary-500) 30%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-500) 7%, #fff);
+  color: var(--primary-700);
+  box-shadow: none;
+  font-weight: 720;
+}
+
+.cuotas-page .module-card__actions .cuotas-collector-action:hover:not(:disabled),
+.cuotas-page .module-card__actions .cuotas-collector-action:focus-visible {
+  border-color: color-mix(in srgb, var(--primary-500) 48%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-500) 12%, #fff);
+  color: var(--primary-800);
+}
+
+.cuotas-page .module-card__actions .cuotas-collector-action.is-active {
+  border-color: var(--primary-500);
+  background: var(--primary-500);
+  color: #fff;
+}
+
+.cuotas-page .module-card__actions .cuotas-collector-action.is-active:hover:not(:disabled),
+.cuotas-page .module-card__actions .cuotas-collector-action.is-active:focus-visible {
+  border-color: var(--primary-600);
+  background: var(--primary-600);
+  color: #fff;
+}
+
+.cuotas-page .module-card__actions .cuotas-print-action {
+  border-color: color-mix(in srgb, var(--text-secondary) 18%, var(--border-color));
+  background: #fff;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.cuotas-page .module-card__actions .cuotas-export-action {
+  box-shadow: none;
+}
+
+/* Footer espejo de Alumnos. Fuera del monitor compacto no agrega altura. */
+.cuotas-tableFooter-v2.is-single-page {
+  display: none;
+}
+
+.cuotas-footerActions {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.cuotas-footerAction,
+.cuotas-footerAction.global-exportHistorial-trigger {
+  min-width: 0;
+  min-height: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease, transform .16s ease;
+}
+
+.cuotas-footerAction:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.cuotas-footerAction:focus-visible {
+  outline: none;
+  box-shadow: var(--mov-focus);
+}
+
+.cuotas-footerAction:disabled {
+  opacity: .5;
+  cursor: default;
+  transform: none;
+}
+
+.cuotas-footerAction--cobrador {
+  border-color: var(--primary-200);
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.cuotas-footerAction--cobrador:hover:not(:disabled) {
+  border-color: var(--primary-300);
+  background: var(--primary-100);
+  color: var(--primary-800);
+}
+
+.cuotas-footerAction--cobrador.is-active {
+  border-color: var(--primary-500);
+  background: var(--primary-500);
+  color: #fff;
+}
+
+.cuotas-footerAction--imprimir {
+  border-color: var(--secondary-300);
+  background: var(--secondary-50);
+  color: var(--secondary-800);
+}
+
+.cuotas-footerAction--imprimir:hover:not(:disabled) {
+  border-color: var(--secondary-400);
+  background: var(--secondary-100);
+  color: var(--secondary-900);
+}
+
+.cuotas-footerAction--exportar.global-exportHistorial-trigger {
+  border-color: var(--success-200);
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+.cuotas-footerAction--exportar.global-exportHistorial-trigger:hover:not(:disabled) {
+  border-color: var(--success-300);
+  background: var(--success-100);
+  color: var(--success-700);
+}
+
+/* Igual que Alumnos: entre 1021 y 1499 las acciones bajan de la cabecera. */
+@media (min-width: 1021px) and (max-width: 1499px) {
+  .cuotas-page .module-card__actions > .cuotas-collector-action,
+  .cuotas-page .module-card__actions > .cuotas-print-action,
+  .cuotas-page .module-card__actions > .cuotas-export-action {
+    display: none !important;
+  }
+
+  .cuotas-tableFooter-v2.is-single-page {
+    display: grid;
+  }
+
+  .cuotas-footerActions {
+    display: flex;
+  }
+
+  .cuotas-tableFooter-v2 .cuotas-pagination__left {
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .cuotas-tableFooter-v2 .cuotas-pagination__summary {
+    margin-left: auto;
+  }
+}
+
+/* En tablet/móvil los filtros vuelven al comportamiento fluido global. */
+@media (max-width: 980px) {
+  .cuotas-head-filters .cuotas-category-filter,
+  .cuotas-head-filters .cuotas-school-year-filter,
+  .cuotas-head-filters .cuotas-division-filter,
+  .cuotas-head-filters .cuotas-medium-filter {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    justify-self: stretch;
+  }
+}
+
+/* =========================================================
+   CUOTAS · HEADER DE FILTROS 100% FLEX
+   Los filtros de esta sección dejan de depender de grillas y
+   anchos rígidos. Cada select puede crecer/encogerse según el
+   espacio real disponible del monitor.
+   ========================================================= */
+
+/* Título + bloque de filtros también se resuelven con flex en Cuotas. */
+.cuotas-page .module-card__headLeft {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 14px;
+  width: auto;
+  min-width: 0;
+}
+
+.cuotas-page .module-card__headLeft > .module-titleBox {
+  flex: 0 0 auto;
+}
+
+/* Reemplaza la grilla global de ModulePage sólo dentro de Cuotas. */
+.cuotas-page .cuotas-head-filters {
+  display: flex;
+  flex: 1 1 0;
+  flex-flow: row nowrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin-left: auto;
+}
+
+.cuotas-page .cuotas-head-filters > .module-filter {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin-left: 0;
+  justify-self: auto;
+}
+
+/*
+ * Bases proporcionales en lugar de columnas/fijos.
+ * flex-shrink permite que los selects se adapten cuando falta espacio;
+ * flex-grow aprovecha el espacio libre sin dejar huecos innecesarios.
+ */
+.cuotas-page .cuotas-head-filters .cuotas-search-filter {
+  flex: 1.65 1 220px;
+  width: auto;
+  min-width: 165px;
+  max-width: 280px;
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-year-filter {
+  flex: .72 1 104px;
+  width: auto;
+  min-width: 86px;
+  max-width: 128px;
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-month-filter {
+  flex: 1 1 132px;
+  width: auto;
+  min-width: 108px;
+  max-width: 168px;
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-category-filter {
+  flex: 1 1 132px;
+  width: auto;
+  min-width: 106px;
+  max-width: 172px;
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-school-year-filter {
+  flex: .88 1 118px;
+  width: auto;
+  min-width: 98px;
+  max-width: 148px;
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-division-filter {
+  flex: .78 1 106px;
+  width: auto;
+  min-width: 90px;
+  max-width: 136px;
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-medium-filter {
+  flex: 1.05 1 142px;
+  width: auto;
+  min-width: 118px;
+  max-width: 178px;
+}
+
+/* El control ocupa siempre el ancho que Flex le asigna a su wrapper. */
+.cuotas-page .cuotas-head-filters .module-filterControl {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Tablet / monitor angosto: sigue siendo FLEX, ahora con wrap natural. */
+@media (max-width: 1020px) {
+  .cuotas-page .module-card__headLeft {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .cuotas-page .module-card__headLeft > .module-titleBox {
+    width: 100%;
+  }
+
+  .cuotas-page .cuotas-head-filters {
+    display: flex;
+    flex: 1 1 auto;
+    flex-flow: row wrap;
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .cuotas-page .cuotas-head-filters .cuotas-search-filter {
+    flex: 2 1 240px;
+    min-width: 200px;
+    max-width: none;
+  }
+
+  .cuotas-page .cuotas-head-filters .cuotas-year-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-month-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-category-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-school-year-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-division-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-medium-filter {
+    flex: 1 1 145px;
+    width: auto;
+    min-width: 125px;
+    max-width: none;
+  }
+}
+
+/* Celular: una fila flexible por control, sin volver a grid. */
+@media (max-width: 560px) {
+  .cuotas-page .cuotas-head-filters {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .cuotas-page .cuotas-head-filters .cuotas-search-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-year-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-month-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-category-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-school-year-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-division-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-medium-filter {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+}
