@@ -117,17 +117,30 @@ function e2e_target_state(PDO $db, string $kind, int $id): ?bool
             'tipos_documentos', 'id_tipo_documento',
             "UPPER(descripcion) LIKE 'PW E2E DOC %' OR UPPER(descripcion) LIKE 'PW EEE DOC %' OR UPPER(sigla) LIKE 'PWE2E%'",
         ],
-        // Contabilidad V2 (módulo todavía presente en el router).
-        'contable_opcion' => [
-            'contable_opciones', 'id_opcion', "UPPER(nombre) LIKE 'PW E2E CT %' OR UPPER(nombre) LIKE 'PW EEE CT %'",
-        ],
+        // Contabilidad Cooperadora: un movimiento E2E debe quedar enlazado
+        // exclusivamente a las tres opciones contables del namespace de la suite.
+        // Así un movimiento real que accidentalmente use una sola opción de prueba
+        // nunca queda habilitado para edición/eliminación desde Playwright.
         'contable_ingreso' => [
-            'contable_ingresos', 'id_ingreso',
-            "UPPER(COALESCE(proveedor,'')) LIKE 'PW E2E CT %' OR UPPER(COALESCE(proveedor,'')) LIKE 'PW EEE CT %' OR UPPER(COALESCE(categoria,'')) LIKE 'PW E2E CT %' OR UPPER(COALESCE(categoria,'')) LIKE 'PW EEE CT %' OR UPPER(COALESCE(concepto,'')) LIKE 'PW E2E CT %' OR UPPER(COALESCE(concepto,'')) LIKE 'PW EEE CT %' OR UPPER(COALESCE(detalle,'')) LIKE 'PW E2E CONTABLE %'",
+            'ingresos i
+             INNER JOIN contable_proveedor cp ON cp.id_cont_proveedor = i.id_cont_proveedor
+             INNER JOIN contable_categoria cc ON cc.id_cont_categoria = i.id_cont_categoria
+             INNER JOIN contable_descripcion cd ON cd.id_cont_descripcion = i.id_cont_descripcion',
+            'i.id_ingreso',
+            "(UPPER(cp.nombre_proveedor) LIKE 'PW E2E CT %' OR UPPER(cp.nombre_proveedor) LIKE 'PW EEE CT %')
+             AND (UPPER(cc.nombre_categoria) LIKE 'PW E2E CT %' OR UPPER(cc.nombre_categoria) LIKE 'PW EEE CT %')
+             AND (UPPER(cd.nombre_descripcion) LIKE 'PW E2E CT %' OR UPPER(cd.nombre_descripcion) LIKE 'PW EEE CT %')",
         ],
         'contable_egreso' => [
-            'contable_egresos', 'id_egreso',
-            "UPPER(COALESCE(proveedor,'')) LIKE 'PW E2E CT %' OR UPPER(COALESCE(proveedor,'')) LIKE 'PW EEE CT %' OR UPPER(COALESCE(categoria,'')) LIKE 'PW E2E CT %' OR UPPER(COALESCE(categoria,'')) LIKE 'PW EEE CT %' OR UPPER(COALESCE(concepto,'')) LIKE 'PW E2E CT %' OR UPPER(COALESCE(concepto,'')) LIKE 'PW EEE CT %' OR UPPER(COALESCE(detalle,'')) LIKE 'PW E2E CONTABLE %' OR UPPER(COALESCE(numero_comprobante,'')) LIKE 'PW-E2E-%'",
+            'egresos e
+             INNER JOIN contable_proveedor cp ON cp.id_cont_proveedor = e.id_cont_proveedor
+             INNER JOIN contable_categoria cc ON cc.id_cont_categoria = e.id_cont_categoria
+             INNER JOIN contable_descripcion cd ON cd.id_cont_descripcion = e.id_cont_descripcion',
+            'e.id_egreso',
+            "e.id_pago_origen IS NULL
+             AND (UPPER(cp.nombre_proveedor) LIKE 'PW E2E CT %' OR UPPER(cp.nombre_proveedor) LIKE 'PW EEE CT %')
+             AND (UPPER(cc.nombre_categoria) LIKE 'PW E2E CT %' OR UPPER(cc.nombre_categoria) LIKE 'PW EEE CT %')
+             AND (UPPER(cd.nombre_descripcion) LIKE 'PW E2E CT %' OR UPPER(cd.nombre_descripcion) LIKE 'PW EEE CT %')",
         ],
     ];
 
@@ -218,6 +231,27 @@ function e2e_config_creation_marker(string $list, array $body): bool
             || e2e_marker((string)($body['sigla'] ?? ''), ['PWE2E']),
         default => false,
     };
+}
+
+function e2e_contable_option_kind(mixed $rawType): ?string
+{
+    return match (strtoupper(trim((string)$rawType))) {
+        'PROVEEDOR' => 'config_contable_proveedor',
+        'CATEGORIA_INGRESO', 'CATEGORIA_EGRESO' => 'config_contable_categoria',
+        'CONCEPTO_INGRESO', 'CONCEPTO_EGRESO' => 'config_contable_descripcion',
+        default => null,
+    };
+}
+
+function e2e_assert_contable_option(PDO $db, string $action, mixed $rawType, mixed $rawId): void
+{
+    $kind = e2e_contable_option_kind($rawType);
+    if ($kind === null) {
+        // El handler también exige un tipo válido. Sin tipo no existe una escritura
+        // posible; se deja que responda su 422 normal sin habilitar ningún registro.
+        return;
+    }
+    e2e_assert_target($db, $action, $kind, $rawId);
 }
 
 function e2e_scope_guard(string $action, array $auth): void
@@ -372,19 +406,21 @@ function e2e_scope_guard(string $action, array $auth): void
             if (e2e_is_local_environment()) return;
             e2e_scope_error($action, 'El monto global de matrícula sólo puede modificarse desde Playwright en ambiente local.');
 
-        // CONTABILIDAD (fuera del freeze actual, pero se conserva fail-closed).
+        // CONTABILIDAD: usa el esquema real de Cooperadora (ingresos/egresos y
+        // catálogos compartidos), siempre restringido al namespace de Playwright.
         case 'contable_opcion_guardar':
             if (!empty($body['id_opcion'])) {
-                e2e_assert_target($db, $action, 'contable_opcion', $body['id_opcion']);
+                e2e_assert_contable_option($db, $action, $body['tipo'] ?? null, $body['id_opcion']);
                 return;
             }
+            if (e2e_contable_option_kind($body['tipo'] ?? null) === null) return;
             $name = trim((string)($body['nombre'] ?? ''));
-            if ($name === '' || e2e_marker($name, ['PW E2E CT ', 'PW EEE CT ', 'PW E2E INVALIDA'])) return;
+            if ($name !== '' && e2e_marker($name, ['PW E2E CT ', 'PW EEE CT '])) return;
             e2e_scope_error($action, 'Una opción contable E2E debe usar prefijo PW E2E/PW EEE CT.');
 
         case 'contable_opcion_cambiar_estado':
         case 'contable_opcion_eliminar':
-            e2e_assert_target($db, $action, 'contable_opcion', $body['id_opcion'] ?? null);
+            e2e_assert_contable_option($db, $action, $body['tipo'] ?? null, $body['id_opcion'] ?? null);
             return;
 
         case 'contable_ingreso_guardar':
@@ -392,9 +428,9 @@ function e2e_scope_guard(string $action, array $auth): void
                 e2e_assert_target($db, $action, 'contable_ingreso', $body['id_ingreso']);
                 return;
             }
-            foreach (['id_proveedor', 'id_categoria', 'id_concepto'] as $field) {
-                e2e_assert_target($db, $action, 'contable_opcion', $body[$field] ?? null);
-            }
+            e2e_assert_target($db, $action, 'config_contable_proveedor', $body['id_proveedor'] ?? null);
+            e2e_assert_target($db, $action, 'config_contable_categoria', $body['id_categoria'] ?? null);
+            e2e_assert_target($db, $action, 'config_contable_descripcion', $body['id_concepto'] ?? null);
             return;
 
         case 'contable_ingreso_eliminar':
@@ -406,9 +442,9 @@ function e2e_scope_guard(string $action, array $auth): void
                 e2e_assert_target($db, $action, 'contable_egreso', $body['id_egreso']);
                 return;
             }
-            foreach (['id_proveedor', 'id_categoria', 'id_concepto'] as $field) {
-                e2e_assert_target($db, $action, 'contable_opcion', $body[$field] ?? null);
-            }
+            e2e_assert_target($db, $action, 'config_contable_proveedor', $body['id_proveedor'] ?? null);
+            e2e_assert_target($db, $action, 'config_contable_categoria', $body['id_categoria'] ?? null);
+            e2e_assert_target($db, $action, 'config_contable_descripcion', $body['id_concepto'] ?? null);
             return;
 
         case 'contable_egreso_eliminar':

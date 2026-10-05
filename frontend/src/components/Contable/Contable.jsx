@@ -13,7 +13,6 @@ import {
   faCircleInfo,
   faEye,
   faFileInvoiceDollar,
-  faList,
   faMoneyBillTransfer,
   faPaperclip,
   faPen,
@@ -42,12 +41,11 @@ import {
   preventInvalidDecimalKey,
   receiptNumberInput,
   upperCatalogName,
-  upperLettersOnly,
   upperLimitedText,
 } from "../Global/Formularios/inputSanitizers";
 import { canWrite } from "../_shared/auth/session";
 import { contableApi } from "./api/contableApi";
-import IngresosSociosView from "./IngresosSociosView";
+import IngresosAlumnosView from "./IngresosAlumnosView";
 import "./Contable.css";
 
 const now = new Date();
@@ -108,10 +106,17 @@ const localDate = () => {
 };
 
 const upper = (value) => String(value ?? "").toLocaleUpperCase("es-AR");
-const sanitizeOptionName = (type, value) =>
-  type === "PROVEEDOR"
-    ? upperCatalogName(value, 160)
-    : upperLettersOnly(value, 160);
+const sanitizeOptionName = (type, value) => {
+  if (type === "PROVEEDOR") return upperCatalogName(value, 120);
+
+  // Categorías y descripciones contables históricas pueden contener números,
+  // puntos, barras u otros signos (por ejemplo códigos de ventas/comprobantes).
+  // No los descartamos silenciosamente en el alta rápida: el backend ya
+  // normaliza espacios, mayúsculas y longitud antes de persistir.
+  const maxLength =
+    type === "CONCEPTO_INGRESO" || type === "CONCEPTO_EGRESO" ? 160 : 120;
+  return upperLimitedText(value, maxLength).replace(/ {2,}/g, " ");
+};
 
 const emptyCatalogs = {
   opciones: {
@@ -122,7 +127,7 @@ const emptyCatalogs = {
     CONCEPTO_EGRESO: [],
   },
   medios_pago: [],
-  categorias_socios: [],
+  periodos: [],
   anios: [CURRENT_YEAR],
 };
 
@@ -134,7 +139,6 @@ const emptyIncomeForm = () => ({
   id_categoria: "",
   id_concepto: "",
   importe: "",
-  detalle: "",
 });
 
 const emptyExpenseForm = () => ({
@@ -146,7 +150,6 @@ const emptyExpenseForm = () => ({
   id_concepto: "",
   numero_comprobante: "",
   importe: "",
-  detalle: "",
   archivo: null,
   archivo_nombre: "",
   eliminar_archivo: false,
@@ -321,7 +324,7 @@ function SummaryView({ summary, loading, mode }) {
   const expenses = Number(visibleTotals.egresos || 0);
   const result = Number(visibleTotals.resultado || income - expenses);
   const feeIncome = Number(visibleTotals.ingresos_cuotas || 0);
-  const registrationIncome = Number(visibleTotals.ingresos_inscripciones || 0);
+  const registrationIncome = Number(visibleTotals.ingresos_matriculas || 0);
   const otherIncome = Number(visibleTotals.otros_ingresos || 0);
   const sum = income + expenses;
   const incomeDegrees = sum > 0 ? (income / sum) * 360 : 0;
@@ -396,13 +399,13 @@ function SummaryView({ summary, loading, mode }) {
             {
               key: "income",
               label: "Ingresos",
-              detail: `Cuotas ${money(feeIncome)} · Inscripciones ${money(registrationIncome)} · Otros ${money(otherIncome)}`,
+              detail: `Cuotas ${money(feeIncome)} · Matrículas ${money(registrationIncome)} · Otros ${money(otherIncome)}`,
               value: money(income),
             },
             {
               key: "expenses",
               label: "Egresos",
-              detail: "Gastos registrados manualmente",
+              detail: "Gastos registrados y comisiones de cobradores",
               value: money(expenses),
             },
             {
@@ -441,126 +444,6 @@ function Breakdown({ title, items = [] }) {
   );
 }
 
-function SummaryDetailModal({ open, onClose, summary, year }) {
-  const monthlyRows = MONTHS.map((name, index) => {
-    const monthNumber = index + 1;
-    const source = (summary?.meses || []).find(
-      (item) => Number(item.mes) === monthNumber,
-    );
-    const income = Number(source?.ingresos || 0);
-    const expenses = Number(source?.egresos || 0);
-
-    return {
-      mes: monthNumber,
-      nombre: source?.nombre || name,
-      ingresos: income,
-      egresos: expenses,
-      resultado: Number(source?.resultado ?? income - expenses),
-    };
-  });
-  const calculatedTotals = monthlyRows.reduce(
-    (totals, item) => ({
-      ingresos: totals.ingresos + item.ingresos,
-      egresos: totals.egresos + item.egresos,
-      resultado: totals.resultado + item.resultado,
-    }),
-    { ingresos: 0, egresos: 0, resultado: 0 },
-  );
-  const totals = {
-    ingresos: Number(summary?.totales?.ingresos ?? calculatedTotals.ingresos),
-    egresos: Number(summary?.totales?.egresos ?? calculatedTotals.egresos),
-    resultado: Number(
-      summary?.totales?.resultado ?? calculatedTotals.resultado,
-    ),
-  };
-
-  return (
-    <CrudModal
-      open={open}
-      title="Detalle mensual contable"
-      subtitle={`Ingresos, egresos y resultado de cada mes del año ${year}.`}
-      onClose={onClose}
-      hideSubmit
-      hideCancel
-      modalClassName="contable-summary-detail-modal"
-      closeOnBackdrop={false}
-      wide
-    >
-        <SummaryCards
-          title=""
-          ariaLabel={`Totales contables del año ${year}`}
-          variant="dashboard"
-          className="contable-summary-detail-cards"
-          items={[
-            {
-              key: "detail-income",
-              icon: faArrowTrendUp,
-              label: "Ingresos",
-              value: money(totals.ingresos),
-              detail: `Acumulado del año ${year}`,
-              tone: "success",
-            },
-            {
-              key: "detail-expenses",
-              icon: faArrowTrendDown,
-              label: "Egresos",
-              value: money(totals.egresos),
-              detail: `Acumulado del año ${year}`,
-              tone: "danger",
-            },
-            {
-              key: "detail-result",
-              icon: faMoneyBillTransfer,
-              label: "Resultado",
-              value: money(totals.resultado),
-              detail:
-                totals.resultado >= 0 ? "Balance positivo" : "Balance negativo",
-              tone: totals.resultado >= 0 ? "balance" : "danger",
-            },
-          ]}
-        />
-
-        <GlobalDivTable
-          className="contable-summary-detail-table"
-          bodyClassName="contable-summary-detail-table__body"
-          gridClassName="contable-summary-detail-grid"
-          columns={[
-            "Mes",
-            { label: "Ingresos", align: "right" },
-            { label: "Egresos", align: "right" },
-            { label: "Resultado", align: "right" },
-          ]}
-          skeletonActionColumn={false}
-          ariaLabel={`Detalle mensual contable del año ${year}`}
-        >
-          {monthlyRows.map((item) => (
-            <div
-              className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row contable-summary-detail-grid ${Number(summary?.mes_seleccionado) === item.mes ? "is-selected-month" : ""}`.trim()}
-              role="row"
-              key={item.mes}
-            >
-              <div className="mov-gridCell entity-main-cell">
-                <strong>{item.nombre}</strong>
-                <small>{year}</small>
-              </div>
-              <div className="mov-gridCell is-right contable-money-cell contable-money-cell--income">
-                {money(item.ingresos)}
-              </div>
-              <div className="mov-gridCell is-right contable-money-cell contable-money-cell--expense">
-                {money(item.egresos)}
-              </div>
-              <div
-                className={`mov-gridCell is-right is-strong contable-money-cell ${item.resultado >= 0 ? "ct-positive" : "ct-negative"}`}
-              >
-                {money(item.resultado)}
-              </div>
-            </div>
-          ))}
-        </GlobalDivTable>
-    </CrudModal>
-  );
-}
-
 export default function ContableModule({ view = "summary" }) {
   const compactActions = useCompactModuleActions();
   const writable = canWrite();
@@ -569,13 +452,11 @@ export default function ContableModule({ view = "summary" }) {
   const [year, setYear] = useState(String(CURRENT_YEAR));
   const [month, setMonth] = useState(String(CURRENT_MONTH));
   const [summaryMode, setSummaryMode] = useState("annual");
-  const [incomeTab, setIncomeTab] = useState("partners");
-  const isFeeIncomeTab = incomeTab === "partners";
-  const [feeDetailTab, setFeeDetailTab] = useState("detail");
-  const [feePeriod, setFeePeriod] = useState(String(Math.ceil(CURRENT_MONTH / 2)));
-  const [feeDetailSearchSocio, setFeeDetailSearchSocio] = useState("");
-  const [feeDetailSearchId, setFeeDetailSearchId] = useState("");
-  const [feeDetailPage, setFeeDetailPage] = useState(1);
+  const [incomeTab, setIncomeTab] = useState("students");
+  const isStudentIncomeTab = incomeTab === "students";
+  const [feePeriod, setFeePeriod] = useState(String(CURRENT_MONTH));
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentPage, setStudentPage] = useState(1);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [mean, setMean] = useState("");
@@ -594,7 +475,6 @@ export default function ContableModule({ view = "summary" }) {
   const [optionName, setOptionName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [exportOpen, setExportOpen] = useState(false);
-  const [summaryDetailOpen, setSummaryDetailOpen] = useState(false);
   const requestId = useRef(0);
   const tableBodyRef = useRef(null);
   const pendingTableScrollRef = useRef(null);
@@ -623,13 +503,11 @@ export default function ContableModule({ view = "summary" }) {
     setCategory("");
     setMean("");
     setSearch("");
-    setFeeDetailSearchSocio("");
-    setFeeDetailSearchId("");
-    setFeeDetailTab("detail");
-    setFeeDetailPage(1);
+    setStudentSearch("");
+    setStudentPage(1);
     setPage(1);
     // Evita mostrar datos de la pestaña anterior mientras se carga la nueva.
-    // También evita mezclar filas de socios y otros ingresos al cambiar de pestaña.
+    // También evita mezclar filas de alumnos y otros ingresos al cambiar de pestaña.
     setData({ items: [], resumen: {} });
   }, [view, incomeTab]);
 
@@ -640,8 +518,8 @@ export default function ContableModule({ view = "summary" }) {
   }, [year, month, feePeriod, search, category, mean]);
 
   useEffect(() => {
-    setFeeDetailPage(1);
-  }, [year, feePeriod, feeDetailSearchSocio, feeDetailSearchId]);
+    setStudentPage(1);
+  }, [year, feePeriod, studentSearch]);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -660,13 +538,12 @@ export default function ContableModule({ view = "summary" }) {
           medio: mean,
         };
         let response;
-        if (view === "income" && isFeeIncomeTab) {
-          response = await contableApi.ingresosSocios({
+        if (view === "income" && isStudentIncomeTab) {
+          response = await contableApi.ingresosAlumnos({
             anio: year,
             periodo: feePeriod,
-            buscar: feeDetailSearchSocio,
-            id_socio: feeDetailSearchId,
-            pagina: feeDetailPage,
+            buscar: studentSearch,
+            pagina: studentPage,
           });
         } else if (view === "income") {
           response = await contableApi.ingresos(filters);
@@ -674,7 +551,7 @@ export default function ContableModule({ view = "summary" }) {
           response = await contableApi.egresos(filters);
         }
         if (requestId.current === currentRequest) {
-          if (view === "income" && isFeeIncomeTab) setData(response || {});
+          if (view === "income" && isStudentIncomeTab) setData(response || {});
           else
             setData({
               items: response.items || [],
@@ -691,13 +568,12 @@ export default function ContableModule({ view = "summary" }) {
   }, [
     view,
     incomeTab,
-    isFeeIncomeTab,
+    isStudentIncomeTab,
     year,
     month,
     feePeriod,
-    feeDetailSearchSocio,
-    feeDetailSearchId,
-    feeDetailPage,
+    studentSearch,
+    studentPage,
     search,
     category,
     mean,
@@ -713,15 +589,15 @@ export default function ContableModule({ view = "summary" }) {
   }, [loadData]);
 
   useEffect(() => {
-    const activeSearch = view === "income" && isFeeIncomeTab
-      ? `${feeDetailSearchSocio}${feeDetailSearchId}`
+    const activeSearch = view === "income" && isStudentIncomeTab
+      ? studentSearch
       : search;
     const timer = window.setTimeout(loadData, activeSearch ? 250 : 0);
     return () => {
       window.clearTimeout(timer);
       requestId.current += 1;
     };
-  }, [loadData, search, feeDetailSearchSocio, feeDetailSearchId, view, isFeeIncomeTab]);
+  }, [loadData, search, studentSearch, view, isStudentIncomeTab]);
 
   useEffect(() => {
     if (loading || pendingTableScrollRef.current == null) return undefined;
@@ -771,7 +647,7 @@ export default function ContableModule({ view = "summary" }) {
         nombre: sanitizedName,
       });
       await loadCatalogs();
-      optionModal.onCreated(String(response.item.id_opcion));
+      optionModal.onCreated(String(response.item?.id_opcion ?? response.id_opcion ?? ""));
       setOptionModal(null);
       setFeedback({ type: "success", message: response.mensaje });
     } catch (error) {
@@ -792,7 +668,6 @@ export default function ContableModule({ view = "summary" }) {
             id_categoria: item.id_categoria ? String(item.id_categoria) : "",
             id_concepto: item.id_concepto ? String(item.id_concepto) : "",
             importe: String(item.importe),
-            detalle: item.detalle || "",
           }
         : emptyIncomeForm(),
     );
@@ -805,7 +680,6 @@ export default function ContableModule({ view = "summary" }) {
     const sanitizedIncomeForm = {
       ...incomeForm,
       importe: decimalInput(incomeForm.importe),
-      detalle: upperLimitedText(incomeForm.detalle, 500),
     };
 
     if (!(Number(sanitizedIncomeForm.importe) > 0)) {
@@ -841,7 +715,6 @@ export default function ContableModule({ view = "summary" }) {
             id_concepto: item.id_concepto ? String(item.id_concepto) : "",
             numero_comprobante: item.numero_comprobante || "",
             importe: String(item.importe),
-            detalle: item.detalle || "",
             archivo: null,
             archivo_nombre: item.archivo_nombre || "",
             eliminar_archivo: false,
@@ -895,8 +768,7 @@ export default function ContableModule({ view = "summary" }) {
     const sanitizedExpenseForm = {
       ...expenseForm,
       importe: decimalInput(expenseForm.importe),
-      numero_comprobante: receiptNumberInput(expenseForm.numero_comprobante, 120),
-      detalle: upperLimitedText(expenseForm.detalle, 500),
+      numero_comprobante: receiptNumberInput(expenseForm.numero_comprobante, 100),
     };
 
     if (
@@ -996,11 +868,9 @@ export default function ContableModule({ view = "summary" }) {
   };
 
   const categoryOptions = useMemo(() => {
-    if (view === "income" && isFeeIncomeTab)
-      return catalogs.categorias_socios || [];
     if (view === "income") return catalogs.opciones.CATEGORIA_INGRESO || [];
     return catalogs.opciones.CATEGORIA_EGRESO || [];
-  }, [catalogs, view, isFeeIncomeTab]);
+  }, [catalogs, view]);
 
   const accountingYears = useMemo(() => {
     const values = Array.isArray(catalogs.anios) ? catalogs.anios : [];
@@ -1023,31 +893,6 @@ export default function ContableModule({ view = "summary" }) {
   const exportConfig = useMemo(() => {
     const items = data.items || [];
 
-    if (view === "income" && isFeeIncomeTab) {
-      return {
-        title: "Exportar ingresos de socios",
-        fileTitle: "Ingresos de socios",
-        fileName: `ingresos_socios_${year}_${month}`,
-        columns: [
-          { label: "Fecha de cobro", value: (item) => formatDate(item.fecha) },
-          { label: "Socio", key: "socio" },
-          {
-            label: "DNI",
-            value: (item) => item.documento || item.dni || "",
-          },
-          { label: "Categoría", key: "categoria" },
-          { label: "Período pagado", key: "periodo" },
-          { label: "Medio", key: "medio" },
-          { label: "Monto", key: "monto" },
-          {
-            label: "Tipo de importe",
-            value: (item) => item.monto_estimado ? "ESTIMADO" : "REGISTRADO",
-          },
-        ],
-        records: items,
-      };
-    }
-
     if (view === "income") {
       return {
         title: "Exportar otros ingresos",
@@ -1059,7 +904,6 @@ export default function ContableModule({ view = "summary" }) {
           { label: "Categoría", key: "categoria" },
           { label: "Concepto", key: "concepto" },
           { label: "Medio", key: "medio" },
-          { label: "Detalle", value: (item) => item.detalle || "" },
           { label: "Importe", key: "importe" },
         ],
         records: items,
@@ -1080,12 +924,11 @@ export default function ContableModule({ view = "summary" }) {
         },
         { label: "Concepto", key: "concepto" },
         { label: "Medio", key: "medio" },
-        { label: "Detalle", value: (item) => item.detalle || "" },
         { label: "Importe", key: "importe" },
       ],
       records: items,
     };
-  }, [data.items, incomeTab, isFeeIncomeTab, month, view, year]);
+  }, [data.items, month, view, year]);
 
   const totalRecords = data.items?.length || 0;
   const totalPages = totalRecords
@@ -1145,9 +988,9 @@ export default function ContableModule({ view = "summary" }) {
     value: feePeriod,
     onChange: setFeePeriod,
     includeEmptyOption: false,
-    options: [1, 2, 3, 4, 5, 6, 7].map((item) => ({
-      value: String(item),
-      label: item === 7 ? "CONTADO ANUAL" : `${item * 2 - 1} Y ${item * 2}`,
+    options: (catalogs.periodos || []).map((item) => ({
+      value: String(item.id_periodo),
+      label: item.nombre,
     })),
   };
   const detailFilters = [
@@ -1213,49 +1056,21 @@ export default function ContableModule({ view = "summary" }) {
               value: incomeTab,
               onChange: setIncomeTab,
               options: [
-                { value: "partners", label: "Socios" },
-                { value: "manual", label: "Otros ingresos" },
+                { value: "students", label: "Alumnos" },
+                { value: "manual", label: "Ingresos" },
               ],
             },
-            ...(isFeeIncomeTab
+            ...(isStudentIncomeTab
               ? [
                   {
-                    key: "detalle-ingresos-socios",
-                    label: "Vista",
-                    type: "tabs",
-                    value: feeDetailTab,
-                    onChange: (nextTab) => {
-                      setFeeDetailTab(nextTab);
-                      setFeeDetailPage(1);
-                    },
-                    options: [
-                      { value: "detail", label: "Detalle" },
-                      { value: "partners", label: "Detalle de socios" },
-                      { value: "collection", label: "Detalle de cobranza" },
-                    ],
+                    key: "buscar-ingresos-alumnos",
+                    label: "Alumno",
+                    type: "search",
+                    className: "contable-filter--student-search",
+                    placeholder: "Nombre, apellido o DNI",
+                    value: studentSearch,
+                    onChange: setStudentSearch,
                   },
-                  ...(feeDetailTab === "detail"
-                    ? [
-                        {
-                          key: "buscar-ingresos-socios",
-                          label: "Socio",
-                          type: "search",
-                          className: "contable-filter--partner-search",
-                          placeholder: "",
-                          value: feeDetailSearchSocio,
-                          onChange: setFeeDetailSearchSocio,
-                        },
-                        {
-                          key: "buscar-id-ingresos-socios",
-                          label: "ID",
-                          type: "search",
-                          className: "contable-filter--partner-id",
-                          placeholder: "",
-                          value: feeDetailSearchId,
-                          onChange: (value) => setFeeDetailSearchId(String(value || "").replace(/\D/g, "").slice(0, 10)),
-                        },
-                      ]
-                    : []),
                   periodFilters[0],
                   feePeriodFilter,
                 ]
@@ -1272,16 +1087,8 @@ export default function ContableModule({ view = "summary" }) {
         ? () => openExpense()
         : undefined;
   const tableColumns =
-    view === "income" && isFeeIncomeTab
+    view === "income"
       ? [
-          "Socio",
-          "Fecha de cobro",
-          "Período pagado",
-          "Medio",
-          { label: "Monto", align: "right" },
-        ]
-      : view === "income"
-        ? [
             "Persona / Proveedor",
             "Fecha",
             "Medio",
@@ -1299,11 +1106,9 @@ export default function ContableModule({ view = "summary" }) {
             "Acciones",
           ];
   const tableGridClassName =
-    view === "income" && isFeeIncomeTab
-      ? "contable-grid contable-grid--partners"
-      : view === "income"
-        ? `contable-grid ${writable ? "contable-grid--income" : "contable-grid--income-readonly"}`
-        : "contable-grid contable-grid--expense";
+    view === "income"
+      ? `contable-grid ${writable ? "contable-grid--income" : "contable-grid--income-readonly"}`
+      : "contable-grid contable-grid--expense";
   const selectedSummaryMonth = (summary?.meses || []).find(
     (item) => Number(item.mes) === Number(summary?.mes_seleccionado),
   );
@@ -1367,23 +1172,17 @@ export default function ContableModule({ view = "summary" }) {
         canCreate={canCreateMovement}
         primaryActionClassName={canCreateMovement ? "contable-create-top" : ""}
         headerActions={
-          view === "summary" ? (
-            <button
-              className="mov-btn mov-btn--primary contable-summary-detail-btn"
-              type="button"
-              onClick={() => setSummaryDetailOpen(true)}
-              disabled={loading || !summary}
-            >
-              <FontAwesomeIcon icon={faList} />
-              Detalle
-            </button>
-          ) : view === "income" && isFeeIncomeTab ? null : !compactActions ? (
-            <BotonExportarGlobal
-              className="contable-export-top"
-              onClick={() => setExportOpen(true)}
-              disabled={!data.items?.length}
-            />
-          ) : null
+          view === "income" && isStudentIncomeTab
+            ? null
+            : view !== "summary" && !compactActions
+              ? (
+                  <BotonExportarGlobal
+                    className="contable-export-top"
+                    onClick={() => setExportOpen(true)}
+                    disabled={!data.items?.length}
+                  />
+                )
+              : null
         }
         notice={
           !writable
@@ -1399,14 +1198,12 @@ export default function ContableModule({ view = "summary" }) {
 
         {view === "summary" ? (
           <SummaryView summary={summary} loading={loading} mode={summaryMode} />
-        ) : view === "income" && isFeeIncomeTab ? (
-          <IngresosSociosView
+        ) : view === "income" && isStudentIncomeTab ? (
+          <IngresosAlumnosView
             data={data}
             loading={loading}
-            activeTab={feeDetailTab}
-            detailSearch={feeDetailSearchSocio}
-            detailIdSearch={feeDetailSearchId}
-            onDetailPageChange={setFeeDetailPage}
+            search={studentSearch}
+            onPageChange={setStudentPage}
             onFeedback={setFeedback}
           />
         ) : (
@@ -1419,61 +1216,11 @@ export default function ContableModule({ view = "summary" }) {
               columns={tableColumns}
               loading={loading}
               loadingLabel="Cargando movimientos contables..."
-              skeletonActionColumn={
-                view === "income"
-                  ? incomeTab === "manual" && writable
-                  : true
-              }
+              skeletonActionColumn={view === "income" ? writable : true}
               ariaLabel={
                 view === "income" ? "Listado de ingresos" : "Listado de egresos"
               }
             >
-              {view === "income" && isFeeIncomeTab ? (
-                <>
-                  {!data.items?.length ? (
-                    <EmptyState
-                      message={
-                        "No hubo cobros de socios en el mes seleccionado."
-                      }
-                    />
-                  ) : null}
-                  {paginatedItems.map((item, index) => (
-                    <div
-                      className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row contable-grid contable-grid--partners"
-                      role="row"
-                      key={
-                        item.clave ||
-                        `${item.origen || "COBRO"}-${item.id_registro || index}`
-                      }
-                    >
-                      <div className="mov-gridCell entity-main-cell">
-                        <strong>{item.socio}</strong>
-                        <small>
-                          DNI: {item.documento || item.dni || "—"}
-                          {" · "}
-                          Categoría: {item.categoria || "Sin categoría"}
-                        </small>
-                      </div>
-                      <div className="mov-gridCell is-center">
-                        {formatDate(item.fecha)}
-                      </div>
-                      <div className="mov-gridCell is-center">
-                        {item.periodo}
-                      </div>
-                      <div className="mov-gridCell is-center">{item.medio}</div>
-                      <div className="mov-gridCell is-right is-strong contable-money-cell">
-                        <strong>{money(item.monto)}</strong>
-                        {item.monto_estimado ? (
-                          <small className="contable-estimated">
-                            Importe histórico estimado
-                          </small>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </>
-              ) : null}
-
               {view === "income" && incomeTab === "manual" ? (
                 <>
                   {!data.items?.length ? (
@@ -1560,41 +1307,49 @@ export default function ContableModule({ view = "summary" }) {
                       </div>
                       <div className="mov-gridCell mov-gridCell--actions">
                         <div className="mov-actionsInline">
-                          <button
-                            className="mov-iconBtn"
-                            type="button"
-                            onClick={() => viewFile(item)}
-                            disabled={!item.tiene_archivo}
-                            title={
-                              item.tiene_archivo
-                                ? "Ver comprobante"
-                                : "Sin comprobante"
-                            }
-                          >
-                            <FontAwesomeIcon icon={faEye} />
-                          </button>
-                          {writable ? (
+                          {item.automatico ? (
+                            <span className="mov-categoryChip" title="Generado automáticamente desde Cuotas">
+                              Automático
+                            </span>
+                          ) : (
                             <>
                               <button
                                 className="mov-iconBtn"
                                 type="button"
-                                onClick={() => openExpense(item)}
-                                title="Editar"
-                              >
-                                <FontAwesomeIcon icon={faPen} />
-                              </button>
-                              <button
-                                className="mov-iconBtn mov-iconBtn--danger"
-                                type="button"
-                                onClick={() =>
-                                  setDeleteTarget({ type: "expense", item })
+                                onClick={() => viewFile(item)}
+                                disabled={!item.tiene_archivo}
+                                title={
+                                  item.tiene_archivo
+                                    ? "Ver comprobante"
+                                    : "Sin comprobante"
                                 }
-                                title="Anular"
                               >
-                                <FontAwesomeIcon icon={faTrashCan} />
+                                <FontAwesomeIcon icon={faEye} />
                               </button>
+                              {writable ? (
+                                <>
+                                  <button
+                                    className="mov-iconBtn"
+                                    type="button"
+                                    onClick={() => openExpense(item)}
+                                    title="Editar"
+                                  >
+                                    <FontAwesomeIcon icon={faPen} />
+                                  </button>
+                                  <button
+                                    className="mov-iconBtn mov-iconBtn--danger"
+                                    type="button"
+                                    onClick={() =>
+                                      setDeleteTarget({ type: "expense", item })
+                                    }
+                                    title="Eliminar"
+                                  >
+                                    <FontAwesomeIcon icon={faTrashCan} />
+                                  </button>
+                                </>
+                              ) : null}
                             </>
-                          ) : null}
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1710,17 +1465,10 @@ export default function ContableModule({ view = "summary" }) {
         )}
       </ModulePage>
 
-      <SummaryDetailModal
-        open={summaryDetailOpen}
-        onClose={() => setSummaryDetailOpen(false)}
-        summary={summary}
-        year={year}
-      />
-
       <CrudModal
         open={incomeOpen}
         title={incomeForm.id_ingreso ? "Editar ingreso" : "Registrar ingreso"}
-        subtitle="Ingreso ajeno a cuotas o inscripciones de socios."
+        subtitle="Ingreso manual ajeno a cuotas o matrículas de alumnos."
         onClose={() => setIncomeOpen(false)}
         onSubmit={saveIncome}
         saving={saving}
@@ -1827,25 +1575,7 @@ export default function ContableModule({ view = "summary" }) {
                 }
               />
             </FloatingField>
-            <FloatingField
-              label="Detalle opcional"
-              active={Boolean(incomeForm.detalle)}
-              textarea
-              wide
-            >
-              <textarea
-                rows="3"
-                maxLength="500"
-                value={incomeForm.detalle}
-                placeholder=" "
-                onChange={(event) =>
-                  setIncomeForm((current) => ({
-                    ...current,
-                    detalle: upperLimitedText(event.target.value, 500),
-                  }))
-                }
-              />
-            </FloatingField>
+
           </EntityFormPanel>
         </div>
       </CrudModal>
@@ -1943,13 +1673,13 @@ export default function ContableModule({ view = "summary" }) {
                 active={Boolean(expenseForm.numero_comprobante)}
               >
                 <input
-                  maxLength="120"
+                  maxLength="100"
                   value={expenseForm.numero_comprobante}
                   placeholder=" "
                   onChange={(event) =>
                     setExpenseForm((current) => ({
                       ...current,
-                      numero_comprobante: receiptNumberInput(event.target.value, 120),
+                      numero_comprobante: receiptNumberInput(event.target.value, 100),
                     }))
                   }
                 />
@@ -2002,25 +1732,7 @@ export default function ContableModule({ view = "summary" }) {
                   }
                 />
               </FloatingField>
-              <FloatingField
-                label="Detalle opcional"
-                active={Boolean(expenseForm.detalle)}
-                textarea
-                wide
-              >
-                <textarea
-                  rows="3"
-                  maxLength="500"
-                  value={expenseForm.detalle}
-                  placeholder=" "
-                  onChange={(event) =>
-                    setExpenseForm((current) => ({
-                      ...current,
-                      detalle: upperLimitedText(event.target.value, 500),
-                    }))
-                  }
-                />
-              </FloatingField>
+
             </EntityFormPanel>
           </EntityTabPane>
 
@@ -2133,7 +1845,7 @@ export default function ContableModule({ view = "summary" }) {
           deleteTarget?.type === "income" ? "Eliminar ingreso" : "Eliminar egreso"
         }
         message="El movimiento se eliminará definitivamente de Contabilidad. La acción quedará registrada en auditoría."
-        warning="Esta acción no modifica cuotas ni cobros de socios."
+        warning="Esta acción no modifica cuotas ni cobros de alumnos."
         confirmLabel="Eliminar movimiento"
         successMessage="El movimiento se eliminó correctamente."
         onClose={() => setDeleteTarget(null)}

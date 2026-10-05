@@ -4,14 +4,14 @@ declare(strict_types=1);
 require_once __DIR__ . '/contable_schema.php';
 require_once __DIR__ . '/contable_soporte.php';
 require_once __DIR__ . '/contable_consultas.php';
-require_once __DIR__ . '/contable_socios.php';
+require_once __DIR__ . '/contable_alumnos.php';
 require_once __DIR__ . '/contable_gestion.php';
 
 final class Contable
 {
     use ContableSoporte;
     use ContableConsultas;
-    use ContableSocios;
+    use ContableAlumnos;
     use ContableGestion;
 
     public static function resumen(): never
@@ -37,18 +37,11 @@ final class Contable
         api_success(self::opcionesConfiguracionDatos($auth['db']));
     }
 
-    public static function listarIngresosSocios(): never
+    public static function listarIngresosAlumnos(): never
     {
         $auth = auth_context();
         ensure_contable_schema($auth['db']);
-        api_success(self::ingresosSociosDatos($auth['db'], $_GET));
-    }
-
-    public static function balance(): never
-    {
-        $auth = auth_context();
-        ensure_contable_schema($auth['db']);
-        api_success(['balance' => self::balanceDatos($auth['db'], $_GET)]);
+        api_success(self::ingresosAlumnosDatos($auth['db'], $_GET));
     }
 
     public static function listarIngresos(): never
@@ -70,12 +63,12 @@ final class Contable
         $auth = require_admin();
         ensure_contable_schema($auth['db']);
         $result = self::guardarOpcionDatos($auth, request_body());
-        api_success(
-            $result,
-            !empty($result['creado'])
-                ? 'La opción se agregó correctamente.'
-                : 'La opción se modificó correctamente.'
-        );
+        $message = !empty($result['creado'])
+            ? 'La opción se agregó correctamente.'
+            : (!empty($result['existente'])
+                ? 'La opción ya existía y quedó seleccionada.'
+                : 'La opción se modificó correctamente.');
+        api_success($result, $message);
     }
 
     public static function cambiarEstadoOpcion(): never
@@ -135,27 +128,51 @@ final class Contable
         ensure_contable_schema($auth['db']);
         $id = positive_id($_GET['id'] ?? null, 'egreso');
         $statement = $auth['db']->prepare(
-            'SELECT archivo_path FROM contable_egresos WHERE id_egreso = ? LIMIT 1'
+            'SELECT comprobante_url FROM egresos WHERE id_egreso = ? LIMIT 1'
         );
         $statement->execute([$id]);
-        $row = $statement->fetch();
-        if (!$row || empty($row['archivo_path'])) {
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+        $stored = trim((string)($row['comprobante_url'] ?? ''));
+        if (!$row || $stored === '') {
             api_error('El egreso no tiene un comprobante adjunto.', 'ARCHIVO_NO_ENCONTRADO', 404);
         }
 
-        $cleanPath = ltrim((string)$row['archivo_path'], '/\\');
-        if (!self::validUploadPath($cleanPath)) {
-            api_error('La ruta del comprobante no es válida.', 'ARCHIVO_FORBIDDEN', 403);
+        $backendRoot = dirname(__DIR__, 2);
+        $candidates = [];
+        if (self::validUploadPath($stored)) {
+            $candidates[] = $backendRoot . '/' . $stored;
         }
-        $root = dirname(__DIR__, 2) . '/uploads/contable';
-        $candidate = $root . '/' . $cleanPath;
-        $realRoot = realpath($root);
-        $realFile = realpath($candidate);
-        if (!$realRoot || !$realFile || !str_starts_with($realFile, $realRoot . DIRECTORY_SEPARATOR) || !is_file($realFile)) {
+
+        // Compatibilidad con comprobantes históricos que se guardaron como URL
+        // pública (por ejemplo /api/uploads/egresos/archivo.pdf).
+        $urlPath = parse_url($stored, PHP_URL_PATH);
+        if (is_string($urlPath) && $urlPath !== '') {
+            $cleanUrlPath = ltrim($urlPath, '/');
+            if (str_starts_with($cleanUrlPath, 'api/')) $cleanUrlPath = substr($cleanUrlPath, 4);
+            if (str_starts_with($cleanUrlPath, 'uploads/')) {
+                $candidates[] = $backendRoot . '/' . $cleanUrlPath;
+            }
+        }
+
+        $realFile = null;
+        $realUploads = realpath($backendRoot . '/uploads');
+        foreach ($candidates as $candidate) {
+            $realCandidate = realpath($candidate);
+            if ($realUploads && $realCandidate && str_starts_with($realCandidate, $realUploads . DIRECTORY_SEPARATOR) && is_file($realCandidate)) {
+                $realFile = $realCandidate;
+                break;
+            }
+        }
+
+        if ($realFile === null) {
+            if (preg_match('#^https?://#i', $stored) === 1) {
+                header('Location: ' . $stored, true, 302);
+                exit;
+            }
             api_error('El comprobante ya no se encuentra en el servidor.', 'ARCHIVO_NO_ENCONTRADO', 404);
         }
 
-        $filename = basename(str_replace('\\', '/', $cleanPath));
+        $filename = basename($realFile);
         $mime = self::mimeArchivoEgreso($realFile);
         header('Content-Type: ' . ($mime !== '' ? $mime : 'application/octet-stream'));
         header('Content-Length: ' . filesize($realFile));

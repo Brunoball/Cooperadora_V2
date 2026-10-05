@@ -1,5 +1,4 @@
-/* Ajustes exclusivos de Contable. La estructura principal reutiliza los
-   componentes y clases globales empleados por Socios. */
+/* Ajustes exclusivos del módulo Contable. */
 
 .module-headFilters.contable-head-filters {
   display: flex !important;
@@ -30,35 +29,6 @@
 .contable-head-filters > .module-filter--tabs .module-tabLabel {
   overflow: visible;
   text-overflow: clip;
-}
-
-/* La navegación de detalle ocupa sólo lo que necesita cada etiqueta. */
-.contable-head-filters
-  > .module-filter--tabs:has(> .module-filterTabs[aria-label="Vista"]) {
-  width: max-content;
-  min-width: max-content;
-  max-width: none;
-  flex: 0 0 auto;
-}
-
-/* Las pestañas de detalle nunca ceden ancho cuando la barra lateral reduce
-   el espacio disponible. Los demás filtros pueden reacomodarse, pero estas
-   tres opciones conservan siempre su texto completo. */
-
-
-.contable-head-filters .module-filterTabs[aria-label="Vista"] {
-  width: max-content;
-  min-width: max-content;
-  max-width: none;
-  overflow: visible;
-}
-
-.contable-head-filters
-  .module-filterTabs[aria-label="Vista"]
-  .module-filterTab {
-  min-width: max-content;
-  flex: 0 0 auto;
-  padding-inline: 12px;
 }
 
 .contable-head-filters > .contable-filter--year,
@@ -101,21 +71,12 @@
   justify-self: end;
 }
 
-.contable-head-filters > .contable-filter--partner-search {
+.contable-head-filters > .contable-filter--student-search {
   order: 0;
   width: auto;
   flex: 1 1 190px;
   min-width: 120px;
   max-width: 250px;
-  margin-left: 0;
-}
-
-.contable-head-filters > .contable-filter--partner-id {
-  order: 0;
-  width: auto;
-  flex: 0 1 105px;
-  min-width: 78px;
-  max-width: 105px;
   margin-left: 0;
 }
 
@@ -158,15 +119,6 @@
   max-width: 100%;
 }
 
-.contable-grid--partners {
-  grid-template-columns:
-    minmax(0, 1.55fr)
-    minmax(0, 0.82fr)
-    minmax(0, 1fr)
-    minmax(0, 0.95fr)
-    minmax(0, 0.86fr);
-}
-
 .contable-grid--income {
   grid-template-columns:
     minmax(0, 1.22fr)
@@ -202,9 +154,6 @@
   min-width: 0;
 }
 
-.contable-grid--partners > :nth-child(2),
-.contable-grid--partners > :nth-child(3),
-.contable-grid--partners > :nth-child(4),
 .contable-grid--income > :nth-child(2),
 .contable-grid--income > :nth-child(3),
 .contable-grid--income > :nth-child(6),
@@ -217,7 +166,6 @@
   justify-content: center;
   text-align: center;
 }
-.contable-grid--partners > :nth-child(5),
 .contable-grid--income > :nth-child(5),
 .contable-grid--income-readonly > :nth-child(5),
 .contable-grid--expense > :nth-child(6) {
@@ -225,17 +173,10 @@
   text-align: right;
 }
 
-.contable-grid--partners > :nth-child(5) {
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
 .contable-money-cell {
   font-variant-numeric: tabular-nums;
 }
 
-.contable-grid--partners > :nth-child(5),
 .contable-grid--income > :nth-child(5),
 .contable-grid--income-readonly > :nth-child(5) {
   align-self: stretch;
@@ -246,20 +187,7 @@
   align-items: center;
 }
 
-.mov-gridTable--head.contable-grid--partners > :nth-child(5),
-.mov-gridTable--row.contable-grid--partners > :nth-child(5) {
-  align-items: flex-end;
-  justify-content: center;
-}
 
-.contable-estimated {
-  display: block;
-  color: #8a641d !important;
-  font-size: 9px !important;
-  font-weight: 650;
-  line-height: 1.2;
-  text-align: right;
-}
 
 /* Resumen: paneles propios sobre la misma paleta, radios y densidad global. */
 .ct-summary {
@@ -768,127 +696,6 @@
   justify-content: center !important;
 }
 
-.contable-summary-detail-btn {
-  min-width: 108px;
-}
-
-.contable-summary-detail-modal.entity-modal--wide {
-  width: min(900px, 100%);
-}
-
-.contable-summary-detail-modal .entity-modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding: 24px 28px 26px;
-  background: color-mix(in srgb, var(--balto-bg) 34%, #fff);
-}
-
-.contable-summary-detail-cards {
-  margin: 0;
-  padding: 4px;
-}
-
-.contable-summary-detail-cards .global-summaryCards__list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.contable-summary-detail-cards .global-summaryCards__item {
-  min-height: 102px;
-  padding: 18px 20px 18px 22px;
-  box-shadow: 0 8px 22px rgb(35 28 25 / 0.07);
-}
-
-.contable-summary-detail-cards .global-summaryCards__item:nth-child(1) .global-summaryCards__value {
-  color: var(--balto-success, #16a34a);
-}
-
-.contable-summary-detail-cards .global-summaryCards__item:nth-child(2) .global-summaryCards__value {
-  color: var(--balto-danger, #ef4444);
-}
-
-.contable-summary-detail-cards .global-summaryCards__item:nth-child(3).is-balance .global-summaryCards__value {
-  color: var(--balto-success, #16a34a);
-}
-
-.contable-summary-detail-cards .global-summaryCards__item:nth-child(3).is-danger .global-summaryCards__value {
-  color: var(--balto-danger, #ef4444);
-}
-
-.contable-summary-detail-cards .global-summaryCards__icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
-}
-
-.contable-summary-detail-table {
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--mov-border) 92%, #fff);
-  border-radius: 15px;
-  background: #fff;
-  box-shadow: 0 10px 26px rgb(35 28 25 / 0.06);
-}
-
-.contable-summary-detail-table > .global-divTable__head {
-  border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 82%, #000);
-  color: rgba(255, 255, 255, 0.96);
-  background: var(--primary-color);
-}
-
-.contable-summary-detail-table > .global-divTable__head .mov-gridCell--head {
-  color: rgba(255, 255, 255, 0.96) !important;
-  font-weight: 750;
-  opacity: 1;
-}
-
-.contable-summary-detail-table__body {
-  min-height: 0 !important;
-  max-height: 400px !important;
-  padding-bottom: 4px;
-}
-
-.contable-summary-detail-grid {
-  grid-template-columns:
-    minmax(150px, 1.2fr)
-    repeat(3, minmax(125px, 1fr));
-}
-
-.contable-summary-detail-grid > :nth-child(n + 2) {
-  justify-content: flex-end;
-  text-align: right;
-}
-
-.contable-money-cell--income {
-  color: var(--balto-success, #16a34a);
-  font-weight: 700;
-}
-
-.contable-money-cell--expense {
-  color: var(--balto-danger, #ef4444);
-  font-weight: 700;
-}
-
-.contable-summary-detail-table .entity-table-row {
-  transition:
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.contable-summary-detail-table .entity-table-row:hover {
-  background: color-mix(in srgb, var(--balto-action) 4%, #fff);
-}
-
-.contable-summary-detail-grid.is-selected-month {
-  background: color-mix(in srgb, var(--balto-action) 9%, #fff);
-  box-shadow: inset 4px 0 0 var(--balto-action);
-}
-
-.contable-summary-detail-grid.is-selected-month .entity-main-cell strong {
-  color: var(--balto-action);
-}
-
 /* Detalles particulares de los formularios globalizados. */
 .contable-modal__form {
   gap: 0;
@@ -1002,16 +809,10 @@
     max-width: 210px;
   }
 
-  .contable-head-filters > .contable-filter--partner-search {
+  .contable-head-filters > .contable-filter--student-search {
     flex-basis: 160px;
     min-width: 110px;
     max-width: 205px;
-  }
-
-  .contable-head-filters > .contable-filter--partner-id {
-    flex-basis: 92px;
-    min-width: 74px;
-    max-width: 92px;
   }
 }
 
@@ -1026,16 +827,10 @@
     max-width: 175px;
   }
 
-  .contable-head-filters > .contable-filter--partner-search {
+  .contable-head-filters > .contable-filter--student-search {
     flex-basis: 140px;
     min-width: 105px;
     max-width: 175px;
-  }
-
-  .contable-head-filters > .contable-filter--partner-id {
-    flex-basis: 84px;
-    min-width: 70px;
-    max-width: 84px;
   }
 }
 
@@ -1045,7 +840,7 @@
   }
 
   .contable-head-filters .module-filter--search,
-  .contable-head-filters > .contable-filter--partner-search {
+  .contable-head-filters > .contable-filter--student-search {
     flex: 1 1 140px;
     min-width: 105px;
   }
@@ -1164,10 +959,6 @@
     max-width: none;
   }
 
-  .contable-head-filters > .contable-filter--partner-id {
-    min-width: 0;
-  }
-
   .contable-head-filters > .contable-filter--year,
   .contable-head-filters > .contable-filter--month,
   .contable-head-filters > .contable-filter--period {
@@ -1191,28 +982,6 @@
 
   .contable-modal__form .entity-field--wide {
     grid-column: auto;
-  }
-
-  .contable-summary-detail-modal .entity-modal__body {
-    gap: 14px;
-    padding: 14px;
-  }
-
-  .contable-summary-detail-cards .global-summaryCards__list {
-    grid-template-columns: 1fr;
-  }
-
-  .contable-summary-detail-cards .global-summaryCards__item {
-    min-height: 78px;
-  }
-
-  .contable-summary-detail-table {
-    overflow-x: auto;
-  }
-
-  .contable-summary-detail-table .global-divTable__head,
-  .contable-summary-detail-table .global-divTable__body {
-    min-width: 650px;
   }
 
   .contable-lower-actions .mov-btn:not(.mov-btn--excel) {

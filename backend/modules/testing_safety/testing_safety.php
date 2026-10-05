@@ -171,6 +171,39 @@ final class TestingSafety
             );
         }
 
+        $contableCategories = self::ids(
+            $db,
+            "SELECT id_cont_categoria FROM contable_categoria
+             WHERE UPPER(nombre_categoria) LIKE 'PW E2E CT %'
+                OR UPPER(nombre_categoria) LIKE 'PW EEE CT %'"
+        );
+        $contableDescriptions = self::ids(
+            $db,
+            "SELECT id_cont_descripcion FROM contable_descripcion
+             WHERE UPPER(nombre_descripcion) LIKE 'PW E2E CT %'
+                OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'"
+        );
+        $contableProviders = self::ids(
+            $db,
+            "SELECT id_cont_proveedor FROM contable_proveedor
+             WHERE UPPER(nombre_proveedor) LIKE 'PW E2E CT %'
+                OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'"
+        );
+        $contableIncomes = [];
+        $contableExpenses = [];
+        if ($contableCategories !== [] && $contableDescriptions !== [] && $contableProviders !== []) {
+            $where = 'id_cont_categoria IN (' . self::placeholders(count($contableCategories)) . ')'
+                . ' AND id_cont_descripcion IN (' . self::placeholders(count($contableDescriptions)) . ')'
+                . ' AND id_cont_proveedor IN (' . self::placeholders(count($contableProviders)) . ')';
+            $params = array_merge($contableCategories, $contableDescriptions, $contableProviders);
+            $contableIncomes = self::idsPrepared(
+                $db, 'SELECT id_ingreso FROM ingresos WHERE ' . $where, $params
+            );
+            $contableExpenses = self::idsPrepared(
+                $db, 'SELECT id_egreso FROM egresos WHERE id_pago_origen IS NULL AND ' . $where, $params
+            );
+        }
+
         return [
             'usuarios' => self::ids($db, "SELECT id_usuario FROM sis_usuarios WHERE LOWER(usuario) LIKE 'pw_e2e_%'"),
             'alumnos' => $students,
@@ -191,24 +224,11 @@ final class TestingSafety
             'categoria_hermanos' => $siblingRules,
             'pagos' => $payments,
             'egresos_comision' => $commissionExpenses,
-            'contable_categoria' => self::ids(
-                $db,
-                "SELECT id_cont_categoria FROM contable_categoria
-                 WHERE UPPER(nombre_categoria) LIKE 'PW E2E CT %'
-                    OR UPPER(nombre_categoria) LIKE 'PW EEE CT %'"
-            ),
-            'contable_descripcion' => self::ids(
-                $db,
-                "SELECT id_cont_descripcion FROM contable_descripcion
-                 WHERE UPPER(nombre_descripcion) LIKE 'PW E2E CT %'
-                    OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'"
-            ),
-            'contable_proveedor' => self::ids(
-                $db,
-                "SELECT id_cont_proveedor FROM contable_proveedor
-                 WHERE UPPER(nombre_proveedor) LIKE 'PW E2E CT %'
-                    OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'"
-            ),
+            'ingresos_contable' => $contableIncomes,
+            'egresos_contable' => $contableExpenses,
+            'contable_categoria' => $contableCategories,
+            'contable_descripcion' => $contableDescriptions,
+            'contable_proveedor' => $contableProviders,
             'sexo' => self::ids(
                 $db,
                 "SELECT id_sexo FROM sexo
@@ -243,7 +263,9 @@ final class TestingSafety
             'alumnos_eliminados' => $in('alumnos', $row['id_alumno_original'] ?? null) || $containsMarker($row),
             'familias' => $in('familias', $row['id_familia'] ?? null),
             'pagos' => $in('pagos', $row['id_pago'] ?? null) || $in('alumnos', $row['id_alumno'] ?? null),
+            'ingresos' => $in('ingresos_contable', $row['id_ingreso'] ?? null) || $containsMarker($row),
             'egresos' => $in('egresos_comision', $row['id_egreso'] ?? null)
+                || $in('egresos_contable', $row['id_egreso'] ?? null)
                 || $in('pagos', $row['id_pago_origen'] ?? null)
                 || $in('alumnos', $row['id_alumno_origen'] ?? null)
                 || $containsMarker($row),
@@ -283,6 +305,8 @@ final class TestingSafety
             'alumnos_eliminados' => 'alumnos',
             'familias' => 'familias',
             'pagos' => 'pagos',
+            'ingresos' => 'ingresos_contable',
+            'egresos' => 'egresos_contable',
             'categoria' => 'categoria',
             'categoria_monto' => 'categoria_monto',
             'categoria_hermanos' => 'categoria_hermanos',

@@ -29,6 +29,8 @@ final class TestingCleanup
     {
         $counts = [
             'egresos_comision' => 0,
+            'ingresos_contable' => 0,
+            'egresos_contable' => 0,
             'pagos' => 0,
             'alumnos_egresados' => 0,
             'alumnos_eliminados' => 0,
@@ -143,6 +145,32 @@ final class TestingCleanup
                 ),
             ];
 
+            $testContableIngresos = [];
+            $testContableEgresos = [];
+            if (
+                ($testConfig['contable_categoria'] ?? []) !== []
+                && ($testConfig['contable_descripcion'] ?? []) !== []
+                && ($testConfig['contable_proveedor'] ?? []) !== []
+            ) {
+                $cat = $testConfig['contable_categoria'];
+                $desc = $testConfig['contable_descripcion'];
+                $prov = $testConfig['contable_proveedor'];
+                $catalogWhere = 'id_cont_categoria IN (' . self::placeholders(count($cat)) . ')'
+                    . ' AND id_cont_descripcion IN (' . self::placeholders(count($desc)) . ')'
+                    . ' AND id_cont_proveedor IN (' . self::placeholders(count($prov)) . ')';
+                $catalogParams = array_merge($cat, $desc, $prov);
+                $testContableIngresos = self::ids(
+                    $db,
+                    'SELECT id_ingreso FROM ingresos WHERE ' . $catalogWhere,
+                    $catalogParams
+                );
+                $testContableEgresos = self::ids(
+                    $db,
+                    'SELECT id_egreso FROM egresos WHERE id_pago_origen IS NULL AND ' . $catalogWhere,
+                    $catalogParams
+                );
+            }
+
             $testPayments = $safeStudents === [] ? [] : self::ids(
                 $db,
                 'SELECT id_pago FROM pagos WHERE id_alumno IN ('
@@ -161,6 +189,8 @@ final class TestingCleanup
                 $testCategoryTypes,
                 $testSiblingRules,
                 $testPayments,
+                $testContableIngresos,
+                $testContableEgresos,
                 $testConfig
             );
 
@@ -182,6 +212,16 @@ final class TestingCleanup
                 $counts['egresos_comision'] += $statement->rowCount();
             }
             $counts['pagos'] += self::deleteByIds($db, 'pagos', 'id_pago', $testPayments);
+
+            // Movimientos manuales del módulo Contable creados por Playwright. Se
+            // exige que las tres FK pertenezcan a catálogos E2E, por lo que no se
+            // elimina un movimiento real que use accidentalmente una sola opción.
+            $counts['ingresos_contable'] += self::deleteByIds(
+                $db, 'ingresos', 'id_ingreso', $testContableIngresos
+            );
+            $counts['egresos_contable'] += self::deleteByIds(
+                $db, 'egresos', 'id_egreso', $testContableEgresos
+            );
 
             // Snapshots/archivo del alumno deben salir antes que alumnos por FK.
             $counts['alumnos_egresados'] += self::deleteByIds(
@@ -341,6 +381,8 @@ final class TestingCleanup
                 $testCategoryTypes,
                 $testSiblingRules,
                 $testPayments,
+                $testContableIngresos,
+                $testContableEgresos,
                 $testConfig
             );
             $counts['sis_usuarios'] += self::deleteByIds($db, 'sis_usuarios', 'id_usuario', $testUsers);
@@ -366,6 +408,8 @@ final class TestingCleanup
         array $categoryTypes,
         array $siblingRules,
         array $payments,
+        array $contableIngresos,
+        array $contableEgresos,
         array $config
     ): int {
         $clauses = [
@@ -392,6 +436,8 @@ final class TestingCleanup
             ['categoria', $categoryTypes],
             ['categoria_hermanos', $siblingRules],
             ['pagos', $payments],
+            ['ingresos', $contableIngresos],
+            ['egresos', $contableEgresos],
             ['contable_categoria', $config['contable_categoria'] ?? []],
             ['contable_descripcion', $config['contable_descripcion'] ?? []],
             ['contable_proveedor', $config['contable_proveedor'] ?? []],
