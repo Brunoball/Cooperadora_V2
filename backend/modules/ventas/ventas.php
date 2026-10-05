@@ -246,7 +246,7 @@ final class Ventas
         foreach ($rawItems as $index => $raw) {
             if (!is_array($raw)) continue;
             $productId = self::nullablePositiveId($raw['id_producto'] ?? null);
-            $product = $productId ? self::product($db, $productId, true) : null;
+            $product = $productId ? self::product($db, $productId) : null;
             $name = clean_text($raw['producto_nombre'] ?? $product['nombre'] ?? '', 150, true);
             if ($name === '') api_error('Cada concepto debe tener un nombre.', 'VALIDATION_ERROR', 422, ['item' => $index]);
             $quantity = self::integer($raw['cantidad'] ?? 1, 'cantidad', 1, 100000);
@@ -282,6 +282,64 @@ final class Ventas
         if ($items === []) api_error('Agregá al menos un concepto válido.', 'VALIDATION_ERROR');
         if ($total <= 0) api_error('El total de la venta debe ser mayor a cero.', 'VALIDATION_ERROR');
         return [$items, number_format($total, 2, '.', '')];
+    }
+
+    /**
+     * Impide usar catálogos archivados en ventas nuevas o incorporarlos a una
+     * venta existente. Una venta histórica sí puede conservar su campaña
+     * archivada y las cantidades ya registradas de productos luego archivados.
+     */
+    private static function assertOrderCatalogAvailability(
+        PDO $db,
+        array $campaign,
+        array $items,
+        ?array $before,
+        array $oldItems,
+        string $newState
+    ): void {
+        $campaignId = (int)$campaign['id_campania'];
+        $sameHistoricalCampaign = $before !== null && (int)$before['id_campania'] === $campaignId;
+        if ((int)$campaign['activo'] !== 1) {
+            $wasApproved = $before !== null && ($before['estado'] ?? '') === 'aprobada';
+            if (!$sameHistoricalCampaign || ($newState === 'aprobada' && !$wasApproved)) {
+                api_error('La campaña seleccionada está inactiva y no admite ventas nuevas.', 'VENTA_CAMPANIA_INACTIVA', 409);
+            }
+        }
+
+        $oldQuantities = [];
+        foreach ($oldItems as $item) {
+            $productId = self::nullablePositiveId($item['id_producto'] ?? null);
+            if ($productId === null) continue;
+            $oldQuantities[$productId] = ($oldQuantities[$productId] ?? 0) + (int)($item['cantidad'] ?? 0);
+        }
+
+        $newQuantities = [];
+        foreach ($items as $item) {
+            $productId = self::nullablePositiveId($item['id_producto'] ?? null);
+            if ($productId === null) continue;
+            $newQuantities[$productId] = ($newQuantities[$productId] ?? 0) + (int)($item['cantidad'] ?? 0);
+        }
+
+        ksort($newQuantities, SORT_NUMERIC);
+        foreach ($newQuantities as $productId => $quantity) {
+            $product = self::product($db, (int)$productId, true);
+            if ((int)$product['activo'] === 1) continue;
+
+            $historicalQuantity = (int)($oldQuantities[$productId] ?? 0);
+            $wasApproved = $before !== null && ($before['estado'] ?? '') === 'aprobada';
+            if (
+                $before === null
+                || $historicalQuantity === 0
+                || $quantity > $historicalQuantity
+                || ($newState === 'aprobada' && !$wasApproved)
+            ) {
+                api_error(
+                    "El producto {$product['nombre']} está inactivo y no puede agregarse a una venta.",
+                    'VENTA_PRODUCTO_INACTIVO',
+                    409
+                );
+            }
+        }
     }
 
     private static function allDoorPrice(array $items): bool
@@ -726,11 +784,12 @@ final class Ventas
         $allDoor=self::allDoorPrice($items);
 
         $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$total,$allDoor){
-            self::campaign($db,$campaignId,true);
+            $campaign=self::campaign($db,$campaignId,true);
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
             $before=$id?self::order($db,$id,true):null;
             $oldItems=$id?self::orderItems($db,$id):[];
+            self::assertOrderCatalogAvailability($db,$campaign,$items,$before,$oldItems,$state);
             if($before && $before['estado']==='aprobada' && self::isStockManagedOrder($before)) self::adjustStock($db,$oldItems,+1);
             $personId=self::resolvePerson($db,$body);
             if(!$personId && !$allDoor) api_error('Las ventas anticipadas deben estar asociadas a una persona o alumno.','VALIDATION_ERROR');

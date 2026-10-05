@@ -326,8 +326,10 @@ abstract class CuotasRegistros extends CuotasConsultas
                     $commission = 0.0;
                     $net = $gross;
                     if (!$condone && $isCollector && $gross > 0) {
+                        // Redondeamos una sola parte y obtenemos la otra por diferencia.
+                        // Así se conserva siempre el invariante: neto + comisión = bruto.
                         $commission = (float)round($gross * (self::PORCENTAJE_COBRADOR / 100));
-                        $net = (float)round($gross * ((100 - self::PORCENTAJE_COBRADOR) / 100));
+                        $net = (float)round($gross - $commission, 2);
                     }
 
                     $insert->execute([

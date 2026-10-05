@@ -234,6 +234,9 @@ function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeed
   const products = catalogs?.productos || [];
   const campaigns = catalogs?.campanias || [];
   const payments = catalogs?.medios_pago || [];
+  const selectableCampaigns = campaigns.filter(
+    (campaign) => yes(campaign.activo) || (initialId && String(campaign.id_campania) === String(form.id_campania))
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -343,7 +346,7 @@ function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeed
   return (
     <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} saving={saving} loading={loading} wide modalClassName="ventas-order-modal">
       <div className="ventas-form-grid">
-        <label className="ventas-field"><span>Venta / campaña</span><select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="">Seleccionar...</option>{campaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva)"}</option>)}</select></label>
+        <label className="ventas-field"><span>Venta / campaña</span><select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="">Seleccionar...</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva · histórica)"}</option>)}</select></label>
         <label className="ventas-field"><span>Medio de pago</span><select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="">Seleccionar...</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{m.medio_pago}</option>)}</select></label>
         <label className="ventas-field"><span>Fecha de venta</span><input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} /></label>
         <label className="ventas-field"><span>Estado</span><select value={form.estado} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select></label>
@@ -354,7 +357,7 @@ function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeed
         <div className="ventas-items-editor">
           {form.items.map((item, index) => (
             <div className="ventas-item-row" key={`item-${index}`}>
-              <select value={item.id_producto || ""} onChange={(e) => chooseProduct(index, e.target.value)}><option value="">Concepto manual</option>{products.map((p) => <option key={p.id_producto} value={p.id_producto}>{p.nombre}{p.stock == null ? "" : ` · Stock ${p.stock}`}</option>)}</select>
+              <select value={item.id_producto || ""} onChange={(e) => chooseProduct(index, e.target.value)}><option value="">Concepto manual</option>{products.filter((p) => yes(p.activo) || (initialId && String(p.id_producto) === String(item.id_producto))).map((p) => <option key={p.id_producto} value={p.id_producto}>{p.nombre}{yes(p.activo) ? "" : " · Inactivo histórico"}{p.stock == null ? "" : ` · Stock ${p.stock}`}</option>)}</select>
               <input required placeholder="Nombre visible" maxLength={150} value={item.producto_nombre || ""} onChange={(e) => setItem(index, { producto_nombre: upper(e.target.value, 150) })} />
               <select value={item.tipo_precio || "personalizado"} onChange={(e) => choosePriceType(index, e.target.value)}><option value="anticipada">Anticipada</option><option value="puerta">Puerta</option><option value="normal">Normal</option><option value="personalizado">Personalizado</option></select>
               <input required type="number" min="0" step="0.01" value={item.precio_unitario ?? ""} onChange={(e) => setItem(index, { precio_unitario: e.target.value })} />
