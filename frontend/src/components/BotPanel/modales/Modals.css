@@ -1,0 +1,148 @@
+.m-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: grid;
+  place-items: center;
+  z-index: 10000;
+  padding: 16px;
+}
+
+.m-card{
+  width: min(520px, 100%);
+  background: var(--wp-sidebar-bg, #111b21);
+  color: var(--wp-text, #e9edef);
+  border-radius: 16px;
+  border: 1px solid var(--wp-border, rgba(255,255,255,0.08));
+  box-shadow: 0 14px 40px rgba(0,0,0,0.4);
+}
+
+.m-head{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 10px 14px;
+  border-bottom: 1px solid var(--wp-border-soft, rgba(255,255,255,0.08));
+}
+
+.m-title{
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.m-x{
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.m-x:hover{
+  background: var(--wp-card-2, rgba(255,255,255,0.08));
+}
+
+.m-body{
+  padding: 14px;
+}
+
+.m-sub{
+  font-size: 14px;
+  opacity: 0.9;
+  margin-bottom: 10px;
+}
+
+.m-form{
+  display: grid;
+  gap: 10px;
+}
+
+.m-label{
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.m-input{
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--wp-border, rgba(255,255,255,0.10));
+  background: var(--wp-card, rgba(255,255,255,0.06));
+  color: var(--wp-text, #e9edef);
+  padding: 11px 12px;
+  outline: none;
+}
+
+.m-input:focus{
+  border-color: rgba(255,255,255,0.22);
+}
+
+.m-err{
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 70, 70, 0.10);
+  border: 1px solid rgba(255, 70, 70, 0.25);
+  color: #ffb3b3;
+  font-size: 13px;
+}
+
+.m-actions{
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.m-btn{
+  border: 0;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-weight: 700;
+  color: var(--wp-text, #e9edef);
+  background: var(--wp-card-2, rgba(255,255,255,0.08));
+}
+
+.m-btn--ghost{
+  background: transparent;
+  border: 1px solid var(--wp-border, rgba(255,255,255,0.12));
+}
+
+.m-btn--primary{
+  background: var(--wp-brand-primary, #00a884);
+  border: 1px solid var(--wp-brand-primary, #00a884);
+}
+
+.m-btn--danger{
+  background: rgba(255, 70, 70, 0.18);
+  border: 1px solid rgba(255, 70, 70, 0.30);
+}
+
+/* =========================
+   FIX SELECT OPTIONS (Windows/Chrome)
+   - En tema oscuro, el menú nativo a veces queda blanco y el texto claro -> no se ve.
+   ========================= */
+
+.m-input select,
+select.m-input {
+  color-scheme: dark; /* ayuda a algunos navegadores */
+}
+
+/* El dropdown nativo (options) suele ignorar muchos estilos,
+   pero estos 2 suelen funcionar en Chrome/Edge Windows */
+select.m-input option {
+  background: #ffffff !important;
+  color: #111111 !important;
+}
+
+/* Cuando está seleccionado en la lista */
+select.m-input option:checked {
+  background: #00a884 !important;
+  color: #ffffff !important;
+}
+
+/* (Opcional) si el navegador aplica opacity raro */
+select.m-input option:disabled {
+  color: #666 !important;
+}

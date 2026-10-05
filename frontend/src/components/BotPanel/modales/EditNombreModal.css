@@ -1,0 +1,198 @@
+/* =========================================================
+   Bot Panel · Modal Editar nombre
+   Estructura profesional inspirada en Mesas, paleta propia.
+   ========================================================= */
+.bp-name-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10020;
+  display:grid;
+  place-items:center;
+  padding:18px;
+  background:rgba(2, 8, 23, .58);
+  backdrop-filter:blur(7px);
+  animation:bpNameFade .18s ease both;
+}
+
+.bp-name-card,
+.bp-name-card *{ box-sizing:border-box; }
+
+.bp-name-card{
+  width:min(500px, 100%);
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  border:1px solid var(--wp-border, rgba(15,23,42,.12));
+  border-radius:var(--blue-inst-radius-xl, 24px);
+  background:var(--wp-sidebar-bg, #fff);
+  color:var(--wp-text, #111b21);
+  box-shadow:0 30px 72px -28px rgba(2,8,23,.48), var(--blue-inst-shadow-md, 0 6px 18px rgba(0,0,0,.10));
+  animation:bpNameRise .2s cubic-bezier(.2,.8,.2,1) both;
+}
+
+.bp-name-head{
+  min-height:92px;
+  padding:19px 20px 17px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  border-bottom:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+  background:linear-gradient(180deg, var(--wp-card, rgba(0,168,132,.05)), transparent);
+}
+
+.bp-name-heading{ min-width:0; }
+.bp-name-eyebrow{
+  display:block;
+  margin-bottom:6px;
+  color:var(--wp-brand-primary, #00a884);
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.bp-name-title{
+  margin:0;
+  font-size:18px;
+  line-height:1.15;
+  font-weight:680;
+  letter-spacing:-.025em;
+}
+.bp-name-subtitle{
+  margin:6px 0 0;
+  color:color-mix(in srgb, var(--wp-text, #111b21) 62%, transparent);
+  font-size:12.5px;
+  line-height:1.35;
+}
+
+.bp-name-close{
+  flex:0 0 auto;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+  border-radius:12px;
+  background:var(--wp-card, rgba(0,168,132,.06));
+  color:inherit;
+  font:inherit;
+  font-size:14px;
+  cursor:pointer;
+  transition:transform .16s ease, background .16s ease, border-color .16s ease;
+}
+.bp-name-close:hover{ transform:translateY(-1px); background:var(--wp-card-2, rgba(0,168,132,.1)); border-color:var(--wp-border, rgba(15,23,42,.14)); }
+
+.bp-name-body{
+  padding:17px 20px 20px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+}
+.bp-name-contact{
+  min-height:60px;
+  padding:10px 13px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:5px;
+  border:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+  border-radius:15px;
+  background:var(--wp-card, rgba(0,168,132,.05));
+}
+.bp-name-contact-label{
+  color:color-mix(in srgb, var(--wp-text, #111b21) 62%, transparent);
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.bp-name-contact b{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:13.5px;
+  font-weight:620;
+}
+
+.bp-name-form{ display:flex; flex-direction:column; gap:9px; }
+.bp-name-label{
+  color:color-mix(in srgb, var(--wp-text, #111b21) 70%, transparent);
+  font-size:12px;
+  font-weight:650;
+  letter-spacing:.02em;
+}
+.bp-name-input{
+  width:100%;
+  height:47px;
+  padding:0 14px;
+  border:1.5px solid var(--wp-border, rgba(15,23,42,.14));
+  border-radius:13px;
+  outline:none;
+  background:var(--wp-sidebar-bg, #fff);
+  color:inherit;
+  font:inherit;
+  font-size:14px;
+  transition:border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+.bp-name-input::placeholder{ color:color-mix(in srgb, var(--wp-text, #111b21) 45%, transparent); }
+.bp-name-input:hover:not(:focus){ border-color:color-mix(in srgb, var(--wp-text, #111b21) 26%, transparent); }
+.bp-name-input:focus{
+  border-color:var(--wp-brand-primary, #00a884);
+  box-shadow:0 0 0 4px rgba(0,168,132,.12);
+}
+.bp-name-error{
+  margin-top:4px;
+  padding:11px 12px;
+  border:1px solid var(--wp-danger, rgba(211,47,47,.28));
+  border-left:3px solid var(--blue-inst-danger, #D32F2F);
+  border-radius:12px;
+  background:var(--wp-danger-bg, rgba(211,47,47,.1));
+  color:color-mix(in srgb, var(--blue-inst-danger, #D32F2F) 82%, var(--wp-text, #111b21));
+  font-size:13px;
+  line-height:1.4;
+}
+.bp-name-actions{
+  margin-top:12px;
+  padding-top:15px;
+  display:flex;
+  justify-content:flex-end;
+  gap:9px;
+  border-top:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+}
+.bp-name-btn{
+  min-height:43px;
+  padding:0 19px;
+  border:1px solid transparent;
+  border-radius:12px;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  font-size:13.5px;
+  font-weight:600;
+  cursor:pointer;
+  transition:transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
+}
+.bp-name-btn:hover:not(:disabled){ transform:translateY(-1px); }
+.bp-name-btn:disabled{ opacity:.54; cursor:not-allowed; }
+.bp-name-btn--ghost{ border-color:var(--wp-border, rgba(15,23,42,.14)); background:var(--wp-sidebar-bg, #fff); }
+.bp-name-btn--ghost:hover:not(:disabled){ background:var(--wp-card, rgba(0,168,132,.05)); }
+.bp-name-btn--primary{
+  background:var(--wp-brand-primary, #00a884);
+  color:#fff;
+  box-shadow:0 12px 20px -13px rgba(0,168,132,.62);
+}
+.bp-name-btn--primary:hover:not(:disabled){ box-shadow:0 15px 25px -13px rgba(0,168,132,.72); }
+.bp-name-close:focus-visible,
+.bp-name-btn:focus-visible{ outline:3px solid var(--wp-brand-ring, rgba(0,168,132,.20)); outline-offset:1px; }
+
+@keyframes bpNameFade{ from{opacity:0;} to{opacity:1;} }
+@keyframes bpNameRise{ from{opacity:0; transform:translateY(8px) scale(.987);} to{opacity:1; transform:translateY(0) scale(1);} }
+@media (max-width:520px){
+  .bp-name-overlay{ padding:12px; }
+  .bp-name-head{ padding:17px 16px 15px; }
+  .bp-name-body{ padding:15px 16px 16px; }
+  .bp-name-actions{ flex-direction:column-reverse; }
+  .bp-name-btn{ width:100%; }
+}
+@media (prefers-reduced-motion:reduce){ .bp-name-overlay,.bp-name-card{ animation:none; } }

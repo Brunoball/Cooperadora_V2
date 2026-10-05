@@ -1,0 +1,162 @@
+/* =========================================================
+   Bot Panel · Modal de confirmación
+   ========================================================= */
+.bp-confirm-overlay{
+  position:fixed;
+  inset:0;
+  z-index:10030;
+  display:grid;
+  place-items:center;
+  padding:18px;
+  background:rgba(2,8,23,.60);
+  backdrop-filter:blur(7px);
+  animation:bpConfirmFade .18s ease both;
+}
+.bp-confirm-card,
+.bp-confirm-card *{ box-sizing:border-box; }
+.bp-confirm-card{
+  width:min(488px, 100%);
+  overflow:hidden;
+  border:1px solid var(--wp-border, rgba(15,23,42,.12));
+  border-radius:var(--blue-inst-radius-xl, 24px);
+  background:var(--wp-sidebar-bg, #fff);
+  color:var(--wp-text, #111b21);
+  box-shadow:0 30px 72px -28px rgba(2,8,23,.5), var(--blue-inst-shadow-md, 0 6px 18px rgba(0,0,0,.10));
+  animation:bpConfirmRise .2s cubic-bezier(.2,.8,.2,1) both;
+}
+.bp-confirm-head{
+  min-height:82px;
+  padding:18px 20px 16px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:15px;
+  border-bottom:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+  background:linear-gradient(180deg, var(--wp-card, rgba(0,168,132,.05)), transparent);
+}
+.bp-confirm-card.is-danger .bp-confirm-head{
+  background:linear-gradient(180deg, var(--wp-danger-bg, rgba(211,47,47,.1)), transparent);
+}
+.bp-confirm-heading{ min-width:0; }
+.bp-confirm-eyebrow{
+  display:block;
+  margin-bottom:6px;
+  color:var(--wp-brand-primary, #00a884);
+  font-size:10.5px;
+  font-weight:700;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+}
+.bp-confirm-card.is-danger .bp-confirm-eyebrow{ color:var(--blue-inst-danger, #D32F2F); }
+.bp-confirm-title{
+  font-size:18px;
+  line-height:1.15;
+  font-weight:680;
+  letter-spacing:-.025em;
+}
+.bp-confirm-close{
+  flex:0 0 auto;
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+  border-radius:12px;
+  background:var(--wp-card, rgba(0,168,132,.06));
+  color:inherit;
+  font:inherit;
+  cursor:pointer;
+  transition:transform .16s ease, background .16s ease, border-color .16s ease;
+}
+.bp-confirm-close:hover{ transform:translateY(-1px); background:var(--wp-card-2, rgba(0,168,132,.1)); border-color:var(--wp-border, rgba(15,23,42,.14)); }
+.bp-confirm-body{ padding:18px 20px 20px; }
+.bp-confirm-message{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  align-items:start;
+  gap:12px;
+  padding:14px;
+  border:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+  border-radius:15px;
+  background:var(--wp-card, rgba(0,168,132,.05));
+}
+.bp-confirm-card.is-danger .bp-confirm-message{
+  border-color:var(--wp-danger, rgba(211,47,47,.28));
+  background:var(--wp-danger-bg, rgba(211,47,47,.1));
+}
+.bp-confirm-mark{
+  width:39px;
+  height:39px;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+  background:var(--wp-accent-2, rgba(0,168,132,.12));
+  color:var(--wp-brand-primary, #00a884);
+  font-size:19px;
+  font-weight:750;
+}
+.bp-confirm-card.is-danger .bp-confirm-mark{
+  background:color-mix(in srgb, var(--blue-inst-danger, #D32F2F) 14%, transparent);
+  color:var(--blue-inst-danger, #D32F2F);
+}
+.bp-confirm-description{
+  padding-top:1px;
+  color:color-mix(in srgb, var(--wp-text, #111b21) 78%, transparent);
+  font-size:13.5px;
+  line-height:1.58;
+}
+.bp-confirm-error{
+  margin-top:12px;
+  padding:11px 12px;
+  border:1px solid var(--wp-danger, rgba(211,47,47,.28));
+  border-left:3px solid var(--blue-inst-danger, #D32F2F);
+  border-radius:12px;
+  background:var(--wp-danger-bg, rgba(211,47,47,.1));
+  color:color-mix(in srgb, var(--blue-inst-danger, #D32F2F) 82%, var(--wp-text, #111b21));
+  font-size:13px;
+}
+.bp-confirm-actions{
+  margin-top:18px;
+  padding-top:16px;
+  display:flex;
+  justify-content:flex-end;
+  gap:9px;
+  border-top:1px solid var(--wp-border-soft, rgba(15,23,42,.08));
+}
+.bp-confirm-btn{
+  min-height:43px;
+  padding:0 19px;
+  border:1px solid transparent;
+  border-radius:12px;
+  color:inherit;
+  font:inherit;
+  font-size:13.5px;
+  font-weight:600;
+  cursor:pointer;
+  transition:transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease;
+}
+.bp-confirm-btn:hover:not(:disabled){ transform:translateY(-1px); }
+.bp-confirm-btn:disabled{ opacity:.54; cursor:not-allowed; }
+.bp-confirm-btn--ghost{ background:var(--wp-sidebar-bg, #fff); border-color:var(--wp-border, rgba(15,23,42,.14)); }
+.bp-confirm-btn--ghost:hover:not(:disabled){ background:var(--wp-card, rgba(0,168,132,.05)); }
+.bp-confirm-btn--primary{
+  background:var(--wp-brand-primary, #00a884);
+  color:#fff;
+  box-shadow:0 12px 20px -13px rgba(0,168,132,.62);
+}
+.bp-confirm-btn--danger{
+  background:var(--blue-inst-danger, #D32F2F);
+  color:#fff;
+  box-shadow:0 12px 20px -13px rgba(211,47,47,.65);
+}
+.bp-confirm-btn:focus-visible,.bp-confirm-close:focus-visible{ outline:3px solid var(--wp-brand-ring, rgba(0,168,132,.20)); outline-offset:1px; }
+@keyframes bpConfirmFade{ from{opacity:0;} to{opacity:1;} }
+@keyframes bpConfirmRise{ from{opacity:0;transform:translateY(8px) scale(.987);} to{opacity:1;transform:translateY(0) scale(1);} }
+@media (max-width:520px){
+  .bp-confirm-overlay{ padding:12px; }
+  .bp-confirm-head,.bp-confirm-body{ padding-left:16px; padding-right:16px; }
+  .bp-confirm-message{ grid-template-columns:1fr; }
+  .bp-confirm-actions{ flex-direction:column-reverse; }
+  .bp-confirm-btn{ width:100%; }
+}
+@media (prefers-reduced-motion:reduce){ .bp-confirm-overlay,.bp-confirm-card{ animation:none; } }

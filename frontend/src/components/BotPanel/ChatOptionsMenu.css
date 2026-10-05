@@ -1,0 +1,125 @@
+/* src/components/BotPanel/ChatOptionsMenu.css */
+.chatopts{
+  position:relative;
+}
+.chatopts--header{
+  display:inline-flex;
+  align-items:center;
+}
+.chatopts-btn{
+  width:38px;
+  height:38px;
+  border-radius:12px;
+  border:1px solid transparent;
+  cursor:pointer;
+  background:transparent;
+  color:inherit;
+  display:grid;
+  place-items:center;
+  opacity:.9;
+  transition:transform .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+}
+.chatopts-btn:hover{
+  transform:translateY(-1px);
+  border-color:var(--wp-border-soft, rgba(255,255,255,.08));
+  background:var(--wp-card, rgba(255,255,255,.08));
+  opacity:1;
+}
+.chatopts-btn.is-open{
+  border-color:var(--wp-accent, rgba(0,168,132,.34));
+  background:var(--wp-accent-2, rgba(0,168,132,.16));
+  color:var(--wp-accent-text, #d9fdd3);
+  opacity:1;
+}
+.chatopts-btn:focus-visible{
+  outline:3px solid var(--wp-brand-ring, rgba(0,168,132,.22));
+  outline-offset:1px;
+}
+/* Fixed: top/left corresponden al viewport. */
+.chatopts-menu{
+  position:fixed;
+  z-index:999999;
+  overflow:hidden;
+  background:var(--wp-sidebar-bg, #1f2c33);
+  color:var(--wp-text, #e9edef);
+  border:1px solid var(--wp-border, rgba(255,255,255,.10));
+  border-radius:16px;
+  padding:7px;
+  box-shadow:0 22px 48px -22px rgba(0,0,0,.58), var(--wp-shadow, 0 12px 30px rgba(0,0,0,.35));
+  animation:wpOptionsIn .14s ease both;
+}
+.chatopts-item{
+  width:100%;
+  min-height:39px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-align:left;
+  border:0;
+  cursor:pointer;
+  background:transparent;
+  color:var(--wp-text, #e9edef);
+  padding:7px 9px;
+  border-radius:10px;
+  font:inherit;
+  font-size:13px;
+  font-weight:540;
+  transition:background .15s ease, color .15s ease;
+}
+.chatopts-item:hover{
+  background:var(--wp-card, rgba(255,255,255,.08));
+}
+.chatopts-item-ico{
+  flex:0 0 auto;
+  width:27px;
+  height:27px;
+  display:grid;
+  place-items:center;
+  border-radius:8px;
+  background:var(--wp-card, rgba(255,255,255,.08));
+  color:color-mix(in srgb, var(--wp-text, #e9edef) 80%, transparent);
+  font-size:12px;
+}
+.chatopts-item--gallery{
+  margin:3px 0;
+  background:var(--wp-accent-2, rgba(0,168,132,.16));
+  color:var(--wp-accent-text, #d9fdd3);
+}
+.chatopts-item--gallery .chatopts-item-ico{
+  background:var(--wp-accent-3, rgba(0,168,132,.25));
+  color:var(--wp-brand-primary, #00a884);
+}
+.chatopts-item--unread{
+  margin:3px 0;
+}
+.chatopts-item--unread .chatopts-item-ico,
+.chatopts-item--read .chatopts-item-ico{
+  background:rgba(245,158,11,.14);
+  color:#f59e0b;
+}
+.chatopts-item--read{
+  margin:3px 0;
+}
+.chatopts-item--danger{
+  margin-top:5px;
+  border-top:1px solid var(--wp-border-soft, rgba(255,255,255,.06));
+  border-radius:0 0 10px 10px;
+  padding-top:10px;
+  color:#ff8a8a;
+}
+.chatopts-item--danger .chatopts-item-ico{
+  color:#ff8a8a;
+  background:var(--wp-danger-bg, rgba(255,60,60,.12));
+}
+:root[data-botpanel-theme="light"] .chatopts-menu{
+  box-shadow:0 20px 40px -25px rgba(15,23,42,.34), 0 3px 12px rgba(15,23,42,.08);
+}
+:root[data-botpanel-theme="light"] .chatopts-item--danger,
+:root[data-botpanel-theme="light"] .chatopts-item--danger .chatopts-item-ico{
+  color:var(--blue-inst-danger, #D32F2F);
+}
+@keyframes wpOptionsIn{
+  from{ opacity:0; transform:translateY(-3px) scale(.985); }
+  to{ opacity:1; transform:translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion:reduce){ .chatopts-menu{ animation:none; } }

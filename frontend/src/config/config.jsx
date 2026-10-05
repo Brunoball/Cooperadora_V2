@@ -1,4 +1,4 @@
-﻿const HOSTINGER_URL = "http://localhost:3001/routes";
+const HOSTINGER_URL = "http://localhost:3001/routes";
 
 const configuredUrl = String(
   process.env.REACT_APP_API_URL || ""
@@ -7,6 +7,20 @@ const configuredUrl = String(
   .replace(/\/+$/, "");
 
 const isE2E = process.env.REACT_APP_E2E === "1";
+
+export const BOT_PANEL_URL = String(
+  process.env.REACT_APP_BOT_PANEL_URL ||
+    "https://cooperadora.ipet50.edu.ar/api/bot_wp/funciones/Panel/endpoints"
+)
+  .trim()
+  .replace(/\/+$/, "");
+
+export const BOT_PANEL_PUNTOS_URL = String(
+  process.env.REACT_APP_BOT_PANEL_PUNTOS_URL ||
+    "https://cooperadora.ipet50.edu.ar/api/bot_wp/funciones/Panel/puntos"
+)
+  .trim()
+  .replace(/\/+$/, "");
 
 // Uso normal (npm start / build): siempre usa Hostinger.
 // Playwright: REACT_APP_E2E=1 habilita la URL seleccionada por el testing
