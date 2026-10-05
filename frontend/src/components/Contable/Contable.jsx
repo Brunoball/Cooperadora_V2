@@ -1242,33 +1242,37 @@ export default function ContableModule({ view = "summary" }) {
                       <div className="mov-gridCell is-center">{item.medio}</div>
                       <div className="mov-gridCell entity-main-cell">
                         <strong>{item.concepto || "—"}</strong>
-                        {item.detalle ? <small>{item.detalle}</small> : null}
+                        {item.automatico_ventas ? <small>Automático · gestionado desde Ventas</small> : item.detalle ? <small>{item.detalle}</small> : null}
                       </div>
                       <div className="mov-gridCell is-right is-strong contable-money-cell">
                         {money(item.importe)}
                       </div>
                       {writable ? (
                         <div className="mov-gridCell mov-gridCell--actions">
-                          <div className="mov-actionsInline">
-                            <button
-                              className="mov-iconBtn"
-                              type="button"
-                              onClick={() => openIncome(item)}
-                              title="Editar"
-                            >
-                              <FontAwesomeIcon icon={faPen} />
-                            </button>
-                            <button
-                              className="mov-iconBtn mov-iconBtn--danger"
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({ type: "income", item })
-                              }
-                              title="Anular"
-                            >
-                              <FontAwesomeIcon icon={faTrashCan} />
-                            </button>
-                          </div>
+                          {item.automatico_ventas ? (
+                            <span className="mov-readOnlyTag" title="Este ingreso se administra desde el módulo Ventas">Ventas</span>
+                          ) : (
+                            <div className="mov-actionsInline">
+                              <button
+                                className="mov-iconBtn"
+                                type="button"
+                                onClick={() => openIncome(item)}
+                                title="Editar"
+                              >
+                                <FontAwesomeIcon icon={faPen} />
+                              </button>
+                              <button
+                                className="mov-iconBtn mov-iconBtn--danger"
+                                type="button"
+                                onClick={() =>
+                                  setDeleteTarget({ type: "income", item })
+                                }
+                                title="Anular"
+                              >
+                                <FontAwesomeIcon icon={faTrashCan} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ) : null}
                     </div>

@@ -5,6 +5,15 @@ require_once __DIR__ . '/cuotas_consultas.php';
 
 abstract class CuotasRegistros extends CuotasConsultas
 {
+    private const MONEY_MAX = 9999999999.99;
+    private const UNSIGNED_INT_MAX = 4294967295;
+
+    protected static function validarMontoEntrada(mixed $value, string $label, bool $roundToCents = true): float
+    {
+        $amount = (float)decimal_amount($value, $label, 0, self::MONEY_MAX);
+        return $roundToCents ? round($amount, 2) : $amount;
+    }
+
     protected static function periodosPayload(array $body): array
     {
         $raw = $body['periodos'] ?? $body['meses'] ?? [];
@@ -31,8 +40,11 @@ abstract class CuotasRegistros extends CuotasConsultas
         if (is_array($raw)) {
             foreach ($raw as $period => $amount) {
                 $periodId = (int)$period;
-                if ($periodId < 3 || $periodId > 16 || !is_numeric($amount)) continue;
-                $result[$periodId] = max(0.0, round((float)$amount, 2));
+                if ($periodId < 3 || $periodId > 16) continue;
+                $result[$periodId] = self::validarMontoEntrada(
+                    $amount,
+                    "monto del período {$periodId}"
+                );
             }
         }
         return $result;
@@ -147,11 +159,15 @@ abstract class CuotasRegistros extends CuotasConsultas
             }
         }
 
-        $freeAmount = isset($body['monto_libre']) && is_numeric($body['monto_libre'])
-            ? max(0.0, (float)$body['monto_libre'])
+        $freeAmount = array_key_exists('monto_libre', $body)
+            && $body['monto_libre'] !== ''
+            && $body['monto_libre'] !== null
+            ? self::validarMontoEntrada($body['monto_libre'], 'monto libre')
             : null;
-        $unitAmount = isset($body['monto_unitario']) && is_numeric($body['monto_unitario'])
-            ? max(0.0, (float)$body['monto_unitario'])
+        $unitAmount = array_key_exists('monto_unitario', $body)
+            && $body['monto_unitario'] !== ''
+            && $body['monto_unitario'] !== null
+            ? self::validarMontoEntrada($body['monto_unitario'], 'monto unitario')
             : null;
 
         $requestedAmounts = [];
@@ -529,7 +545,11 @@ abstract class CuotasRegistros extends CuotasConsultas
         if (!isset($body['monto']) || !is_numeric($body['monto'])) {
             api_error('Ingresá un monto válido para matrícula.', 'VALIDATION_ERROR');
         }
-        $amount = max(0, (int)round((float)$body['monto']));
+        $rawAmount = (float)$body['monto'];
+        if (!is_finite($rawAmount) || $rawAmount < 0 || $rawAmount > self::UNSIGNED_INT_MAX) {
+            api_error('El monto de matrícula está fuera del rango permitido.', 'VALIDATION_ERROR', 422);
+        }
+        $amount = (int)round($rawAmount);
         $effectiveDate = valid_date($body['vigente_desde'] ?? date('Y-m-d'), 'vigencia');
         if ($effectiveDate > date('Y-m-d')) {
             api_error('La vigencia de matrícula no puede ser futura.', 'VIGENCIA_PRECIO_INVALIDA', 422);

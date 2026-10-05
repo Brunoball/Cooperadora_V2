@@ -32,6 +32,12 @@ const CURRENT_MONTH = currentDate.getMonth() + 1;
 const DEFAULT_PERIOD = CURRENT_MONTH >= 3 && CURRENT_MONTH <= 12 ? CURRENT_MONTH : 3;
 const PAGE_SIZE = 100;
 
+const localToday = () => {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+};
+
 const money = (value) =>
   new Intl.NumberFormat("es-AR", {
     style: "currency",
@@ -211,7 +217,7 @@ export default function Cuotas() {
       const result = await cuotasApi.contextosPago({
         id_alumno: target.id_alumno || target.id_socio,
         anio: year,
-        fecha_pago: date || new Date().toISOString().slice(0, 10),
+        fecha_pago: date || localToday(),
       });
       setPaymentContext(result);
       return result;
@@ -373,7 +379,7 @@ export default function Cuotas() {
     const context = await cuotasApi.contextosPago({
       id_alumno: row.id_alumno || row.id_socio,
       anio,
-      fecha_pago: new Date().toISOString().slice(0, 10),
+      fecha_pago: localToday(),
     });
     const byId = new Map((context.periodos || []).map((period) => [Number(period.id_mes), period]));
     return Array.from({ length: 10 }, (_, index) => index + 3).map((month) => {

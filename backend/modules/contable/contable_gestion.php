@@ -128,6 +128,11 @@ trait ContableGestion
                 $statement->execute([$id]);
                 $before = $statement->fetch(PDO::FETCH_ASSOC);
                 if (!$before) api_error('El ingreso que intentás editar no existe.', 'INGRESO_NO_ENCONTRADO', 404);
+                $venta = $db->prepare('SELECT id_orden FROM ventas_ordenes WHERE id_ingreso = ? LIMIT 1 FOR UPDATE');
+                $venta->execute([$id]);
+                if ($venta->fetchColumn()) {
+                    api_error('Este ingreso fue generado por Ventas. Modificá la venta desde el módulo Ventas para mantener Contabilidad y stock sincronizados.', 'INGRESO_VENTA_PROTEGIDO', 409);
+                }
                 $db->prepare(
                     'UPDATE ingresos SET fecha=?, id_cont_categoria=?, id_cont_proveedor=?, id_cont_descripcion=?, id_medio_pago=?, importe=? WHERE id_ingreso=?'
                 )->execute([$date, $category['id_opcion'], $provider['id_opcion'], $concept['id_opcion'], $mean['id_medio_pago'], $amount, $id]);
@@ -157,6 +162,11 @@ trait ContableGestion
             $statement->execute([$id]);
             $before = $statement->fetch(PDO::FETCH_ASSOC);
             if (!$before) api_error('El ingreso no existe.', 'INGRESO_NO_ENCONTRADO', 404);
+            $venta = $db->prepare('SELECT id_orden FROM ventas_ordenes WHERE id_ingreso = ? LIMIT 1 FOR UPDATE');
+            $venta->execute([$id]);
+            if ($venta->fetchColumn()) {
+                api_error('Este ingreso fue generado por Ventas. Anulá la venta desde el módulo Ventas para revertirlo correctamente.', 'INGRESO_VENTA_PROTEGIDO', 409);
+            }
             $db->prepare('DELETE FROM ingresos WHERE id_ingreso = ?')->execute([$id]);
             audit_change($db, $auth, 'CONTABLE', 'ELIMINAR_INGRESO', 'ingresos', $id, 'Se eliminó un ingreso manual.', $before, null);
             return ['id_ingreso'=>$id];

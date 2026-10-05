@@ -18,6 +18,7 @@ require_once __DIR__ . '/../modules/categorias/routes.php';
 require_once __DIR__ . '/../modules/configuracion/routes.php';
 require_once __DIR__ . '/../modules/usuarios/routes.php';
 require_once __DIR__ . '/../modules/contable/routes.php';
+require_once __DIR__ . '/../modules/ventas/routes.php';
 
 // Infraestructura E2E siempre registrada, también en producción. No queda
 // abierta al uso normal: exige admin + X-COOPERADORA-E2E: PLAYWRIGHT + confirmación y
@@ -47,6 +48,7 @@ register_categorias_routes($router);
 register_configuracion_routes($router);
 register_usuarios_routes($router);
 register_contable_routes($router);
+register_ventas_routes($router);
 register_testing_cleanup_routes($router);
 register_testing_safety_routes($router);
 

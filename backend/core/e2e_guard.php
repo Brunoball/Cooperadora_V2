@@ -451,6 +451,22 @@ function e2e_scope_guard(string $action, array $auth): void
             e2e_assert_target($db, $action, 'contable_egreso', $body['id_egreso'] ?? null);
             return;
 
+        // VENTAS: hasta que exista una suite E2E propia con namespace de campañas,
+        // productos y órdenes, las escrituras Playwright sólo se habilitan en local.
+        // En Hostinger/producción quedan fail-closed para evitar tocar ventas reales.
+        case 'ventas_campania_guardar':
+        case 'ventas_campania_estado':
+        case 'ventas_campania_eliminar':
+        case 'ventas_producto_guardar':
+        case 'ventas_producto_estado':
+        case 'ventas_producto_eliminar':
+        case 'ventas_persona_guardar':
+        case 'ventas_orden_guardar':
+        case 'ventas_orden_retiro':
+        case 'ventas_orden_eliminar':
+            if (e2e_is_local_environment()) return;
+            e2e_scope_error($action, 'Las escrituras de Ventas sólo están habilitadas para Playwright en ambiente local.');
+
         default:
             e2e_scope_error(
                 $action,

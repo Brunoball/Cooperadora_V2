@@ -14,6 +14,7 @@ import Resumen from "./components/Contable/secciones/Resumen";
 import Configuracion from "./components/Configuracion/Configuracion";
 import Usuarios from "./components/Configuracion/secciones/Usuarios";
 import CatalogosConfiguracion from "./components/Configuracion/secciones/CatalogosConfiguracion";
+import Ventas from "./components/Ventas/Ventas";
 import {
   AUTH_SESSION_CHANGED_EVENT,
   isAuthenticated,
@@ -72,6 +73,12 @@ export default function App() {
           <Route path="/contable/ingresos" element={<Ingresos />} />
           <Route path="/contable/egresos" element={<Egresos />} />
           <Route path="/contable/resumen" element={<Resumen />} />
+
+          <Route path="/ventas" element={<Navigate to="/ventas/registradas" replace />} />
+          <Route path="/ventas/registradas" element={<Ventas />} />
+          <Route path="/ventas/productos" element={<Ventas />} />
+          <Route path="/ventas/configuracion" element={<Ventas />} />
+          <Route path="/ventas/planillas" element={<Ventas />} />
 
           <Route path="/configuracion" element={<Configuracion />} />
           <Route path="/configuracion/usuarios" element={<Usuarios />} />

@@ -9,6 +9,14 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   // Helpers
   const NORMALIZAR = (s = '') => String(s || '').trim();
   const UPPER = (s = '') => NORMALIZAR(s).toUpperCase();
+  const escapeHtml = (value) =>
+    String(value ?? '').replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#039;',
+      '"': '&quot;',
+    })[character]);
 
   const nombreMes = (idMes) => {
     const m = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -146,33 +154,33 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
         <div class="row">
           <div class="col">
             <span class="lbl">Alumno</span>
-            <span class="val mono">${nombreCompleto || '—'}</span>
+            <span class="val mono">${escapeHtml(nombreCompleto || '—')}</span>
           </div>
           <div class="col">
             <span class="lbl">DNI</span>
-            <span class="val mono">${UPPER(dni) || '—'}</span>
+            <span class="val mono">${escapeHtml(UPPER(dni) || '—')}</span>
           </div>
         </div>
 
         <div class="row">
           <div class="col">
             <span class="lbl">Domicilio</span>
-            <span class="val mono">${UPPER(domicilio) || '—'}</span>
+            <span class="val mono">${escapeHtml(UPPER(domicilio) || '—')}</span>
           </div>
           <div class="col">
             <span class="lbl">Localidad</span>
-            <span class="val mono">${UPPER(localidad) || '—'}</span>
+            <span class="val mono">${escapeHtml(UPPER(localidad) || '—')}</span>
           </div>
         </div>
 
         <div class="row">
           <div class="col">
             <span class="lbl">Curso / División</span>
-            <span class="val mono">${UPPER(curso) || '—'}</span>
+            <span class="val mono">${escapeHtml(UPPER(curso) || '—')}</span>
           </div>
           <div class="col">
             <span class="lbl">Periodo</span>
-            <span class="val mono">${UPPER(periodoTexto) || '—'}</span>
+            <span class="val mono">${escapeHtml(UPPER(periodoTexto) || '—')}</span>
           </div>
         </div>
 
@@ -183,7 +191,7 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
           </div>
         </div>
 
-        <div class="fecha-impresion">Exportado: ${fechaImpresion}</div>
+        <div class="fecha-impresion">Exportado: ${escapeHtml(fechaImpresion)}</div>
       </div>
     </div>
   `;

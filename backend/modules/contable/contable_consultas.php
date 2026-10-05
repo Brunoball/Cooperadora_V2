@@ -194,6 +194,7 @@ trait ContableConsultas
 
         $statement = $db->prepare(
             'SELECT i.id_ingreso, i.fecha, i.id_medio_pago,
+                    (SELECT MIN(vo.id_orden) FROM ventas_ordenes vo WHERE vo.id_ingreso = i.id_ingreso) AS id_venta_origen,
                     i.id_cont_proveedor AS id_proveedor, i.id_cont_categoria AS id_categoria,
                     i.id_cont_descripcion AS id_concepto, i.importe,
                     COALESCE(p.nombre_proveedor, \'SIN INFORMAR\') AS proveedor,
@@ -218,6 +219,8 @@ trait ContableConsultas
             'proveedor'=>(string)$row['proveedor'], 'categoria'=>(string)$row['categoria'],
             'concepto'=>(string)$row['concepto'], 'medio'=>(string)$row['medio'],
             'importe'=>(float)$row['importe'], 'detalle'=>'',
+            'id_venta_origen'=>$row['id_venta_origen'] !== null ? (int)$row['id_venta_origen'] : null,
+            'automatico_ventas'=>$row['id_venta_origen'] !== null,
         ], $statement->fetchAll(PDO::FETCH_ASSOC));
 
         return ['items'=>$items, 'resumen'=>['registros'=>count($items),'importe'=>round(array_sum(array_column($items,'importe')),2)]];

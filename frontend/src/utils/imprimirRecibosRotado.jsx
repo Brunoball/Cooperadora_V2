@@ -3,6 +3,16 @@ import { apiGet } from '../components/_shared/api/apiClient';
 
 /* ================= Utilidades ================= */
 
+const escapeHtml = (value) =>
+  String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#039;",
+    '"': "&quot;",
+  })[character]);
+
+
 function fechaHoy() {
   const d = new Date();
   const dd = String(d.getDate()).padStart(2, '0');
@@ -97,18 +107,18 @@ function renderComprobante({
       <div class="titulo">COOPERADORA IPET N° 50 ING.E.F.OLMOS</div>
 
       <div class="fila cabecera">
-        <div class="izq">Recibo N° ${nroRecibo}</div>
-        <div class="der">${localidad}, ${fecha}</div>
+        <div class="izq">Recibo N° ${escapeHtml(nroRecibo)}</div>
+        <div class="der">${escapeHtml(localidad)}, ${escapeHtml(fecha)}</div>
       </div>
 
       <!-- Datos persona -->
       <div class="fila">
         <span>Recibimos de</span>
-        <span class="dato largo">${nombreCompleto}</span>
+        <span class="dato largo">${escapeHtml(nombreCompleto)}</span>
       </div>
       <div class="fila">
         <span>DNI</span>
-        <span class="dato">${dni || ''}</span>
+        <span class="dato">${escapeHtml(dni || '')}</span>
       </div>
 
       <!-- Cantidad de pesos -->
@@ -121,10 +131,10 @@ function renderComprobante({
       </div>
 
       <!-- Leyenda -->
-      <div class="fila leyenda">${leyenda}</div>
+      <div class="fila leyenda">${escapeHtml(leyenda)}</div>
 
       <!-- SON $ ... (siempre arriba del pie) -->
-      <div class="fila son">${textoSon}</div>
+      <div class="fila son">${escapeHtml(textoSon)}</div>
 
       <!-- Pie: sello y firma -->
       <div class="pie">
@@ -133,8 +143,8 @@ function renderComprobante({
       </div>
 
       <!-- Destino -->
-      <div class="fecha-impresion">Impreso: ${fechaImpresion}</div>
-      <div class="destino">${destino || ''}</div>
+      <div class="fecha-impresion">Impreso: ${escapeHtml(fechaImpresion)}</div>
+      <div class="destino">${escapeHtml(destino || '')}</div>
     </div>
   `;
 }

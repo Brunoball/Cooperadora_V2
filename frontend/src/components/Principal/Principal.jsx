@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBars,
   faChartLine,
+  faCashRegister,
   faGear,
   faReceipt,
   faRightFromBracket,
@@ -38,6 +39,19 @@ const NAV_ITEMS = [
     ],
   },
   { key: "cuotas", label: "Cuotas", path: "/cuotas", icon: faReceipt },
+  {
+    key: "ventas",
+    label: "Ventas",
+    path: "/ventas",
+    defaultPath: "/ventas/registradas",
+    icon: faCashRegister,
+    children: [
+      { key: "ventas-registradas", label: "Ventas registradas", path: "/ventas/registradas" },
+      { key: "ventas-productos", label: "Productos", path: "/ventas/productos" },
+      { key: "ventas-configuracion", label: "Configuración", path: "/ventas/configuracion" },
+      { key: "ventas-planillas", label: "Planillas", path: "/ventas/planillas" },
+    ],
+  },
   {
     key: "categorias",
     label: "Categorías",

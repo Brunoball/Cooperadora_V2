@@ -5,13 +5,16 @@ import { apiGet } from '../components/_shared/api/apiClient';
 
 const NORMALIZAR = (s = '') => String(s || '').trim();
 
-// Mostrar el domicilio como texto, incluso si contiene símbolos HTML.
-const escaparDomicilio = (valor) => String(valor)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+// Todo dato proveniente del padrón se trata como texto antes de insertarlo
+// en el documento de impresión.
+const escapeHtml = (value) =>
+  String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#039;",
+    '"': "&quot;",
+  })[character]);
 
 const fechaHoy = () => new Date().toLocaleDateString('es-AR');
 
@@ -56,7 +59,7 @@ function resolverCurso(s, aniosById, divisionesById) {
 function lineSinEtiqueta(valor, mono = true) {
   return `
     <div class="line nolbl">
-      <span class="val ${mono ? 'mono' : ''}">${valor}</span>
+      <span class="val ${mono ? 'mono' : ''}">${escapeHtml(valor)}</span>
     </div>
   `;
 }
@@ -64,8 +67,8 @@ function lineSinEtiqueta(valor, mono = true) {
 function lineConEtiqueta(label, valor, mono = true) {
   return `
     <div class="line">
-      <span class="lbl">${label}</span>
-      <span class="val ${mono ? 'mono' : ''}">${valor}</span>
+      <span class="lbl">${escapeHtml(label)}</span>
+      <span class="val ${mono ? 'mono' : ''}">${escapeHtml(valor)}</span>
     </div>
   `;
 }
@@ -93,7 +96,7 @@ function renderCupon({
 
       ${lineSinEtiqueta(dni ? dni : '')}
       ${lineSinEtiqueta(nombreCompleto)}
-      ${lineSinEtiqueta(escaparDomicilio(NORMALIZAR(domicilio).toUpperCase()))}
+      ${lineSinEtiqueta(NORMALIZAR(domicilio).toUpperCase())}
       ${lineSinEtiqueta(NORMALIZAR(barrio).toUpperCase() || '')}
       ${lineConEtiqueta('Curso :', NORMALIZAR(curso).toUpperCase())}
 
@@ -101,8 +104,8 @@ function renderCupon({
       ${lineConEtiqueta('Importe:', `$ ${importeFmt}`)}
       ${lineConEtiqueta('Cobrad.:', '—')}
 
-      <div class="nota">(${etiqueta})</div>
-      <div class="fecha-impresion">Impreso: ${fechaImpresion}</div>
+      <div class="nota">(${escapeHtml(etiqueta)})</div>
+      <div class="fecha-impresion">Impreso: ${escapeHtml(fechaImpresion)}</div>
     </div>
   `;
 }
