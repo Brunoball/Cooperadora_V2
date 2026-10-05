@@ -9,6 +9,7 @@ import {
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
+import { EntityTabs } from "../../Global/Formularios/TabbedForm";
 import "./CuotasModal.css";
 
 const PERIODOS_MENSUALES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -76,6 +77,7 @@ export default function ModalPagoCuota({
   const [updatingMatricula, setUpdatingMatricula] = useState(false);
   const [freeMode, setFreeMode] = useState(false);
   const [freeAmount, setFreeAmount] = useState("");
+  const [activePaymentTab, setActivePaymentTab] = useState("monthly");
 
   const periods = useMemo(() => context?.periodos || [], [context?.periodos]);
   const periodMap = useMemo(
@@ -95,6 +97,7 @@ export default function ModalPagoCuota({
     setMatriculaGlobal("");
     setFreeMode(false);
     setFreeAmount("");
+    setActivePaymentTab([ANUAL, MATRICULA, MITAD_1, MITAD_2].includes(Number(initialPeriod)) ? "special" : "monthly");
   }, [open, alumno?.id_alumno, initialYear, initialPeriod, context?.familia?.tiene_familia, context?.familia?.integrantes_activos]);
 
   useEffect(() => {
@@ -316,7 +319,42 @@ export default function ModalPagoCuota({
     );
   };
 
-  const subtitle = `${alumno?.denominacion || alumno?.nombre_completo || "Alumno"} · DNI ${alumno?.documento || alumno?.dni || "—"}`;
+  const renderPaymentToolbar = () => (
+    <section className="cuotas-v2-payment-toolbar cuotas-v2-payment-toolbar--inside-tab">
+      <label>
+        <span><FontAwesomeIcon icon={faCalendarDays} /> Fecha</span>
+        <input type="date" value={fecha} onChange={(event) => changeDate(event.target.value)} />
+      </label>
+      <label>
+        <span>Año</span>
+        <select value={anio} onChange={(event) => changeYear(event.target.value)}>
+          {years.map((year) => <option value={year} key={year}>{year}</option>)}
+        </select>
+      </label>
+      {!condoning ? (
+        <label>
+          <span><FontAwesomeIcon icon={faCoins} /> Medio de pago</span>
+          <select value={medio} onChange={(event) => setMedio(event.target.value)}>
+            <option value="">Seleccionar...</option>
+            {(catalogos?.medios_pago || []).map((item) => (
+              <option value={item.id_medio_pago} key={item.id_medio_pago}>{item.nombre}</option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <div className="cuotas-v2-condone-note">
+          La condonación se guarda con importe $0 y sin medio de pago.
+        </div>
+      )}
+    </section>
+  );
+
+  const alumnoNombre = alumno?.denominacion || alumno?.nombre_completo || "Alumno";
+  const alumnoDocumento = alumno?.documento || alumno?.dni || "—";
+  const alumnoCurso = alumno?.curso || "Sin curso";
+  const alumnoCategoria = alumno?.categoria || "Sin categoría";
+  const alumnoFamilia = alumno?.familia || context?.familia?.nombre_familia || "Sin grupo familiar";
+  const subtitle = `${alumnoNombre} · DNI ${alumnoDocumento} · ${alumnoCurso} · ${alumnoCategoria} · ${alumnoFamilia}`;
 
   return (
     <CrudModal
@@ -341,158 +379,159 @@ export default function ModalPagoCuota({
       }
     >
       <div className="cuotas-v2-payment-body">
-        <section className="cuotas-v2-payment-person" aria-label="Alumno seleccionado">
-          <div className="cuotas-v2-payment-person__identity">
-            <span>Alumno</span>
-            <strong>{alumno?.denominacion || alumno?.nombre_completo || "—"}</strong>
-            <small>DNI {alumno?.documento || alumno?.dni || "—"}</small>
-          </div>
-          <div className="cuotas-v2-payment-person__details">
-            <div>
-              <span>Curso</span>
-              <strong>{alumno?.curso || "Sin curso"}</strong>
-            </div>
-            <div>
-              <span>Categoría</span>
-              <strong>{alumno?.categoria || "Sin categoría"}</strong>
-            </div>
-            <div>
-              <span>Familia</span>
-              <strong>{alumno?.familia || context?.familia?.nombre_familia || "Sin grupo familiar"}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="cuotas-v2-payment-toolbar">
-          <label>
-            <span><FontAwesomeIcon icon={faCalendarDays} /> Fecha</span>
-            <input type="date" value={fecha} onChange={(event) => changeDate(event.target.value)} />
-          </label>
-          <label>
-            <span>Año aplicado</span>
-            <select value={anio} onChange={(event) => changeYear(event.target.value)}>
-              {years.map((year) => <option value={year} key={year}>{year}</option>)}
-            </select>
-          </label>
-          {!condoning ? (
-            <label>
-              <span><FontAwesomeIcon icon={faCoins} /> Medio de pago</span>
-              <select value={medio} onChange={(event) => setMedio(event.target.value)}>
-                <option value="">Seleccionar...</option>
-                {(catalogos?.medios_pago || []).map((item) => (
-                  <option value={item.id_medio_pago} key={item.id_medio_pago}>{item.nombre}</option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <div className="cuotas-v2-condone-note">
-              La condonación se guarda con importe $0 y sin medio de pago.
-            </div>
-          )}
-        </section>
-
         {context?.aviso ? <div className="cuotas-v2-warning">{context.aviso}</div> : null}
 
-        <section className="cuotas-v2-section">
-          <header className="cuotas-v2-section__head">
-            <div>
-              <h3>Cuotas mensuales</h3>
-              <p>Marzo a diciembre. Podés seleccionar varios meses en una sola operación.</p>
-            </div>
-            <button type="button" className="mov-btn mov-btn--ghost" onClick={toggleAllMonthly} disabled={!availableMonthly.length}>
-              {allMonthlySelected ? "Quitar disponibles" : "Seleccionar disponibles"}
-            </button>
-          </header>
-          {!condoning ? (
-            <div className={`cuotas-v2-free-amount ${freeMode ? "is-active" : ""}`}>
-              <label>
-                <input type="checkbox" checked={freeMode} onChange={(event) => toggleFreeMode(event.target.checked)} />
-                <span>Usar <strong>monto libre por mes</strong></span>
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="Monto libre"
-                value={freeAmount}
-                disabled={!freeMode}
-                onChange={(event) => applyFreeAmount(event.target.value)}
-              />
-              <small>Al activarlo, el mismo importe se aplica a los meses seleccionados y se deshabilita el anual/mitades.</small>
-            </div>
-          ) : null}
-          <div className="cuotas-v2-period-grid">
-            {monthly.map((period) => renderPeriodCard(period))}
-          </div>
-        </section>
+        <EntityTabs
+          tabs={[
+            {
+              value: "monthly",
+              label: "Cuotas",
+              icon: faCalendarDays,
+              badge: selected.filter((id) => PERIODOS_MENSUALES.has(Number(id))).length || null,
+            },
+            {
+              value: "special",
+              label: "Anual / especiales",
+              icon: faCoins,
+              badge: selected.filter((id) => [ANUAL, MATRICULA, MITAD_1, MITAD_2].includes(Number(id))).length || null,
+            },
+            {
+              value: "family",
+              label: "Familia",
+              icon: faUsers,
+              badge: Number(context?.familia?.integrantes_activos || 0) || null,
+            },
+          ]}
+          value={activePaymentTab}
+          onChange={setActivePaymentTab}
+          idPrefix="cooperadora-payment-tab"
+          ariaLabel="Secciones del pago"
+          className="cuotas-v2-payment-tabs"
+        />
 
-        <section className="cuotas-v2-section">
-          <header className="cuotas-v2-section__head">
-            <div>
-              <h3>Pagos especiales</h3>
-              <p>Contado anual, mitades y matrícula mantienen exactamente la cobertura del sistema anterior.</p>
-            </div>
-          </header>
-          <div className="cuotas-v2-special-grid">
-            {renderPeriodCard(special.anual, "is-special")}
-            {renderPeriodCard(special.mitad1, "is-special")}
-            {renderPeriodCard(special.mitad2, "is-special")}
-            <div className="cuotas-v2-registration-card">
-              {renderPeriodCard(special.matricula, "is-special")}
-              {!condoning && special.matricula ? (
-                <div className="cuotas-v2-registration-global">
-                  <div>
-                    <small>Monto global de matrícula</small>
-                    <strong>{money(special.matricula.monto_sugerido)}</strong>
-                  </div>
-                  {editingMatricula ? (
-                    <div className="cuotas-v2-registration-editor">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={matriculaGlobal}
-                        onChange={(event) => setMatriculaGlobal(amountInput(event.target.value))}
-                      />
-                      <button type="button" className="mov-btn mov-btn--primary" disabled={updatingMatricula} onClick={saveGlobalRegistration}>
-                        {updatingMatricula ? "Guardando..." : "Guardar global"}
-                      </button>
-                    </div>
-                  ) : (
-                    <button type="button" className="mov-btn mov-btn--ghost" onClick={() => setEditingMatricula(true)}>
-                      <FontAwesomeIcon icon={faPenToSquare} /> Editar global
-                    </button>
-                  )}
+        <div
+          id={`cooperadora-payment-tab-${activePaymentTab}-panel`}
+          className="cuotas-v2-payment-tab-panel"
+          role="tabpanel"
+          aria-labelledby={`cooperadora-payment-tab-${activePaymentTab}`}
+        >
+          {activePaymentTab === "monthly" ? (
+            <section className="cuotas-v2-section cuotas-v2-section--monthly">
+              {renderPaymentToolbar()}
+              <header className="cuotas-v2-section__head">
+                <div>
+                  <h3>Cuotas mensuales</h3>
+                  <p>Marzo a diciembre. Podés seleccionar varios meses en una sola operación.</p>
+                </div>
+                <button type="button" className="mov-btn mov-btn--ghost" onClick={toggleAllMonthly} disabled={!availableMonthly.length}>
+                  {allMonthlySelected ? "Quitar disponibles" : "Seleccionar disponibles"}
+                </button>
+              </header>
+              {!condoning ? (
+                <div className={`cuotas-v2-free-amount ${freeMode ? "is-active" : ""}`}>
+                  <label>
+                    <input type="checkbox" checked={freeMode} onChange={(event) => toggleFreeMode(event.target.checked)} />
+                    <span>Usar <strong>monto libre por mes</strong></span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Monto libre"
+                    value={freeAmount}
+                    disabled={!freeMode}
+                    onChange={(event) => applyFreeAmount(event.target.value)}
+                  />
+                  <small>Al activarlo, el mismo importe se aplica a los meses seleccionados y se deshabilita el anual/mitades.</small>
                 </div>
               ) : null}
-            </div>
-          </div>
-        </section>
-
-        {context?.familia?.tiene_familia ? (
-          <section className="cuotas-v2-section cuotas-v2-family-section">
-            <header className="cuotas-v2-section__head">
-              <div>
-                <h3><FontAwesomeIcon icon={faUsers} /> Grupo familiar</h3>
-                <p>
-                  {context.familia.nombre_familia || "Familia"} · {context.familia.cantidad_total} integrante(s) cargado(s), {context.familia.integrantes_activos} activo(s).
-                </p>
+              <div className="cuotas-v2-period-grid">
+                {monthly.map((period) => renderPeriodCard(period))}
               </div>
-              <label className="cuotas-v2-family-toggle">
-                <input type="checkbox" checked={family} onChange={(event) => setFamily(event.target.checked)} />
-                <span>Aplicar al grupo familiar</span>
-              </label>
-            </header>
-            <div className="cuotas-v2-family-list">
-              {(context.familia.integrantes || []).map((member) => (
-                <div className={`cuotas-v2-family-member ${member.activo ? "" : "is-inactive"}`} key={member.id_alumno || member.id_socio}>
-                  <FontAwesomeIcon icon={faIdCard} />
-                  <span>{member.denominacion}</span>
-                  <small>{member.curso || "Sin curso"}</small>
-                  <b>{member.activo ? "ACTIVO" : "BAJA"}</b>
+            </section>
+          ) : null}
+
+          {activePaymentTab === "special" ? (
+            <section className="cuotas-v2-section cuotas-v2-section--special">
+              {renderPaymentToolbar()}
+              <header className="cuotas-v2-section__head">
+                <div>
+                  <h3>Pagos especiales</h3>
+                  <p>Contado anual, mitades y matrícula mantienen exactamente la cobertura del sistema anterior.</p>
                 </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+              </header>
+              <div className="cuotas-v2-special-grid">
+                {renderPeriodCard(special.anual, "is-special")}
+                {renderPeriodCard(special.mitad1, "is-special")}
+                {renderPeriodCard(special.mitad2, "is-special")}
+                <div className="cuotas-v2-registration-card">
+                  {renderPeriodCard(special.matricula, "is-special")}
+                  {!condoning && special.matricula ? (
+                    <div className="cuotas-v2-registration-global">
+                      <div>
+                        <small>Monto global de matrícula</small>
+                        <strong>{money(special.matricula.monto_sugerido)}</strong>
+                      </div>
+                      {editingMatricula ? (
+                        <div className="cuotas-v2-registration-editor">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={matriculaGlobal}
+                            onChange={(event) => setMatriculaGlobal(amountInput(event.target.value))}
+                          />
+                          <button type="button" className="mov-btn mov-btn--primary" disabled={updatingMatricula} onClick={saveGlobalRegistration}>
+                            {updatingMatricula ? "Guardando..." : "Guardar global"}
+                          </button>
+                        </div>
+                      ) : (
+                        <button type="button" className="mov-btn mov-btn--ghost" onClick={() => setEditingMatricula(true)}>
+                          <FontAwesomeIcon icon={faPenToSquare} /> Editar global
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          {activePaymentTab === "family" ? (
+            context?.familia?.tiene_familia ? (
+              <section className="cuotas-v2-section cuotas-v2-family-section">
+                <header className="cuotas-v2-section__head">
+                  <div>
+                    <h3><FontAwesomeIcon icon={faUsers} /> Grupo familiar</h3>
+                    <p>
+                      {context.familia.nombre_familia || "Familia"} · {context.familia.cantidad_total} integrante(s) cargado(s), {context.familia.integrantes_activos} activo(s).
+                    </p>
+                  </div>
+                  <label className="cuotas-v2-family-toggle">
+                    <input type="checkbox" checked={family} onChange={(event) => setFamily(event.target.checked)} />
+                    <span>Aplicar al grupo familiar</span>
+                  </label>
+                </header>
+                <div className="cuotas-v2-family-list">
+                  {(context.familia.integrantes || []).map((member) => (
+                    <div className={`cuotas-v2-family-member ${member.activo ? "" : "is-inactive"}`} key={member.id_alumno || member.id_socio}>
+                      <FontAwesomeIcon icon={faIdCard} />
+                      <span>{member.denominacion}</span>
+                      <small>{member.curso || "Sin curso"}</small>
+                      <b>{member.activo ? "ACTIVO" : "BAJA"}</b>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section className="cuotas-v2-section cuotas-v2-family-empty" aria-label="Alumno sin grupo familiar">
+                <FontAwesomeIcon icon={faUsers} />
+                <div>
+                  <strong>Sin grupo familiar</strong>
+                  <span>Este alumno no pertenece actualmente a una familia registrada.</span>
+                </div>
+              </section>
+            )
+          ) : null}
+        </div>
       </div>
     </CrudModal>
   );

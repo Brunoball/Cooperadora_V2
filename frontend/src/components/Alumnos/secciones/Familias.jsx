@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faAddressBook,
   faCircleInfo,
   faHouse,
   faPen,
+  faPlus,
   faRotateLeft,
   faTrashCan,
   faUserSlash,
@@ -19,11 +21,20 @@ import InfoModal, {
   InfoSummary,
 } from "../../Global/Modales/InfoModal";
 import ModuleFeedback from "../../Global/ModuleFeedback";
-import { FloatingField } from "../../Global/Formularios/TabbedForm";
+import ModalEliminarGlobal from "../../Global/Modales/ModalEliminarGlobal";
+import {
+  EntityFormPanel,
+  EntityTabPane,
+  EntityTabs,
+  FloatingField,
+} from "../../Global/Formularios/TabbedForm";
 import { canWrite } from "../../_shared/auth/session";
 import { familiasApi } from "../api/alumnosApi";
 import { useFamilias } from "../hooks/useFamilias";
 import "./Familias.css";
+
+const FORM_TAB_DETAILS = "datos";
+const FORM_TAB_MEMBERS = "integrantes";
 
 function formatDate(value) {
   if (!value) return "—";
@@ -57,84 +68,347 @@ function formFromDetail(detail) {
   };
 }
 
-function MemberPicker({ catalog = [], selected = [], familyId, onChange }) {
-  const [search, setSearch] = useState("");
-  const normalized = search.trim().toLocaleUpperCase("es-AR");
-  const selectedSet = useMemo(() => new Set(selected.map(Number)), [selected]);
+function FamilyForm({ form, setForm, catalog = [], activeTab, onTabChange }) {
+  const [memberSearch, setMemberSearch] = useState("");
+  const [pendingMemberIds, setPendingMemberIds] = useState(() => new Set());
 
-  const available = catalog.filter((person) => {
-    const belongsHere = Number(person.id_familia || 0) === Number(familyId || 0);
-    const free = !person.id_familia || belongsHere;
-    if (!free) return false;
-    if (!normalized) return true;
-    const haystack = `${person.apellido || ""} ${person.nombre || ""} ${person.num_documento || ""} ${person.curso || ""}`.toLocaleUpperCase("es-AR");
-    return haystack.includes(normalized);
-  });
+  const selectedSet = useMemo(
+    () => new Set((form.integrantes || []).map(Number)),
+    [form.integrantes],
+  );
 
-  const toggle = (id) => {
+  const normalizedSearch = memberSearch.trim().toLocaleUpperCase("es-AR");
+
+  const matchesSearch = (person) => {
+    if (!normalizedSearch) return true;
+    const haystack = [
+      person.nombre_completo,
+      person.apellido,
+      person.nombre,
+      person.num_documento,
+      person.curso,
+      person.categoria,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLocaleUpperCase("es-AR");
+    return haystack.includes(normalizedSearch);
+  };
+
+  const belongsToAnotherFamily = (person) => {
+    const assignedFamilyId = Number(person.id_familia || 0);
+    const currentFamilyId = Number(form.id_familia || 0);
+    if (!assignedFamilyId) return false;
+    return !currentFamilyId || assignedFamilyId !== currentFamilyId;
+  };
+
+  const available = useMemo(
+    () =>
+      catalog.filter(
+        (person) =>
+          !selectedSet.has(Number(person.id_alumno)) && matchesSearch(person),
+      ),
+    // normalizedSearch is derived from memberSearch and intentionally included.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalog, selectedSet, normalizedSearch],
+  );
+
+  const selectedMembers = useMemo(
+    () =>
+      (form.integrantes || []).map((id) => {
+        const person = catalog.find(
+          (candidate) => Number(candidate.id_alumno) === Number(id),
+        );
+        return (
+          person || {
+            id_alumno: id,
+            nombre_completo: `ALUMNO #${id}`,
+            num_documento: "",
+            curso: "",
+          }
+        );
+      }),
+    [catalog, form.integrantes],
+  );
+
+  const togglePendingMember = (person) => {
+    const id = Number(person.id_alumno);
+    if (!id || belongsToAnotherFamily(person) || !person.activo) return;
+
+    setPendingMemberIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const addPendingMembers = () => {
+    if (!pendingMemberIds.size) return;
+    setForm((current) => ({
+      ...current,
+      integrantes: Array.from(
+        new Set([
+          ...(current.integrantes || []).map(Number),
+          ...Array.from(pendingMemberIds),
+        ]),
+      ),
+    }));
+    setPendingMemberIds(new Set());
+  };
+
+  const removeMember = (id) => {
     const numericId = Number(id);
-    if (selectedSet.has(numericId)) {
-      onChange(selected.filter((current) => Number(current) !== numericId));
-    } else {
-      onChange([...selected, numericId]);
-    }
+    setForm((current) => ({
+      ...current,
+      integrantes: (current.integrantes || []).filter(
+        (currentId) => Number(currentId) !== numericId,
+      ),
+    }));
   };
 
   return (
-    <section className="familias-members-panel">
-      <div className="familias-members-panel__head">
-        <div>
-          <strong>Integrantes</strong>
-          <span>{selected.length} seleccionados</span>
-        </div>
-        <FloatingField
-          label="Buscar integrante"
-          active
-          placeholderOnFloat
-          className="familias-memberSearch"
-        >
-          <input
-            className="familias-member-input"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Nombre o documento..."
-          />
-        </FloatingField>
-      </div>
+    <div className="entity-form familias-modal__form">
+      <EntityTabs
+        tabs={[
+          {
+            value: FORM_TAB_DETAILS,
+            label: "Datos de la familia",
+            icon: faHouse,
+          },
+          {
+            value: FORM_TAB_MEMBERS,
+            label: "Integrantes",
+            icon: faUsers,
+            badge: form.integrantes.length || null,
+          },
+        ]}
+        value={activeTab}
+        onChange={onTabChange}
+        idPrefix="cooperadora-familia-form-tab"
+        ariaLabel="Secciones de la familia"
+      />
 
-      <div className="familias-memberPicker-list">
-        {available.length ? (
-          available.map((person) => {
-            const checked = selectedSet.has(Number(person.id_alumno));
-            return (
-              <label
-                className={`familias-member-option ${checked ? "is-selected" : ""}`}
-                key={person.id_alumno}
+      <EntityTabPane active={activeTab === FORM_TAB_DETAILS} disableWhenInactive>
+        <EntityFormPanel
+          tabValue={FORM_TAB_DETAILS}
+          idPrefix="cooperadora-familia-form-tab"
+          eyebrow="Ficha principal"
+          title="Identificación del grupo"
+          icon={faAddressBook}
+          tag="Nombre obligatorio"
+          bodyClassName="familias-form-panel__body--details"
+        >
+          <FloatingField
+            label="Nombre de la familia *"
+            active={Boolean(form.nombre_familia)}
+          >
+            <input
+              value={form.nombre_familia}
+              maxLength={120}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  nombre_familia: event.target.value.toUpperCase(),
+                }))
+              }
+              required
+              placeholder=" "
+              autoFocus
+            />
+          </FloatingField>
+
+          <FloatingField
+            label="Observaciones"
+            active={Boolean(form.observaciones)}
+            textarea
+          >
+            <textarea
+              value={form.observaciones}
+              maxLength={5000}
+              rows={4}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  observaciones: event.target.value.toUpperCase(),
+                }))
+              }
+              placeholder=" "
+            />
+          </FloatingField>
+
+          <div className="familias-form-note">
+            <FontAwesomeIcon icon={faCircleInfo} />
+            <span>
+              Cada alumno puede pertenecer a una sola familia. La asociación se
+              conserva para cuotas, cobradores y recordatorios.
+            </span>
+          </div>
+        </EntityFormPanel>
+      </EntityTabPane>
+
+      <EntityTabPane active={activeTab === FORM_TAB_MEMBERS} disableWhenInactive>
+        <EntityFormPanel
+          tabValue={FORM_TAB_MEMBERS}
+          idPrefix="cooperadora-familia-form-tab"
+          bodyClassName="familias-form-panel__body--members"
+        >
+          <div className="familias-members-layout">
+            <section className="familias-members-column familias-members-column--available">
+              <div className="familias-members-column__header">
+                <div>
+                  <strong>Alumnos</strong>
+                  <span>Los que ya tienen otra familia quedan deshabilitados.</span>
+                </div>
+                <span className="familias-members-count">{available.length}</span>
+              </div>
+
+              <FloatingField
+                label="Buscar alumno por nombre, documento o curso"
+                active
+                placeholderOnFloat
+                className="familias-modal__member-search"
               >
                 <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(person.id_alumno)}
+                  type="search"
+                  value={memberSearch}
+                  onChange={(event) => setMemberSearch(event.currentTarget.value)}
+                  placeholder="Nombre, documento o curso..."
+                  autoComplete="off"
                 />
-                <span className="familias-member-avatar" aria-hidden="true">
-                  {String(person.apellido || "?").charAt(0)}
+              </FloatingField>
+
+              <div className="familias-modal__member-list familias-modal__member-list--available">
+                {available.map((person) => {
+                  const id = Number(person.id_alumno);
+                  const checked = pendingMemberIds.has(id);
+                  const belongsElsewhere = belongsToAnotherFamily(person);
+                  const disabled = Boolean(belongsElsewhere || !person.activo);
+                  return (
+                    <label
+                      className={`familias-modal__member ${checked ? "is-selected" : ""} ${disabled ? "is-disabled" : ""}`.trim()}
+                      key={person.id_alumno}
+                      title={
+                        belongsElsewhere
+                          ? person.nombre_familia
+                            ? `Ya pertenece a ${person.nombre_familia}`
+                            : "Ya pertenece a otra familia"
+                          : !person.activo
+                            ? "Alumno dado de baja"
+                            : ""
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => togglePendingMember(person)}
+                      />
+                      <span className="familias-member-avatar" aria-hidden="true">
+                        {String(person.apellido || person.nombre || "?")
+                          .trim()
+                          .charAt(0)
+                          .toLocaleUpperCase("es-AR")}
+                      </span>
+                      <span className="familias-modal__member-copy">
+                        <strong>{person.nombre_completo}</strong>
+                        <small>
+                          {person.tipo_documento_sigla
+                            ? `${person.tipo_documento_sigla} `
+                            : ""}
+                          {person.num_documento || "SIN DOCUMENTO"}
+                          {person.curso ? ` · ${person.curso}` : ""}
+                          {belongsElsewhere && person.nombre_familia
+                            ? ` · Familia: ${person.nombre_familia}`
+                            : ""}
+                          {!person.activo ? " · BAJA" : ""}
+                        </small>
+                      </span>
+                    </label>
+                  );
+                })}
+
+                {!available.length ? (
+                  <div className="familias-modal__empty">
+                    <strong>Sin alumnos disponibles</strong>
+                    <span>No hay alumnos que coincidan con la búsqueda.</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <button
+                type="button"
+                className="familias-add-members-button"
+                onClick={addPendingMembers}
+                disabled={!pendingMemberIds.size}
+              >
+                <FontAwesomeIcon icon={faPlus} />
+                <span>
+                  Agregar {pendingMemberIds.size || ""}{" "}
+                  {pendingMemberIds.size === 1 ? "integrante" : "integrantes"}
                 </span>
-                <span className="familias-member-option__identity">
-                  <strong>{person.nombre_completo}</strong>
-                  <small>{person.tipo_documento_sigla ? `${person.tipo_documento_sigla} ` : ""}{person.num_documento || "SIN DOCUMENTO"} · {person.curso || "SIN CURSO"}{person.activo ? "" : " · BAJA"}</small>
+              </button>
+            </section>
+
+            <section className="familias-members-column familias-members-column--current">
+              <div className="familias-members-column__header">
+                <div>
+                  <strong>Integrantes actuales</strong>
+                  <span>Alumnos que quedarán vinculados a la familia.</span>
+                </div>
+                <span className="familias-members-count">
+                  {selectedMembers.length}
                 </span>
-              </label>
-            );
-          })
-        ) : (
-          <div className="familias-modal__empty">
-            <strong>Sin alumnos disponibles</strong>
-            <span>Los alumnos que ya pertenecen a otra familia no se muestran para evitar duplicaciones.</span>
+              </div>
+
+              <div className="familias-selected-members__list">
+                {selectedMembers.length ? (
+                  selectedMembers.map((person) => (
+                    <article
+                      className="familias-selected-member"
+                      key={person.id_alumno}
+                    >
+                      <div className="familias-selected-member__top">
+                        <span className="familias-member-avatar" aria-hidden="true">
+                          {String(person.apellido || person.nombre || "?")
+                            .trim()
+                            .charAt(0)
+                            .toLocaleUpperCase("es-AR")}
+                        </span>
+                        <span className="familias-selected-member__identity">
+                          <strong>{person.nombre_completo}</strong>
+                          <small>
+                            {person.tipo_documento_sigla
+                              ? `${person.tipo_documento_sigla} `
+                              : ""}
+                            {person.num_documento || "SIN DOCUMENTO"}
+                            {person.curso ? ` · ${person.curso}` : ""}
+                          </small>
+                        </span>
+                        <button
+                          type="button"
+                          className="familias-member-remove"
+                          title="Quitar integrante"
+                          aria-label={`Quitar ${person.nombre_completo || "integrante"}`}
+                          onClick={() => removeMember(person.id_alumno)}
+                        >
+                          <FontAwesomeIcon icon={faTrashCan} />
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="familias-modal__empty">
+                    <strong>Sin integrantes seleccionados</strong>
+                    <span>Elegí alumnos de la columna izquierda y agregalos.</span>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
-        )}
-      </div>
-    </section>
+        </EntityFormPanel>
+      </EntityTabPane>
+    </div>
   );
 }
 
@@ -145,6 +419,7 @@ export default function Familias() {
   const [feedback, setFeedback] = useState(null);
   const [formModal, setFormModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [formTab, setFormTab] = useState(FORM_TAB_DETAILS);
   const [saving, setSaving] = useState(false);
   const [detailModal, setDetailModal] = useState(null);
   const [detailTab, setDetailTab] = useState("integrantes");
@@ -159,6 +434,7 @@ export default function Familias() {
 
   const openCreate = () => {
     setForm(emptyForm());
+    setFormTab(FORM_TAB_DETAILS);
     setFormModal(true);
   };
 
@@ -166,6 +442,7 @@ export default function Familias() {
     try {
       const result = await familiasApi.obtener(item.id_familia);
       setForm(formFromDetail(result));
+      setFormTab(FORM_TAB_DETAILS);
       setFormModal(true);
     } catch (requestError) {
       setFeedback({ type: "error", message: requestError.message });
@@ -208,38 +485,26 @@ export default function Familias() {
     }
   };
 
-  const changeState = async (event) => {
-    event.preventDefault();
-    if (!stateModal) return;
-    setSaving(true);
-    try {
-      const response = stateModal.activo
-        ? await familiasApi.darBaja({ id: stateModal.id_familia })
-        : await familiasApi.reactivar(stateModal.id_familia);
-      setFeedback({ type: "success", message: response.mensaje });
-      setStateModal(null);
-      await cargar();
-    } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message });
-    } finally {
-      setSaving(false);
-    }
+  const changeState = async () => {
+    if (!stateModal) return { ok: false, mensaje: "No hay una familia seleccionada." };
+
+    const response = stateModal.activo
+      ? await familiasApi.darBaja({ id: stateModal.id_familia })
+      : await familiasApi.reactivar(stateModal.id_familia);
+
+    await cargar();
+    return response;
   };
 
-  const hardDelete = async (event) => {
-    event.preventDefault();
-    if (!deleteModal) return;
-    setSaving(true);
-    try {
-      const response = await familiasApi.eliminarDefinitivo({ id: deleteModal.id_familia });
-      setFeedback({ type: "success", message: response.mensaje });
-      setDeleteModal(null);
-      await cargar();
-    } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message });
-    } finally {
-      setSaving(false);
-    }
+  const hardDelete = async () => {
+    if (!deleteModal) return { ok: false, mensaje: "No hay una familia seleccionada." };
+
+    const response = await familiasApi.eliminarDefinitivo({
+      id: deleteModal.id_familia,
+    });
+
+    await cargar();
+    return response;
   };
 
   const pageFilters = [
@@ -355,42 +620,22 @@ export default function Familias() {
       <CrudModal
         open={formModal}
         title={form.id_familia ? "Editar familia" : "Nueva familia"}
-        subtitle="Los integrantes se vinculan mediante alumnos.id_familia."
+        subtitle="Administrá los datos y los alumnos vinculados a este grupo familiar."
         onClose={() => !saving && setFormModal(false)}
         onSubmit={save}
         saving={saving}
         submitLabel={form.id_familia ? "Guardar cambios" : "Crear familia"}
         wide
+        closeOnBackdrop={false}
         modalClassName="familias-modal familias-modal--form"
       >
-        <div className="familias-modal__layout">
-          <section className="familias-modal__data">
-            <FloatingField label="Nombre de familia *" active={Boolean(form.nombre_familia)} wide className="familias-field familias-field--name">
-              <input
-                value={form.nombre_familia}
-                maxLength={120}
-                onChange={(event) => setForm((current) => ({ ...current, nombre_familia: event.target.value.toUpperCase() }))}
-                required
-                placeholder=" "
-              />
-            </FloatingField>
-            <FloatingField label="Observaciones" active={Boolean(form.observaciones)} wide textarea className="familias-field familias-field--notes">
-              <textarea
-                value={form.observaciones}
-                maxLength={5000}
-                rows={4}
-                onChange={(event) => setForm((current) => ({ ...current, observaciones: event.target.value.toUpperCase() }))}
-                placeholder=" "
-              />
-            </FloatingField>
-          </section>
-          <MemberPicker
-            catalog={catalogos.alumnos || []}
-            selected={form.integrantes}
-            familyId={form.id_familia}
-            onChange={(integrantes) => setForm((current) => ({ ...current, integrantes }))}
-          />
-        </div>
+        <FamilyForm
+          form={form}
+          setForm={setForm}
+          catalog={catalogos.alumnos || []}
+          activeTab={formTab}
+          onTabChange={setFormTab}
+        />
       </CrudModal>
 
       <InfoModal
@@ -458,37 +703,68 @@ export default function Familias() {
         ) : null}
       </InfoModal>
 
-      <CrudModal
+      <ModalEliminarGlobal
         open={Boolean(stateModal)}
-        title={stateModal?.activo ? "Dar de baja la familia" : "Reactivar familia"}
-        subtitle={stateModal?.nombre_familia || ""}
-        onClose={() => !saving && setStateModal(null)}
-        onSubmit={changeState}
-        saving={saving}
-        submitLabel={stateModal?.activo ? "Dar de baja" : "Reactivar"}
-        danger={Boolean(stateModal?.activo)}
-      >
-        <p>
-          {stateModal?.activo
-            ? "La familia quedará marcada como baja. Los alumnos conservarán el vínculo familiar para no perder la agrupación usada por cuotas y recordatorios."
-            : "La familia volverá a estar disponible como activa."}
-        </p>
-      </CrudModal>
+        operacion={stateModal?.activo ? "baja" : "alta"}
+        row={stateModal}
+        onClose={() => setStateModal(null)}
+        title={stateModal?.activo ? "Dar de baja familia" : "Reactivar familia"}
+        message={
+          stateModal?.activo
+            ? "La familia dejará de figurar entre las activas."
+            : "La familia volverá a estar disponible entre las activas."
+        }
+        warning={
+          stateModal?.activo
+            ? "Los alumnos conservarán el vínculo familiar para no perder la agrupación usada por cuotas, cobradores y recordatorios."
+            : "La reactivación no modifica los integrantes ni el historial de la familia."
+        }
+        confirmLabel={stateModal?.activo ? "Dar de baja" : "Reactivar"}
+        successMessage={
+          stateModal?.activo
+            ? "Familia dada de baja correctamente."
+            : "Familia reactivada correctamente."
+        }
+        errorMessage={
+          stateModal?.activo
+            ? "No se pudo dar de baja la familia."
+            : "No se pudo reactivar la familia."
+        }
+        details={[
+          { label: "Familia", value: stateModal?.nombre_familia || "—" },
+          {
+            label: "Integrantes",
+            value: stateModal?.cantidad_integrantes ?? 0,
+          },
+          {
+            label: "Estado actual",
+            value: stateModal?.activo ? "ACTIVA" : "BAJA",
+          },
+        ]}
+        onConfirm={changeState}
+      />
 
-      <CrudModal
+      <ModalEliminarGlobal
         open={Boolean(deleteModal)}
-        title="Eliminar definitivamente la familia"
-        subtitle={deleteModal?.nombre_familia || ""}
-        onClose={() => !saving && setDeleteModal(null)}
-        onSubmit={hardDelete}
-        saving={saving}
-        submitLabel="Eliminar definitivamente"
-        danger
-      >
-        <p>
-          Los alumnos vinculados quedarán <b>sin familia</b>. Esta acción sólo se habilita después de dar de baja la familia.
-        </p>
-      </CrudModal>
+        operacion="eliminar"
+        row={deleteModal}
+        onClose={() => setDeleteModal(null)}
+        title="Eliminar familia definitivamente"
+        message="La familia se eliminará definitivamente del padrón."
+        warning="Los alumnos vinculados quedarán sin familia. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar familia"
+        successMessage="Familia eliminada correctamente."
+        errorMessage="No se pudo eliminar la familia."
+        details={[
+          { label: "Familia", value: deleteModal?.nombre_familia || "—" },
+          {
+            label: "Integrantes",
+            value: deleteModal?.cantidad_integrantes ?? 0,
+          },
+          { label: "Estado", value: "BAJA" },
+        ]}
+        onConfirm={hardDelete}
+      />
 
       <ModuleFeedback
         type={feedback?.type}

@@ -19,6 +19,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../Global/ModulePage";
 import GlobalDivTable from "../Global/GlobalDivTable";
+import GlobalPagination from "../Global/GlobalPagination";
 import CrudModal from "../Global/Modales/CrudModal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
 import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
@@ -837,7 +838,7 @@ export default function Alumnos() {
   const fileActions = [
     {
       key: "exportar",
-      label: preparingExport ? "Preparando..." : "Exportar Excel",
+      label: preparingExport ? "Preparando..." : "Exportar",
       icon: faFileExcel,
       onClick: openExportModal,
       disabled: preparingExport || loading,
@@ -872,7 +873,7 @@ export default function Alumnos() {
         className="socios-page"
       >
         <GlobalDivTable
-          className={`socios-table ${paginacion.total_paginas > 1 ? "has-bottom-pagination" : ""}`}
+          className="socios-table has-bottom-pagination"
           gridClassName={view === "activos" ? "socios-grid" : "alumnos-inactive-grid"}
           ariaLabel={view === "activos" ? "Listado de alumnos activos" : view === "bajas" ? "Listado de alumnos dados de baja" : "Listado de alumnos egresados"}
           columns={columns}
@@ -1020,10 +1021,18 @@ export default function Alumnos() {
             : null}
         </GlobalDivTable>
 
-        <div
-          className={`socios-pagination alumnos-tableFooter ${paginacion.total_paginas <= 1 ? "is-single-page" : ""}`}
-        >
-          <div className="socios-pagination__left">
+        <GlobalPagination
+          className="alumnos-tableFooter"
+          currentPage={Number(paginacion?.pagina || page)}
+          totalPages={Number(paginacion?.total_paginas || 0)}
+          totalRecords={Number(paginacion?.total || 0)}
+          from={Number(paginacion?.desde || 0)}
+          to={Number(paginacion?.hasta || 0)}
+          loading={loading}
+          itemLabel="alumnos"
+          ariaLabel="Paginación de alumnos"
+          onPageChange={setPage}
+          leftContent={(
             <div className="alumnos-footerActions" aria-label="Acciones de alumnos">
               {view === "activos" && writable ? (
                 <button
@@ -1049,24 +1058,8 @@ export default function Alumnos() {
                 </button>
               ))}
             </div>
-
-            {paginacion.total_paginas > 1 ? (
-              <span className="socios-pagination__summary">
-                Mostrando <strong>{paginacion.desde}</strong>–<strong>{paginacion.hasta}</strong> de <strong>{paginacion.total}</strong>
-              </span>
-            ) : null}
-          </div>
-
-          {paginacion.total_paginas > 1 ? (
-            <div className="socios-pagination__right">
-              <div className="socios-pagination__controls">
-                <button type="button" disabled={!paginacion.tiene_anterior} onClick={() => setPage((current) => Math.max(1, current - 1))}>‹</button>
-                <button type="button" className="is-active">{paginacion.pagina}</button>
-                <button type="button" disabled={!paginacion.tiene_siguiente} onClick={() => setPage((current) => current + 1)}>›</button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+          )}
+        />
       </ModulePage>
 
       <CrudModal

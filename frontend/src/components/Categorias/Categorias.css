@@ -103,3 +103,25 @@
     min-width: 980px;
   }
 }
+
+/* Valores por hermanos: el filtro Categoria no debe estirarse ocupando
+   todo el espacio disponible del encabezado. */
+.categorias-page .categorias-siblingCategory-filter {
+  flex: 0 1 220px;
+  width: 220px;
+  min-width: 170px;
+  max-width: 220px;
+  margin-left: auto;
+  justify-self: end;
+}
+
+@media (max-width: 720px) {
+  .categorias-page .categorias-siblingCategory-filter {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin-left: 0;
+    justify-self: stretch;
+  }
+}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGear, faXmark } from "@fortawesome/free-solid-svg-icons";
-import logoRh from "../../imagenes/Logo_rh_sf.png";
+import logoIpet50 from "../../imagenes/Escudo_ipet50.png";
 import "./ModalPerfil.css";
 
 function firstValue(...values) {
@@ -45,7 +45,7 @@ export default function ModalPerfil({
   open,
   onClose,
   usuario,
-  logoSrc = logoRh,
+  logoSrc = logoIpet50,
   onConfigRequest,
 }) {
   const closeButtonRef = useRef(null);
@@ -140,7 +140,7 @@ export default function ModalPerfil({
         <header className="perfil-modal__header">
           <div className="perfil-modal__heading">
             <h2 id="perfil-modal-title">Perfil de usuario</h2>
-            <p>{view.rol} · RH Negativo</p>
+            <p>{view.rol} · Cooperadora IPET N° 50</p>
           </div>
           <button
             ref={closeButtonRef}
@@ -182,7 +182,7 @@ export default function ModalPerfil({
 
             <div className="perfil-data-card">
               <span className="perfil-data-card__label">Institución</span>
-              <strong className="perfil-data-card__value">RH Negativo</strong>
+              <strong className="perfil-data-card__value">IPET N° 50 E.F. Olmos</strong>
             </div>
 
             {view.email !== "-" ? (

@@ -19,6 +19,8 @@ import {
   faCommentDots,
 } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../Global/ModulePage";
+import GlobalDivTable from "../Global/GlobalDivTable";
+import GlobalPagination from "../Global/GlobalPagination";
 import ModuleFeedback from "../Global/ModuleFeedback";
 import CrudModal from "../Global/Modales/CrudModal";
 import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
@@ -50,32 +52,16 @@ const stateLabel = (state) => ({
   vencida: "Vencida",
 }[state] || state || "—");
 
-function Pagination({ page, totalPages, onChange }) {
-  if (!totalPages || totalPages <= 1) return null;
-  return (
-    <div className="ventas-pagination" aria-label="Paginación">
-      <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>Anterior</button>
-      <span>Página <strong>{page}</strong> de <strong>{totalPages}</strong></span>
-      <button type="button" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>Siguiente</button>
-    </div>
-  );
-}
-
-function Empty({ children = "No hay registros para mostrar." }) {
-  return <div className="ventas-empty">{children}</div>;
-}
-
-function LoadingRows({ columns, rows = 6 }) {
-  return Array.from({ length: rows }).map((_, row) => (
-    <tr key={`loading-${row}`} className="ventas-loading-row">
-      {Array.from({ length: columns }).map((__, col) => <td key={col}><span /></td>)}
-    </tr>
-  ));
-}
-
 function ActionButton({ icon, title, tone = "", ...props }) {
+  const toneClass = tone === "danger" ? "mov-iconBtn--danger" : "";
   return (
-    <button type="button" className={`ventas-icon-btn ${tone}`.trim()} title={title} aria-label={title} {...props}>
+    <button
+      type="button"
+      className={`mov-iconBtn ${toneClass}`.trim()}
+      title={title}
+      aria-label={title}
+      {...props}
+    >
       <FontAwesomeIcon icon={icon} />
     </button>
   );
@@ -425,11 +411,81 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
   };
 
   return (
-    <ModulePage title="Productos de ventas" description="Catálogo con precios anticipados, en puerta y stock opcional con control real." stats={summary} filters={[{ key: "buscar", type: "search", label: "Buscar", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]} canCreate={writable} primaryActionLabel="Nuevo producto" onPrimaryAction={() => setModal({ open: true, row: null })}>
-      <div className="ventas-table-wrap"><table className="ventas-table"><thead><tr><th>Producto</th><th>Anticipada</th><th>Puerta</th><th>Stock</th><th>Uso</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-        {loading ? <LoadingRows columns={7} /> : rows.length ? rows.map((row) => <tr key={row.id_producto}><td><strong>{row.nombre}</strong><small>{row.descripcion || "Sin descripción"}</small></td><td>{money(row.precio_anticipada)}</td><td>{money(row.precio_puerta)}</td><td>{row.stock == null ? <span className="ventas-pill neutral">Sin control</span> : <span className={`ventas-pill ${Number(row.stock) === 0 ? "danger" : "success"}`}>{row.stock}</span>}</td><td>{Number(row.cantidad_usos || 0)} ventas · {Number(row.cantidad_campanias || 0)} campañas</td><td><span className={`ventas-pill ${yes(row.activo) ? "success" : "neutral"}`}>{yes(row.activo) ? "Activo" : "Inactivo"}</span></td><td><div className="ventas-actions">{writable && <><ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} /><ActionButton icon={yes(row.activo) ? faToggleOff : faToggleOn} title={yes(row.activo) ? "Desactivar" : "Activar"} onClick={() => changeState(row)} /><ActionButton icon={faTrashCan} title="Eliminar o archivar" tone="danger" onClick={() => setConfirm(row)} /></>}</div></td></tr>) : <tr><td colSpan="7"><Empty /></td></tr>}
-      </tbody></table></div>
-      <Pagination page={Number(pagination.pagina || page)} totalPages={Number(pagination.total_paginas || 1)} onChange={setPage} />
+    <ModulePage className="ventas-page" title="Productos de ventas" description="Catálogo con precios anticipados, en puerta y stock opcional con control real." stats={summary} filters={[{ key: "buscar", type: "search", label: "Buscar", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]} canCreate={writable} primaryActionLabel="Nuevo producto" onPrimaryAction={() => setModal({ open: true, row: null })}>
+      <GlobalDivTable
+        className="ventas-global-table has-bottom-pagination"
+        bodyClassName="entity-table-wrap"
+        gridClassName="ventas-grid ventas-grid--products"
+        columns={[
+          "Producto",
+          { label: "Anticipada", align: "right" },
+          { label: "Puerta", align: "right" },
+          { label: "Stock", align: "center" },
+          "Uso",
+          { label: "Estado", align: "center" },
+          { label: "Acciones", align: "center" },
+        ]}
+        loading={loading}
+        loadingLabel="Cargando productos..."
+        skeletonActionColumn
+        ariaLabel="Productos de ventas"
+        empty={!rows.length}
+      >
+        {!loading && !rows.length ? (
+          <div className="module-empty">
+            <FontAwesomeIcon icon={faBoxesStacked} />
+            <strong>Sin productos para mostrar</strong>
+            <span>No hay productos que coincidan con los filtros seleccionados.</span>
+          </div>
+        ) : null}
+        {rows.map((row) => (
+          <div
+            className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--products"
+            role="row"
+            key={row.id_producto}
+          >
+            <div className="mov-gridCell entity-main-cell">
+              <strong>{row.nombre}</strong>
+              <small>{row.descripcion || "Sin descripción"}</small>
+            </div>
+            <div className="mov-gridCell is-right is-strong ventas-money">{money(row.precio_anticipada)}</div>
+            <div className="mov-gridCell is-right is-strong ventas-money">{money(row.precio_puerta)}</div>
+            <div className="mov-gridCell is-center">
+              {row.stock == null ? (
+                <span className="ventas-pill neutral">Sin control</span>
+              ) : (
+                <span className={`ventas-pill ${Number(row.stock) === 0 ? "danger" : "success"}`}>{row.stock}</span>
+              )}
+            </div>
+            <div className="mov-gridCell">{Number(row.cantidad_usos || 0)} ventas · {Number(row.cantidad_campanias || 0)} campañas</div>
+            <div className="mov-gridCell is-center">
+              <span className={`ventas-pill ${yes(row.activo) ? "success" : "neutral"}`}>{yes(row.activo) ? "Activo" : "Inactivo"}</span>
+            </div>
+            <div className="mov-gridCell mov-gridCell--actions">
+              <div className="mov-actionsInline">
+                {writable ? (
+                  <>
+                    <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
+                    <ActionButton icon={yes(row.activo) ? faToggleOff : faToggleOn} title={yes(row.activo) ? "Desactivar" : "Activar"} onClick={() => changeState(row)} />
+                    <ActionButton icon={faTrashCan} title="Eliminar o archivar" tone="danger" onClick={() => setConfirm(row)} />
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
+      </GlobalDivTable>
+      <GlobalPagination
+        currentPage={Number(pagination.pagina || page)}
+        totalPages={Number(pagination.total_paginas || 1)}
+        totalRecords={Number(pagination.total || 0)}
+        from={Number(pagination.desde || ((Number(pagination.pagina || page) - 1) * 20 + (rows.length ? 1 : 0)))}
+        to={Number(pagination.hasta || Math.min(Number(pagination.total || 0), Number(pagination.pagina || page) * 20))}
+        loading={loading}
+        itemLabel="productos"
+        ariaLabel="Paginación de productos"
+        onPageChange={setPage}
+      />
       <ProductModal open={modal.open} initial={modal.row} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} />
       <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="eliminar" title="Eliminar producto" message="Si el producto ya fue utilizado no se borrará: quedará archivado para conservar el historial." details={confirm ? [{ label: "Producto", value: confirm.nombre }, { label: "Usos", value: confirm.cantidad_usos }] : []} onClose={() => setConfirm(null)} onConfirm={async () => { const result = await ventasApi.eliminarProducto({ id_producto: confirm.id_producto }); setConfirm(null); await load(); return { mensaje: result.mensaje }; }} />
       {feedback}
@@ -469,10 +525,74 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
   };
 
   return (
-    <ModulePage title="Configuración de ventas" description="Campañas disponibles para ventas manuales y para el menú del bot de WhatsApp." stats={summary} canCreate={writable} primaryActionLabel="Nueva campaña" onPrimaryAction={() => setModal({ open: true, row: null })}>
-      <div className="ventas-table-wrap"><table className="ventas-table"><thead><tr><th>Venta / campaña</th><th>Producto principal</th><th>Vigencia</th><th>WhatsApp</th><th>Ventas</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-        {loading ? <LoadingRows columns={7} /> : rows.length ? rows.map((row) => <tr key={row.id_campania}><td><strong>{row.nombre}</strong><small>{row.pregunta_persona || "Sin mensaje de identificación"}</small></td><td>{row.producto_principal_nombre || "—"}<small>{row.precio_anticipada != null ? `Ant. ${money(row.precio_anticipada)} · Puerta ${money(row.precio_puerta)}` : ""}</small></td><td>{row.fecha_inicio || "Sin inicio"}<small>hasta {row.fecha_fin || "sin fin"}</small></td><td><span className={`ventas-pill ${yes(row.disponible_bot) ? "whatsapp" : "neutral"}`}><FontAwesomeIcon icon={faCommentDots} /> {yes(row.disponible_bot) ? "Visible" : "Oculta"}</span></td><td>{Number(row.cantidad_ordenes || 0)}</td><td><span className={`ventas-pill ${yes(row.activo) ? "success" : "neutral"}`}>{yes(row.activo) ? "Activa" : "Inactiva"}</span></td><td><div className="ventas-actions">{writable && <><ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} /><ActionButton icon={yes(row.activo) ? faToggleOff : faToggleOn} title={yes(row.activo) ? "Desactivar" : "Activar"} onClick={() => changeState(row)} /><ActionButton icon={faTrashCan} title="Eliminar o archivar" tone="danger" onClick={() => setConfirm(row)} /></>}</div></td></tr>) : <tr><td colSpan="7"><Empty /></td></tr>}
-      </tbody></table></div>
+    <ModulePage className="ventas-page" title="Configuración de ventas" description="Campañas disponibles para ventas manuales y para el menú del bot de WhatsApp." stats={summary} canCreate={writable} primaryActionLabel="Nueva campaña" onPrimaryAction={() => setModal({ open: true, row: null })}>
+      <GlobalDivTable
+        className="ventas-global-table"
+        bodyClassName="entity-table-wrap"
+        gridClassName="ventas-grid ventas-grid--campaigns"
+        columns={[
+          "Venta / campaña",
+          "Producto principal",
+          { label: "Vigencia", align: "center" },
+          { label: "WhatsApp", align: "center" },
+          { label: "Ventas", align: "center" },
+          { label: "Estado", align: "center" },
+          { label: "Acciones", align: "center" },
+        ]}
+        loading={loading}
+        loadingLabel="Cargando campañas..."
+        skeletonActionColumn
+        ariaLabel="Configuración de ventas"
+        empty={!rows.length}
+      >
+        {!loading && !rows.length ? (
+          <div className="module-empty">
+            <FontAwesomeIcon icon={faClipboardList} />
+            <strong>Sin campañas para mostrar</strong>
+            <span>Creá una campaña para comenzar a registrar ventas.</span>
+          </div>
+        ) : null}
+        {rows.map((row) => (
+          <div
+            className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns"
+            role="row"
+            key={row.id_campania}
+          >
+            <div className="mov-gridCell entity-main-cell">
+              <strong>{row.nombre}</strong>
+              <small>{row.pregunta_persona || "Sin mensaje de identificación"}</small>
+            </div>
+            <div className="mov-gridCell entity-main-cell">
+              <strong>{row.producto_principal_nombre || "—"}</strong>
+              {row.precio_anticipada != null ? <small>Ant. {money(row.precio_anticipada)} · Puerta {money(row.precio_puerta)}</small> : null}
+            </div>
+            <div className="mov-gridCell is-center entity-main-cell">
+              <strong>{row.fecha_inicio || "Sin inicio"}</strong>
+              <small>hasta {row.fecha_fin || "sin fin"}</small>
+            </div>
+            <div className="mov-gridCell is-center">
+              <span className={`ventas-pill ${yes(row.disponible_bot) ? "whatsapp" : "neutral"}`}>
+                <FontAwesomeIcon icon={faCommentDots} /> {yes(row.disponible_bot) ? "Visible" : "Oculta"}
+              </span>
+            </div>
+            <div className="mov-gridCell is-center is-strong">{Number(row.cantidad_ordenes || 0)}</div>
+            <div className="mov-gridCell is-center">
+              <span className={`ventas-pill ${yes(row.activo) ? "success" : "neutral"}`}>{yes(row.activo) ? "Activa" : "Inactiva"}</span>
+            </div>
+            <div className="mov-gridCell mov-gridCell--actions">
+              <div className="mov-actionsInline">
+                {writable ? (
+                  <>
+                    <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
+                    <ActionButton icon={yes(row.activo) ? faToggleOff : faToggleOn} title={yes(row.activo) ? "Desactivar" : "Activar"} onClick={() => changeState(row)} />
+                    <ActionButton icon={faTrashCan} title="Eliminar o archivar" tone="danger" onClick={() => setConfirm(row)} />
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
+      </GlobalDivTable>
       <CampaignModal open={modal.open} initial={modal.row} products={products} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} />
       <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="eliminar" title="Eliminar campaña" message="Las campañas con ventas no se eliminan físicamente: se archivan para mantener la trazabilidad." details={confirm ? [{ label: "Campaña", value: confirm.nombre }, { label: "Ventas asociadas", value: confirm.cantidad_ordenes }] : []} onClose={() => setConfirm(null)} onConfirm={async () => { const result = await ventasApi.eliminarCampania({ id_campania: confirm.id_campania }); setConfirm(null); await load(); return { mensaje: result.mensaje }; }} />
       {feedback}
@@ -533,11 +653,93 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
   ];
 
   return (
-    <ModulePage title="Ventas registradas" description="Ventas manuales y del bot con stock, trazabilidad, retiro y asiento contable sincronizado." stats={summary} filters={filters} canCreate={writable} primaryActionLabel="Nueva venta" onPrimaryAction={() => setModal({ open: true, id: null })} secondaryActions={[{ key: "origen", label: origin === "bot_whatsapp" ? "Mostrando bot" : origin === "manual" ? "Mostrando manuales" : "Todos los orígenes", className: "mov-btn--ghost", onClick: () => setOrigin((current) => current === "" ? "manual" : current === "manual" ? "bot_whatsapp" : "") }]}>
-      <div className="ventas-table-wrap"><table className="ventas-table ventas-table--orders"><thead><tr><th>Venta</th><th>Persona</th><th>Medio</th><th>Total</th><th>Estado</th><th>Retiro</th><th>Origen</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>
-        {loading ? <LoadingRows columns={9} /> : rows.length ? rows.map((row) => <tr key={row.id_orden}><td><strong>{row.campania_nombre}</strong><small>{row.detalle_items || `${row.cantidad_items} conceptos`}</small></td><td><strong>{row.nombre_apellido || "VENTA EN PUERTA"}</strong><small>{row.dni ? `DNI ${row.dni}` : "Sin identificación"}</small></td><td>{row.medio_pago}</td><td><strong>{money(row.total)}</strong></td><td><span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span></td><td>{row.estado === "aprobada" ? <span className={`ventas-pill ${yes(row.retirado) ? "success" : "warning"}`}>{yes(row.retirado) ? "Retirado" : "Pendiente"}</span> : <span className="ventas-pill neutral">—</span>}</td><td><span className={`ventas-pill ${row.origen === "bot_whatsapp" ? "whatsapp" : "neutral"}`}>{row.origen === "bot_whatsapp" ? "WhatsApp" : row.origen === "importado" ? "Importado" : "Manual"}</span></td><td>{row.fecha_venta || String(row.aprobado_en || row.creado_en || "").slice(0, 10)}</td><td><div className="ventas-actions">{row.comprobante_url && <ActionButton icon={faEye} title="Ver comprobante" onClick={() => openPdf(row)} />}{writable && row.estado === "aprobada" && <ActionButton icon={yes(row.retirado) ? faRotateLeft : faCheckCircle} title={yes(row.retirado) ? "Quitar retiro" : "Marcar como retirado"} onClick={() => setRetreatConfirm(row)} />}{writable && <><ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, id: row.id_orden })} />{row.estado !== "cancelada" && <ActionButton icon={faTrashCan} title="Anular venta" tone="danger" onClick={() => setConfirm(row)} />}</>}</div></td></tr>) : <tr><td colSpan="9"><Empty>No hay ventas con estos filtros.</Empty></td></tr>}
-      </tbody></table></div>
-      <Pagination page={Number(pagination.pagina || page)} totalPages={Number(pagination.total_paginas || 1)} onChange={setPage} />
+    <ModulePage className="ventas-page" title="Ventas registradas" description="Ventas manuales y del bot con stock, trazabilidad, retiro y asiento contable sincronizado." stats={summary} filters={filters} canCreate={writable} primaryActionLabel="Nueva venta" onPrimaryAction={() => setModal({ open: true, id: null })} secondaryActions={[{ key: "origen", label: origin === "bot_whatsapp" ? "Mostrando bot" : origin === "manual" ? "Mostrando manuales" : "Todos los orígenes", className: "mov-btn--ghost", onClick: () => setOrigin((current) => current === "" ? "manual" : current === "manual" ? "bot_whatsapp" : "") }]}>
+      <GlobalDivTable
+        className="ventas-global-table has-bottom-pagination"
+        bodyClassName="entity-table-wrap"
+        gridClassName="ventas-grid ventas-grid--orders"
+        columns={[
+          "Venta",
+          "Persona",
+          "Medio",
+          { label: "Total", align: "right" },
+          { label: "Estado", align: "center" },
+          { label: "Retiro", align: "center" },
+          { label: "Origen", align: "center" },
+          { label: "Fecha", align: "center" },
+          { label: "Acciones", align: "center" },
+        ]}
+        loading={loading}
+        loadingLabel="Cargando ventas..."
+        skeletonActionColumn
+        ariaLabel="Ventas registradas"
+        empty={!rows.length}
+      >
+        {!loading && !rows.length ? (
+          <div className="module-empty">
+            <FontAwesomeIcon icon={faReceipt} />
+            <strong>Sin ventas para mostrar</strong>
+            <span>No hay ventas que coincidan con los filtros seleccionados.</span>
+          </div>
+        ) : null}
+        {rows.map((row) => (
+          <div
+            className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--orders"
+            role="row"
+            key={row.id_orden}
+          >
+            <div className="mov-gridCell entity-main-cell">
+              <strong>{row.campania_nombre}</strong>
+              <small>{row.detalle_items || `${row.cantidad_items} conceptos`}</small>
+            </div>
+            <div className="mov-gridCell entity-main-cell">
+              <strong>{row.nombre_apellido || "VENTA EN PUERTA"}</strong>
+              <small>{row.dni ? `DNI ${row.dni}` : "Sin identificación"}</small>
+            </div>
+            <div className="mov-gridCell">{row.medio_pago}</div>
+            <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
+            <div className="mov-gridCell is-center"><span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span></div>
+            <div className="mov-gridCell is-center">
+              {row.estado === "aprobada" ? (
+                <span className={`ventas-pill ${yes(row.retirado) ? "success" : "warning"}`}>{yes(row.retirado) ? "Retirado" : "Pendiente"}</span>
+              ) : (
+                <span className="ventas-pill neutral">—</span>
+              )}
+            </div>
+            <div className="mov-gridCell is-center">
+              <span className={`ventas-pill ${row.origen === "bot_whatsapp" ? "whatsapp" : "neutral"}`}>
+                {row.origen === "bot_whatsapp" ? "WhatsApp" : row.origen === "importado" ? "Importado" : "Manual"}
+              </span>
+            </div>
+            <div className="mov-gridCell is-center">{row.fecha_venta || String(row.aprobado_en || row.creado_en || "").slice(0, 10)}</div>
+            <div className="mov-gridCell mov-gridCell--actions">
+              <div className="mov-actionsInline">
+                {row.comprobante_url ? <ActionButton icon={faEye} title="Ver comprobante" onClick={() => openPdf(row)} /> : null}
+                {writable && row.estado === "aprobada" ? (
+                  <ActionButton icon={yes(row.retirado) ? faRotateLeft : faCheckCircle} title={yes(row.retirado) ? "Quitar retiro" : "Marcar como retirado"} onClick={() => setRetreatConfirm(row)} />
+                ) : null}
+                {writable ? (
+                  <>
+                    <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, id: row.id_orden })} />
+                    {row.estado !== "cancelada" ? <ActionButton icon={faTrashCan} title="Anular venta" tone="danger" onClick={() => setConfirm(row)} /> : null}
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ))}
+      </GlobalDivTable>
+      <GlobalPagination
+        currentPage={Number(pagination.pagina || page)}
+        totalPages={Number(pagination.total_paginas || 1)}
+        totalRecords={Number(pagination.total || 0)}
+        from={Number(pagination.desde || ((Number(pagination.pagina || page) - 1) * 20 + (rows.length ? 1 : 0)))}
+        to={Number(pagination.hasta || Math.min(Number(pagination.total || 0), Number(pagination.pagina || page) * 20))}
+        loading={loading}
+        itemLabel="ventas"
+        ariaLabel="Paginación de ventas registradas"
+        onPageChange={setPage}
+      />
       <OrderModal open={modal.open} initialId={modal.id} catalogs={catalogs} saving={saving} onClose={() => setModal({ open: false, id: null })} onSave={save} onFeedback={showFeedback} />
       <ModalEliminarGlobal
         open={Boolean(retreatConfirm)}
@@ -690,7 +892,7 @@ function PlanillasSection({ summary, feedback, showFeedback }) {
   };
 
   return (
-    <ModulePage title="Planillas de ventas" description="Planillas A4 para cursos/divisiones o docentes, con información actual de la venta seleccionada." stats={summary} canCreate={false} secondaryActions={[{ key: "imprimir", label: "Generar planilla", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || !campaign }]}>
+    <ModulePage className="ventas-page" title="Planillas de ventas" description="Planillas A4 para cursos/divisiones o docentes, con información actual de la venta seleccionada." stats={summary} canCreate={false} secondaryActions={[{ key: "imprimir", label: "Generar planilla", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || !campaign }]}>
       <div className="ventas-planillas-panel">
         <div className="ventas-planillas-grid">
           <label className="ventas-field"><span>Venta / campaña</span><select value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">Seleccionar...</option>{(options.campanias || []).map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva)"}</option>)}</select></label>

@@ -10,6 +10,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../Global/ModulePage";
 import GlobalDivTable from "../Global/GlobalDivTable";
+import GlobalPagination from "../Global/GlobalPagination";
 import CrudModal from "../Global/Modales/CrudModal";
 import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
@@ -174,8 +175,20 @@ export default function Cuotas() {
 
   const { items, catalogos, paginacion, loading, error, cargar } = useCuotas(filtros);
 
-  const totalPages = Number(paginacion?.total_paginas || 0);
   const totalFiltered = Number(paginacion?.total || 0);
+  const remotePage = Number(paginacion?.pagina || pagina);
+  const remotePageSize = Number(paginacion?.por_pagina || PAGE_SIZE);
+  const totalPages = Number(
+    paginacion?.total_paginas ||
+      (totalFiltered ? Math.ceil(totalFiltered / remotePageSize) : 0),
+  );
+  const recordFrom = Number(
+    paginacion?.desde ||
+      (totalFiltered ? (remotePage - 1) * remotePageSize + 1 : 0),
+  );
+  const recordTo = Number(
+    paginacion?.hasta || Math.min(remotePage * remotePageSize, totalFiltered),
+  );
 
   const showFeedback = useCallback((type, message) => setFeedback({ type, message }), []);
 
@@ -204,6 +217,13 @@ export default function Cuotas() {
   useEffect(() => {
     loadTotals();
   }, [loadTotals]);
+
+  useEffect(() => {
+    if (loading || pagina <= 1) return;
+    if (totalPages === 0 || pagina > totalPages) {
+      setPagina(Math.max(1, totalPages));
+    }
+  }, [loading, pagina, totalPages]);
 
   const refreshData = useCallback(async () => {
     await Promise.all([cargar(), loadTotals()]);
@@ -484,7 +504,7 @@ export default function Cuotas() {
   const filters = [
     { type: "tabs", label: "Estado", value: estado, options: tabs, onChange: changeFilter(setEstado) },
     { type: "search", label: "Buscar", placeholder: "Alumno, DNI o domicilio...", value: buscar, onChange: changeFilter(setBuscar), className: "cuotas-search-filter" },
-    { type: "select", label: "Año aplicado", value: anio, includeEmptyOption: false, options: (catalogos.anios || [CURRENT_YEAR]).map((value) => ({ value: String(value), label: String(value) })), onChange: changeFilter(setAnio), className: "cuotas-year-filter" },
+    { type: "select", label: "Año", value: anio, includeEmptyOption: false, options: (catalogos.anios || [CURRENT_YEAR]).map((value) => ({ value: String(value), label: String(value) })), onChange: changeFilter(setAnio), className: "cuotas-year-filter" },
     { type: "select", label: "Período", value: mes, includeEmptyOption: false, options: (catalogos.meses || []).map((item) => ({ value: String(item.id_mes), label: item.nombre })), onChange: changeFilter(setMes), className: "cuotas-month-filter" },
     { type: "select", label: "Categoría", value: categoria, placeholder: "Todas", options: (catalogos.categorias || []).map((item) => ({ value: String(item.id_categoria), label: item.nombre })), onChange: changeFilter(setCategoria), className: "cuotas-category-filter" },
     { type: "select", label: "Año lectivo", value: anioLectivo, placeholder: "Todos", options: (catalogos.anios_lectivos || []).map((item) => ({ value: String(item.id_anio), label: item.nombre })), onChange: changeFilter(setAnioLectivo), className: "cuotas-school-year-filter" },
@@ -553,6 +573,8 @@ export default function Cuotas() {
         {error ? <div className="module-notice is-error">{error}</div> : null}
         <GlobalDivTable
           ariaLabel="Listado de cuotas"
+          className="cuotas-table has-bottom-pagination"
+          bodyClassName="entity-table-wrap cuotas-table__body"
           columns={columns}
           loading={loading}
           empty={!loading && items.length === 0}
@@ -614,9 +636,34 @@ export default function Cuotas() {
           )}
         </GlobalDivTable>
 
-        <div className={`cuotas-pagination cuotas-tableFooter-v2 ${totalPages <= 1 ? "is-single-page" : ""}`}>
-          <div className="cuotas-pagination__left">
-            <div className="cuotas-footerActions" aria-label="Acciones de cuotas">
+        <GlobalPagination
+          className="cuotas-tableFooter-v2"
+          currentPage={remotePage}
+          totalPages={totalPages}
+          totalRecords={totalFiltered}
+          from={recordFrom}
+          to={recordTo}
+          loading={loading}
+          itemLabel="registros"
+          ariaLabel="Paginación de cuotas"
+          onPageChange={setPagina}
+          showSummary={false}
+          leftContent={(
+            <div className="cuotas-footerActions" aria-label="Filtros y acciones de cuotas">
+              <label className="module-filter module-filter--select is-active cuotas-footerYear-filter">
+                <select
+                  className="module-filterControl"
+                  value={anio}
+                  onChange={(event) => changeFilter(setAnio)(event.target.value)}
+                  aria-label="Año"
+                >
+                  {(catalogos.anios || [CURRENT_YEAR]).map((value) => (
+                    <option key={value} value={String(value)}>{value}</option>
+                  ))}
+                </select>
+                <span className="module-floatingLabel">Año</span>
+              </label>
+
               <button
                 type="button"
                 className={`cuotas-footerAction cuotas-footerAction--cobrador ${collectorMode ? "is-active" : ""}`}
@@ -643,36 +690,8 @@ export default function Cuotas() {
                 className="cuotas-footerAction cuotas-footerAction--exportar"
               />
             </div>
-
-            {totalPages > 1 ? (
-              <span className="cuotas-pagination__summary">
-                Mostrando <strong>{paginacion?.desde || 0}</strong>–<strong>{paginacion?.hasta || 0}</strong> de <strong>{totalFiltered}</strong>
-              </span>
-            ) : null}
-          </div>
-
-          {totalPages > 1 ? (
-            <div className="cuotas-pagination__right">
-              <div className="cuotas-pagination__controls">
-                <button
-                  type="button"
-                  disabled={!paginacion?.tiene_anterior}
-                  onClick={() => setPagina((value) => Math.max(1, value - 1))}
-                >
-                  ‹
-                </button>
-                <button type="button" className="is-active">{paginacion?.pagina || pagina}</button>
-                <button
-                  type="button"
-                  disabled={!paginacion?.tiene_siguiente}
-                  onClick={() => setPagina((value) => value + 1)}
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+          )}
+        />
       </ModulePage>
 
       <ModalPagoCuota

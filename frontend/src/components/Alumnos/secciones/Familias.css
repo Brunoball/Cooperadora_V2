@@ -220,135 +220,238 @@
 }
 
 /* =========================================================
-   Modal de Familias — distribución y checklist institucional
+   Modal Nueva / Editar Familia — estética RH adaptada a la
+   paleta azul institucional de Cooperadora.
    ========================================================= */
-.familias-modal--form.entity-modal--wide {
-  width: min(940px, 100%);
+.familias-modal--form.entity-modal {
+  width: min(1080px, 100%);
 }
 
-.familias-modal__layout {
+.familias-modal--form .entity-modal__body {
+  padding: 14px 20px 18px;
+  background: linear-gradient(
+    180deg,
+    var(--surface-color) 0%,
+    color-mix(in srgb, var(--primary-50) 88%, var(--surface-color)) 100%
+  );
+}
+
+.familias-modal--form .entity-modal__footer {
+  padding-top: 12px;
+}
+
+.familias-modal__form {
+  gap: 0;
+}
+
+.familias-form-panel__body--details,
+.familias-form-panel__body--members {
   display: grid;
-  grid-template-columns: minmax(250px, .8fr) minmax(390px, 1.35fr);
-  align-items: stretch;
-  gap: 16px;
-}
-
-.familias-modal__data,
-.familias-members-panel {
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
-  border-radius: 15px;
-  background: #fff;
-  box-shadow: 0 12px 30px -28px rgb(15 23 42 / .45);
-}
-
-.familias-modal__data {
-  display: grid;
-  align-content: start;
   gap: 14px;
-  padding: 16px;
 }
 
-.familias-modal__data .familias-field--notes textarea {
-  min-height: 146px;
+.familias-form-panel__body--details .entity-floating-field:first-child {
+  max-width: 520px;
+}
+
+.familias-form-panel__body--details textarea {
+  min-height: 112px;
   resize: vertical;
 }
 
-.familias-members-panel {
-  gap: 0;
+.familias-form-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary-500) 22%, #fff);
+  border-radius: 12px;
+  color: var(--entity-modal-text, var(--text-secondary));
+  background: color-mix(in srgb, var(--primary-500) 6%, #fff);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.familias-form-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--primary-500);
+}
+
+/* ===== Pestaña integrantes: misma composición de RH ===== */
+.familias-form-panel__body--members {
+  height: clamp(340px, calc(100vh - 330px), 470px);
+  min-height: 0;
   overflow: hidden;
 }
 
-.familias-members-panel__head {
+.familias-members-layout {
+  height: 100%;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, .92fr);
-  align-items: center;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   gap: 14px;
-  padding: 14px 15px;
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
-  background: color-mix(in srgb, var(--gray-50) 72%, transparent);
 }
 
-.familias-members-panel__head > div strong {
-  color: var(--entity-modal-ink, #0f172a);
-  font-size: 13px;
+.familias-members-column {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--entity-modal-border, var(--border-color));
+  border-radius: 14px;
+  background: var(--surface-color);
+  box-shadow: 0 8px 24px -24px rgb(15 23 42 / 0.45);
+}
+
+.familias-members-column--current {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.familias-members-column__header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.familias-members-column__header > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.familias-members-column__header strong {
+  color: var(--entity-modal-ink, var(--text-primary));
+  font-size: 12px;
   font-weight: 680;
 }
 
-.familias-memberSearch {
+.familias-members-column__header span:not(.familias-members-count) {
+  color: var(--entity-modal-text, var(--text-secondary));
+  font-size: 10.5px;
+}
+
+.familias-members-count {
+  min-width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: var(--primary-600);
+  background: color-mix(in srgb, var(--primary-500) 10%, #fff);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.familias-modal__member-search {
   width: 100%;
   margin: 0;
 }
 
-.familias-memberSearch > input {
+.familias-modal__member-search input {
   min-height: 42px;
 }
 
-.familias-memberPicker-list {
-  gap: 8px;
-  max-height: 342px;
-  padding: 12px;
+.familias-modal__member-list--available,
+.familias-selected-members__list {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
-.familias-member-option {
-  min-height: 54px;
-  gap: 10px;
-  padding: 9px 11px;
-  border-color: color-mix(in srgb, var(--text-primary) 11%, transparent);
-  border-radius: 11px;
-  background: #fff;
+.familias-modal__member-list--available {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 8px;
 }
 
-.familias-member-option:hover {
-  border-color: color-mix(in srgb, var(--primary-500) 32%, var(--entity-modal-border, #dbe5f1));
-  background: color-mix(in srgb, var(--primary-500) 3.5%, #fff);
+.familias-modal__member {
+  width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 19px 34px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--entity-modal-border, var(--border-color));
+  border-radius: 12px;
+  background: var(--surface-color);
+  box-shadow: 0 4px 14px -13px rgb(15 23 42 / 0.38);
+  cursor: pointer;
+  transition:
+    border-color var(--entity-modal-transition, 160ms ease),
+    background var(--entity-modal-transition, 160ms ease),
+    box-shadow var(--entity-modal-transition, 160ms ease),
+    transform var(--entity-modal-transition, 160ms ease);
 }
 
-.familias-member-option.is-selected {
-  border-color: color-mix(in srgb, var(--primary-500) 48%, var(--entity-modal-border, #dbe5f1));
+.familias-modal__member:not(.is-disabled):hover {
+  border-color: color-mix(in srgb, var(--primary-500) 42%, #fff);
+  background: color-mix(in srgb, var(--primary-500) 4%, #fff);
+  transform: translateY(-1px);
+}
+
+.familias-modal__member.is-selected {
+  border-color: color-mix(in srgb, var(--primary-500) 48%, #fff);
   background: color-mix(in srgb, var(--primary-500) 7%, #fff);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-500) 6%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-500) 7%, transparent);
 }
 
-.familias-member-option > input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
+.familias-modal__member input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  flex: 0 0 18px;
-  display: grid;
-  place-items: center;
   margin: 0;
-  border: 1.5px solid color-mix(in srgb, var(--entity-modal-text) 38%, transparent);
-  border-radius: 5px;
-  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-content: center;
+  border: 1.5px solid var(--gray-400);
+  border-radius: 6px;
   background: #fff;
   cursor: pointer;
-  transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+  transition:
+    border-color var(--entity-modal-transition, 160ms ease),
+    background var(--entity-modal-transition, 160ms ease),
+    box-shadow var(--entity-modal-transition, 160ms ease);
 }
 
-.familias-member-option > input[type="checkbox"]::after {
-  content: "✓";
-  color: #fff;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1;
-  transform: scale(0);
-  transition: transform .12s ease;
+.familias-modal__member input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 5px;
+  margin-top: -2px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  opacity: 0;
+  transform: rotate(-45deg) scale(0.7);
+  transition:
+    opacity var(--entity-modal-transition, 160ms ease),
+    transform var(--entity-modal-transition, 160ms ease);
 }
 
-.familias-member-option > input[type="checkbox"]:checked {
+.familias-modal__member input[type="checkbox"]:checked {
   border-color: var(--primary-500);
   background: var(--primary-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 12%, transparent);
 }
 
-.familias-member-option > input[type="checkbox"]:checked::after {
-  transform: scale(1);
+.familias-modal__member input[type="checkbox"]:checked::before {
+  opacity: 1;
+  transform: rotate(-45deg) scale(1);
 }
 
-.familias-member-option > input[type="checkbox"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-500) 15%, transparent);
+.familias-modal__member input[type="checkbox"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary-500) 45%, #fff);
+  outline-offset: 2px;
 }
 
 .familias-member-avatar {
@@ -357,53 +460,217 @@
   flex: 0 0 34px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary-500) 22%, #fff);
+  border-radius: 50%;
   color: var(--primary-600);
-  background: color-mix(in srgb, var(--primary-500) 10%, #fff);
+  background: color-mix(in srgb, var(--primary-500) 12%, #fff);
   font-size: 12px;
   font-weight: 800;
+  text-transform: uppercase;
 }
 
-.familias-member-option__identity strong {
-  color: var(--entity-modal-ink, #0f172a);
+.familias-modal__member-copy,
+.familias-selected-member__identity {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.familias-modal__member-copy strong,
+.familias-modal__member-copy small,
+.familias-selected-member__identity strong,
+.familias-selected-member__identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.familias-modal__member-copy strong,
+.familias-selected-member__identity strong {
+  color: var(--entity-modal-ink, var(--text-primary));
   font-size: 12px;
   font-weight: 680;
 }
 
-.familias-member-option__identity small {
-  color: var(--entity-modal-text, #64748b);
+.familias-modal__member-copy small,
+.familias-selected-member__identity small {
+  color: var(--entity-modal-text, var(--text-secondary));
   font-size: 10.5px;
+  font-weight: 520;
+}
+
+.familias-modal__member.is-selected .familias-modal__member-copy strong {
+  color: var(--primary-600);
+}
+
+.familias-modal__member.is-disabled {
+  cursor: not-allowed;
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--gray-300) 78%, #fff);
+  background: color-mix(in srgb, var(--gray-100) 82%, #fff);
+  box-shadow: none;
+  opacity: 0.72;
+}
+
+.familias-modal__member.is-disabled:hover {
+  transform: none;
+}
+
+.familias-modal__member.is-disabled input[type="checkbox"] {
+  border-color: var(--gray-300);
+  background: var(--gray-100);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.familias-modal__member.is-disabled .familias-member-avatar {
+  color: var(--gray-500);
+  border-color: var(--gray-200);
+  background: var(--gray-100);
+}
+
+.familias-modal__member.is-disabled .familias-modal__member-copy strong {
+  color: var(--gray-600);
+}
+
+.familias-add-members-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--primary-500);
+  border-radius: 10px;
+  color: #fff;
+  background: var(--primary-500);
+  font-size: 10.5px;
+  font-weight: 750;
+  cursor: pointer;
+  transition:
+    background var(--entity-modal-transition, 160ms ease),
+    border-color var(--entity-modal-transition, 160ms ease),
+    opacity var(--entity-modal-transition, 160ms ease),
+    transform var(--entity-modal-transition, 160ms ease);
+}
+
+.familias-add-members-button:not(:disabled):hover {
+  border-color: var(--primary-600);
+  background: var(--primary-600);
+  transform: translateY(-1px);
+}
+
+.familias-add-members-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.familias-selected-members__list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.familias-selected-member {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--entity-modal-border, var(--border-color));
+  border-radius: 11px;
+  background: var(--surface-color);
+}
+
+.familias-selected-member__top {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.familias-member-remove {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--danger-500, #dc2626) 30%, #fff);
+  border-radius: 9px;
+  color: var(--danger-500, #dc2626);
+  background: color-mix(in srgb, var(--danger-500, #dc2626) 5%, #fff);
+  font-size: 11px;
+  cursor: pointer;
+  transition:
+    border-color var(--entity-modal-transition, 160ms ease),
+    background var(--entity-modal-transition, 160ms ease),
+    transform var(--entity-modal-transition, 160ms ease);
+}
+
+.familias-member-remove:hover {
+  border-color: color-mix(in srgb, var(--danger-500, #dc2626) 48%, #fff);
+  background: color-mix(in srgb, var(--danger-500, #dc2626) 9%, #fff);
+  transform: translateY(-1px);
 }
 
 .familias-modal__empty {
-  display: grid;
-  gap: 4px;
-  padding: 22px 16px;
-  color: var(--entity-modal-text, #64748b);
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 20px 14px;
+  color: var(--entity-modal-text, var(--text-secondary));
   text-align: center;
 }
 
 .familias-modal__empty strong {
-  color: var(--entity-modal-ink, #0f172a);
-  font-size: 13px;
+  color: var(--entity-modal-ink, var(--text-primary));
+  font-size: 12px;
 }
 
 .familias-modal__empty span {
+  max-width: 310px;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
-@media (max-width: 820px) {
-  .familias-modal__layout {
+.familias-modal--form .entity-modal__body:has(.familias-members-layout) {
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .familias-form-panel__body--members {
+    height: auto;
+    overflow: visible;
+  }
+
+  .familias-members-layout {
+    height: auto;
     grid-template-columns: 1fr;
   }
 
-  .familias-members-panel__head {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+  .familias-modal__member-list--available,
+  .familias-selected-members__list {
+    max-height: 270px;
   }
 
-  .familias-memberPicker-list {
-    max-height: 300px;
+  .familias-modal--form .entity-modal__body:has(.familias-members-layout) {
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .familias-modal--form .entity-modal__body {
+    padding: 10px 13px 14px;
+  }
+
+  .familias-form-note {
+    font-size: 10.5px;
+  }
+
+  .familias-members-column {
+    padding: 10px;
   }
 }

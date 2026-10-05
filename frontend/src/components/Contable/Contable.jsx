@@ -24,6 +24,7 @@ import {
   useCompactModuleActions,
 } from "../Global/ModulePage";
 import GlobalDivTable from "../Global/GlobalDivTable";
+import GlobalPagination from "../Global/GlobalPagination";
 import CrudModal from "../Global/Modales/CrudModal";
 import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
@@ -66,23 +67,6 @@ const MONTHS = [
   "NOVIEMBRE",
   "DICIEMBRE",
 ];
-
-function paginationItems(currentPage, totalPages) {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
-  }
-
-  const items = [1];
-  if (currentPage > 4) items.push("ellipsis-left");
-
-  const from = Math.max(2, currentPage - 1);
-  const to = Math.min(totalPages - 1, currentPage + 1);
-  for (let page = from; page <= to; page += 1) items.push(page);
-
-  if (currentPage < totalPages - 3) items.push("ellipsis-right");
-  items.push(totalPages);
-  return items;
-}
 
 const money = (value) =>
   new Intl.NumberFormat("es-AR", {
@@ -934,10 +918,6 @@ export default function ContableModule({ view = "summary" }) {
   const totalPages = totalRecords
     ? Math.ceil(totalRecords / PAGE_SIZE)
     : 0;
-  const pageOptions = useMemo(
-    () => paginationItems(page, totalPages),
-    [page, totalPages],
-  );
   const paginatedItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return (data.items || []).slice(start, start + PAGE_SIZE);
@@ -1363,80 +1343,18 @@ export default function ContableModule({ view = "summary" }) {
             </GlobalDivTable>
 
             {totalRecords > 0 || compactActions ? (
-              <nav
-                className="global-pagination"
-                aria-label={
-                  view === "income"
-                    ? "Paginación de ingresos"
-                    : "Paginación de egresos"
-                }
-              >
-                <p className="global-pagination__summary">
-                  {totalRecords > 0 ? (
-                    <>
-                      Mostrando <strong>{firstVisibleRecord}</strong>–
-                      <strong>{lastVisibleRecord}</strong> de{" "}
-                      <strong>{totalRecords}</strong> registros
-                    </>
-                  ) : (
-                    <>
-                      <strong>0</strong> registros
-                    </>
-                  )}
-                </p>
-
-                <div className="global-pagination__right">
-                  {totalRecords > 0 ? (
-                    <div className="global-pagination__controls">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPage((current) => Math.max(1, current - 1))
-                        }
-                        disabled={loading || page <= 1}
-                      >
-                        Anterior
-                      </button>
-
-                      {pageOptions.map((item) =>
-                        typeof item === "number" ? (
-                          <button
-                            type="button"
-                            key={item}
-                            className={item === page ? "is-active" : ""}
-                            aria-current={item === page ? "page" : undefined}
-                            onClick={() => setPage(item)}
-                            disabled={loading}
-                          >
-                            {item}
-                          </button>
-                        ) : (
-                          <span
-                            className="global-pagination__ellipsis"
-                            key={item}
-                            aria-hidden="true"
-                          >
-                            …
-                          </span>
-                        ),
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPage((current) =>
-                            Math.min(totalPages, current + 1),
-                          )
-                        }
-                        disabled={
-                          loading || totalPages === 0 || page >= totalPages
-                        }
-                      >
-                        Siguiente
-                      </button>
-                    </div>
-                  ) : null}
-
+              <GlobalPagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalRecords={totalRecords}
+                from={firstVisibleRecord}
+                to={lastVisibleRecord}
+                loading={loading}
+                itemLabel="registros"
+                ariaLabel={view === "income" ? "Paginación de ingresos" : "Paginación de egresos"}
+                onPageChange={setPage}
+                showWhenEmpty={compactActions}
+                rightContent={(
                   <div className="contable-lower-actions">
                     {compactActions ? (
                       <BotonExportarGlobal
@@ -1456,14 +1374,12 @@ export default function ContableModule({ view = "summary" }) {
                         onClick={openMovement}
                       >
                         <FontAwesomeIcon icon={faPlus} />
-                        {view === "income"
-                          ? "Registrar ingreso"
-                          : "Registrar egreso"}
+                        {view === "income" ? "Registrar ingreso" : "Registrar egreso"}
                       </button>
                     ) : null}
                   </div>
-                </div>
-              </nav>
+                )}
+              />
             ) : null}
           </div>
         )}

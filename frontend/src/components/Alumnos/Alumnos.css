@@ -1339,15 +1339,15 @@
    * Se conserva el scroll dentro del cuerpo de la tabla.
    */
   .socios-page .module-card .socios-table > .global-divTable__body {
-    height: calc(100dvh - 288px);
-    max-height: calc(100dvh - 288px);
+    height: calc(100vh - 288px);
+    max-height: calc(100vh - 288px);
   }
 
   .alumnos-tableFooter.is-single-page {
     display: grid;
   }
 
-  .alumnos-tableFooter .socios-pagination__left {
+  .alumnos-tableFooter .global-pagination__left {
     justify-content: flex-start;
     gap: 12px;
   }
@@ -1356,7 +1356,7 @@
     display: flex;
   }
 
-  .alumnos-tableFooter .socios-pagination__summary {
+  .alumnos-tableFooter .global-pagination__summary {
     margin-left: auto;
   }
 }

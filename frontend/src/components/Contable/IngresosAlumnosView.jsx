@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMoneyBillTransfer, faPeopleGroup } from "@fortawesome/free-solid-svg-icons";
 import GlobalDivTable from "../Global/GlobalDivTable";
+import GlobalPagination from "../Global/GlobalPagination";
 import BotonExportarGlobal from "../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
 import SummaryCards from "../Global/SummaryCards";
@@ -27,18 +28,6 @@ function amountTone(value) {
   if (type === "DESCUENTO_FAMILIAR") return "is-family";
   if (type === "MONTO_PERSONALIZADO") return "is-custom";
   return "is-period";
-}
-
-function paginationItems(currentPage, totalPages) {
-  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
-  const items = [1];
-  if (currentPage > 4) items.push("ellipsis-left");
-  const from = Math.max(2, currentPage - 1);
-  const to = Math.min(totalPages - 1, currentPage + 1);
-  for (let page = from; page <= to; page += 1) items.push(page);
-  if (currentPage < totalPages - 3) items.push("ellipsis-right");
-  items.push(totalPages);
-  return items;
 }
 
 function AmountCell({ item }) {
@@ -186,43 +175,29 @@ export default function IngresosAlumnosView({
         ))}
       </GlobalDivTable>
 
-      <footer className="global-pagination ct-student-pagination" aria-label="Paginación de pagos de alumnos">
-        {totalRecords ? (
-          <div className="ct-student-pagination__navigation">
-            <p className="global-pagination__summary">
-              Mostrando <b>{Number(pagination.desde || 0)}</b>–<b>{Number(pagination.hasta || 0)}</b> de <b>{totalRecords}</b> pagos
-            </p>
-            <div className="global-pagination__controls">
-              <button type="button" disabled={loading || currentPage <= 1} onClick={() => onPageChange(Math.max(1, currentPage - 1))}>Anterior</button>
-              {paginationItems(currentPage, totalPages).map((item) =>
-                typeof item === "number" ? (
-                  <button
-                    type="button"
-                    key={item}
-                    className={item === currentPage ? "is-active" : ""}
-                    aria-current={item === currentPage ? "page" : undefined}
-                    disabled={loading}
-                    onClick={() => onPageChange(item)}
-                  >
-                    {item}
-                  </button>
-                ) : (
-                  <span className="global-pagination__ellipsis" key={item}>…</span>
-                ),
-              )}
-              <button type="button" disabled={loading || currentPage >= totalPages} onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}>Siguiente</button>
-            </div>
+      <GlobalPagination
+        className="ct-student-pagination"
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalRecords={totalRecords}
+        from={Number(pagination.desde || 0)}
+        to={Number(pagination.hasta || 0)}
+        loading={loading}
+        itemLabel="pagos"
+        ariaLabel="Paginación de pagos de alumnos"
+        onPageChange={onPageChange}
+        showSummary={totalRecords > 0}
+        rightContent={(
+          <div className="global-tableActions">
+            <BotonExportarGlobal
+              label="Exportar"
+              className="mov-btn--compact"
+              onClick={() => setExportOpen(true)}
+              disabled={loading || totalRecords <= 0}
+            />
           </div>
-        ) : <span />}
-        <div className="global-tableActions">
-          <BotonExportarGlobal
-            label="Exportar"
-            className="mov-btn--compact"
-            onClick={() => setExportOpen(true)}
-            disabled={loading || totalRecords <= 0}
-          />
-        </div>
-      </footer>
+        )}
+      />
 
       <ModalExportarGlobal
         open={exportOpen}

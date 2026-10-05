@@ -344,9 +344,22 @@
   white-space: nowrap;
 }
 
-.cuotas-page .module-card .cuotas-table > .entity-table-wrap {
-  min-height: 240px;
-  max-height: min(56vh, 610px, calc(100vh - 360px));
+/* La tabla de Cuotas mantiene el encabezado fijo y desplaza solo el cuerpo.
+   Antes este selector apuntaba a una clase que la tabla actual ya no recibía,
+   por eso la lista crecía sin generar scroll interno. */
+.cuotas-page .module-card .cuotas-table {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.cuotas-page .module-card .cuotas-table > .mov-tableWrap {
+  min-height: 0;
+  height: calc(100vh - 360px);
+  max-height: calc(100vh - 360px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .cuotas-table-footer {
@@ -360,38 +373,36 @@
 }
 
 .cuotas-pagination {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px 18px;
-  min-height: 60px;
-  border-top: 1px solid #e6edf5;
-  padding: 9px 15px;
-  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
-}
-
-.cuotas-pagination__left,
-.cuotas-pagination__right {
-  min-width: 0;
+  min-height: 54px;
   display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+  border-top: 1px solid var(--mov-border);
+  padding: 10px 14px;
+  background: transparent;
 }
 
 .cuotas-pagination__left {
-  grid-column: 1;
-  justify-self: start;
-  width: 100%;
-  gap: 10px 14px;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 8px 12px;
+  min-width: 0;
 }
 
 .cuotas-pagination__right {
-  grid-column: 2;
-  justify-self: end;
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
-/* Chips de filtros activos: mismo patrón visual que Socios. */
 .cuotas-activeFilters {
   display: flex;
   align-items: center;
@@ -468,8 +479,10 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
-  color: #64748b;
-  font-size: 11px;
+  position: relative;
+  top: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -533,15 +546,15 @@
 }
 
 .cuotas-pagination__controls button {
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0 9px;
-  border: 1px solid #dbe3ef;
-  border-radius: 7px;
-  color: #475569;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  color: var(--text-secondary);
   background: #fff;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 750;
   cursor: pointer;
   transition:
     border-color 0.18s ease,
@@ -1232,12 +1245,11 @@
   }
 
   .cuotas-pagination {
-    grid-template-columns: 1fr;
     align-items: stretch;
+    flex-direction: column;
   }
 
   .cuotas-pagination__left {
-    grid-column: 1;
     align-items: center;
     flex-direction: row;
     flex-wrap: nowrap;
@@ -1246,8 +1258,8 @@
   }
 
   .cuotas-pagination__right {
-    grid-column: 1;
-    justify-self: start;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .cuotas-activeFilters {
@@ -1269,9 +1281,10 @@
     padding-bottom: 2px;
   }
 
-  .cuotas-page .module-card .cuotas-table > .entity-table-wrap {
-    min-height: 220px;
-    max-height: min(48vh, 520px, calc(100vh - 470px));
+  .cuotas-page .module-card .cuotas-table > .mov-tableWrap {
+    min-height: 0;
+    height: calc(100vh - 470px);
+    max-height: calc(100vh - 470px);
   }
 
   .cuotas-table-footer {
@@ -2049,7 +2062,7 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
 
 /* Skeleton amplio: >1500px mantiene las 24 filas con la altura normal global. */
 @media (min-width: 1501px) {
-  .cuotas-page .module-card .cuotas-table.is-loading > .entity-table-wrap {
+  .cuotas-page .module-card .cuotas-table.is-loading > .mov-tableWrap {
     height: auto;
     min-height: calc(24 * 67px);
     max-height: none;
@@ -2206,7 +2219,7 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
 
 /* Footer espejo de Alumnos. Fuera del monitor compacto no agrega altura. */
 .cuotas-tableFooter-v2.is-single-page {
-  display: none;
+  display: flex;
 }
 
 .cuotas-footerActions {
@@ -2288,10 +2301,58 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
   color: var(--success-700);
 }
 
+/* En el footer compacto, Exportar debe medir exactamente lo mismo que
+   Cobrador e Imprimir. Esta regla gana sobre el tamaño global de Excel. */
+.cuotas-footerActions
+  .cuotas-footerAction--exportar.global-exportHistorial-trigger.mov-btn.mov-btn--excel {
+  width: auto;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cuotas-footerActions
+  .cuotas-footerAction--exportar.global-exportHistorial-trigger.mov-btn.mov-btn--excel svg {
+  font-size: 12px;
+}
+
 .cuotas-footerAction--exportar.global-exportHistorial-trigger:hover:not(:disabled) {
   border-color: var(--success-300);
   background: var(--success-100);
   color: var(--success-700);
+}
+
+
+/* Select Año compacto que acompaña a las acciones debajo de la tabla. */
+.cuotas-footerYear-filter {
+  display: none;
+  flex: 0 0 92px;
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
+  height: 32px;
+}
+
+.cuotas-footerYear-filter .module-filterControl {
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.cuotas-footerYear-filter .module-floatingLabel {
+  left: 10px;
+  margin-left: -4px;
+  padding: 0 4px;
+  font-size: 10px;
 }
 
 /* Igual que Alumnos: entre 1021 y 1499 las acciones bajan de la cabecera. */
@@ -2302,20 +2363,29 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
     display: none !important;
   }
 
+  /* Igual que las acciones: Año deja la cabecera y baja al pie de la tabla. */
+  .cuotas-page .cuotas-head-filters > .cuotas-year-filter {
+    display: none !important;
+  }
+
   .cuotas-tableFooter-v2.is-single-page {
-    display: grid;
+    display: flex;
   }
 
   .cuotas-footerActions {
     display: flex;
   }
 
-  .cuotas-tableFooter-v2 .cuotas-pagination__left {
+  .cuotas-footerYear-filter {
+    display: block;
+  }
+
+  .cuotas-tableFooter-v2 .global-pagination__left {
     justify-content: flex-start;
     gap: 12px;
   }
 
-  .cuotas-tableFooter-v2 .cuotas-pagination__summary {
+  .cuotas-tableFooter-v2 .global-pagination__summary {
     margin-left: auto;
   }
 }
@@ -2498,4 +2568,68 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
     min-width: 0;
     max-width: none;
   }
+}
+
+/* =========================================================
+   CUOTAS · AÑO COMPACTO EN FOOTER DE MONITOR ANGOSTO
+   El select que baja debajo de la tabla debe igualar los 32px
+   de Cobrador / Imprimir / Exportar, sin heredar los 44px globales.
+   ========================================================= */
+@media (min-width: 1021px) and (max-width: 1499px) {
+  .cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions
+    .module-filter.cuotas-footerYear-filter {
+    display: flex !important;
+    align-items: center;
+    flex: 0 0 92px;
+    width: 92px;
+    min-width: 92px;
+    max-width: 92px;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+  }
+
+  .cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions
+    .module-filter.cuotas-footerYear-filter > .module-filterControl {
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0 9px !important;
+    border-radius: 7px;
+    font-size: 10.5px;
+    line-height: 30px;
+  }
+
+  .cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions
+    .module-filter.cuotas-footerYear-filter > .module-floatingLabel {
+    left: 9px;
+    margin-left: -3px;
+    padding: 0 3px;
+    font-size: 9px;
+    line-height: 1;
+  }
+}
+
+/* =========================================================
+   CUOTAS · IMPORTE ALINEADO A LA DERECHA
+   Header y contenido comparten el mismo borde visual derecho.
+   ========================================================= */
+.cuotas-grid-v2.mov-gridTable--head > .mov-gridCell--head:nth-child(6) {
+  justify-content: flex-end !important;
+  text-align: right !important;
+}
+
+.cuotas-grid-v2.mov-gridTable--row > .cuotas-v2-amount,
+.cuotas-grid-v2.mov-gridTable--row > .mov-gridCell:nth-child(6) {
+  width: 100%;
+  justify-content: end !important;
+  justify-items: end !important;
+  text-align: right !important;
+}
+
+.cuotas-grid-v2.mov-gridTable--row > .cuotas-v2-amount > * {
+  margin-left: auto;
+  text-align: right;
 }

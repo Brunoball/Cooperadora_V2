@@ -2783,3 +2783,230 @@ html[data-theme="oscuro"] .cuotas-v2-payment-modal .cuotas-v2-footer-total {
   border-color: color-mix(in srgb, var(--balto-action) 28%, var(--mov-border));
   background: color-mix(in srgb, var(--balto-action) 10%, #111827);
 }
+
+/* =========================================================
+   COOPERADORA · MODAL DE PAGOS EN 3 PESTAÑAS
+   Divide el contenido largo sin alterar la lógica de cobro.
+   ========================================================= */
+.cuotas-v2-payment-modal .cuotas-v2-payment-tabs {
+  margin: 1px 0 0;
+  gap: 26px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tabs .entity-form-tab {
+  min-height: 42px;
+  font-size: 11.5px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tabs .entity-form-tab > svg {
+  width: 13px;
+  min-width: 13px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tab-panel {
+  min-height: 0;
+  animation: cuotasPaymentTabIn 150ms ease-out;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tab-panel > .cuotas-v2-section {
+  margin-top: 0;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-family-section {
+  border-top: 0;
+  padding-top: 12px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-family-empty {
+  min-height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  text-align: left;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-family-empty > svg {
+  width: 34px;
+  height: 34px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
+  border-radius: 12px;
+  color: var(--balto-action);
+  background: color-mix(in srgb, var(--primary-color) 7%, #fff);
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-family-empty > div {
+  display: grid;
+  gap: 3px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-family-empty strong {
+  color: var(--balto-ink);
+  font-size: 12px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-family-empty span {
+  color: var(--balto-text);
+  font-size: 10px;
+}
+
+@keyframes cuotasPaymentTabIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 620px) {
+  .cuotas-v2-payment-modal .cuotas-v2-payment-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    padding-bottom: 5px;
+  }
+
+  .cuotas-v2-payment-modal .cuotas-v2-payment-tabs .entity-form-tab {
+    min-width: 0;
+    gap: 5px;
+    padding-inline: 3px;
+    font-size: 10px;
+  }
+
+  .cuotas-v2-payment-modal .cuotas-v2-payment-tabs .entity-form-tab > span:not(.entity-form-tab__badge) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+html[data-theme="oscuro"] .cuotas-v2-payment-modal .cuotas-v2-family-empty > svg {
+  border-color: var(--mov-border);
+  background: color-mix(in srgb, var(--balto-action) 10%, #0f172a);
+}
+
+/* =========================================================
+   CUOTAS · MODAL DE PAGO REALMENTE DIVIDIDO EN 3 PESTAÑAS
+   Los datos operativos se muestran sólo dentro de Cuotas y
+   Anual/especiales. Familia queda como panel independiente.
+   ========================================================= */
+.cuotas-v2-payment-modal .cuotas-v2-payment-body {
+  gap: 10px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tabs {
+  margin-top: 0;
+  padding-inline: 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--mov-border) 86%, transparent);
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tab-panel {
+  min-height: 0;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-tab-panel > .cuotas-v2-section {
+  gap: 8px;
+  padding: 10px 11px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary-color) 3%, #fff);
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab input,
+.cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab select {
+  height: 36px;
+  min-height: 36px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-section--monthly .cuotas-v2-section__head,
+.cuotas-v2-payment-modal .cuotas-v2-section--special .cuotas-v2-section__head {
+  min-height: 28px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-section--monthly .cuotas-v2-period-grid {
+  grid-template-columns: repeat(5, minmax(104px, 1fr));
+  gap: 7px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-section--monthly .cuotas-v2-period__select {
+  min-height: 56px;
+  padding: 7px;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-section--monthly .cuotas-v2-free-amount {
+  padding-block: 7px;
+}
+
+@media (max-width: 900px) {
+  .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab > label:last-of-type,
+  .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab > .cuotas-v2-condone-note {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab {
+    grid-template-columns: 1fr;
+  }
+
+  .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab > label:last-of-type,
+  .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab > .cuotas-v2-condone-note {
+    grid-column: auto;
+  }
+}
+
+html[data-theme="oscuro"] .cuotas-v2-payment-modal .cuotas-v2-payment-toolbar--inside-tab {
+  border-color: var(--mov-border);
+  background: color-mix(in srgb, var(--balto-action) 6%, #111827);
+}
+
+
+/* =========================================================
+   CUOTAS · DATOS DEL ALUMNO EN EL HEADER DEL MODAL
+   Evita ocupar altura útil con una tarjeta dentro del body.
+   ========================================================= */
+.cuotas-v2-payment-modal.cuotas-modal--payment .entity-modal__header {
+  min-height: 66px;
+  padding-block: 12px;
+}
+
+.cuotas-v2-payment-modal.cuotas-modal--payment .entity-modal__header > div {
+  min-width: 0;
+}
+
+.cuotas-v2-payment-modal.cuotas-modal--payment .entity-modal__header p {
+  max-width: none;
+  margin-top: 4px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuotas-v2-payment-modal .cuotas-v2-payment-body {
+  gap: 9px;
+}
+
+@media (max-width: 720px) {
+  .cuotas-v2-payment-modal.cuotas-modal--payment .entity-modal__header {
+    align-items: flex-start;
+    min-height: 72px;
+  }
+
+  .cuotas-v2-payment-modal.cuotas-modal--payment .entity-modal__header p {
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.28;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}

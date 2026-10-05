@@ -87,17 +87,15 @@
   container-type: inline-size;
 }
 
-.contable-table .entity-table-wrap {
-  width: 100%;
-  max-width: 100%;
-  min-height: 0 !important;
-  max-height: calc(100vh - 300px) !important;
-  overflow-x: hidden !important;
-}
-
+/*
+ * CONTABILIDAD · ALTURA PROPIA DE TABLAS
+ * La altura del viewport de la tabla se controla únicamente desde este módulo.
+ * Así las tarjetas/filtros superiores no obligan a usar la altura global del resto
+ * del sistema y el scroll aparece dentro de la tabla sin modificar otras secciones.
+ */
 .contable-table {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -107,10 +105,48 @@
 
 .contable-table__data {
   min-height: 0;
+  flex: 0 0 auto;
 }
 
-.contable-table .global-divTable.has-bottom-pagination .entity-table-wrap {
-  max-height: calc(100vh - 282px) !important;
+/*
+ * CONTABILIDAD · VIEWPORT DE TABLAS
+ * Contabilidad controla su altura desde este archivo para no depender de
+ * ajustes de otros módulos. Las filas conservan el min-height global de 44px.
+ *
+ * Ingresos manuales / Egresos usan el tamaño NORMAL del sistema.
+ */
+.contable-table .entity-table-wrap,
+.contable-table .global-divTable__body {
+  width: 100%;
+  max-width: 100%;
+  height: calc(100vh - 240px) !important;
+  max-height: calc(100vh - 240px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.contable-table .global-divTable.has-bottom-pagination > .entity-table-wrap,
+.contable-table .global-divTable.has-bottom-pagination > .global-divTable__body {
+  height: calc(100vh - 272px) !important;
+  max-height: calc(100vh - 272px) !important;
+}
+
+/*
+ * Ingresos de alumnos tiene las tarjetas de resumen encima. Por eso usa un
+ * viewport propio más bajo, pero nunca un offset tan grande que colapse la
+ * tabla en monitores de 700–800px de alto.
+ */
+.contable-page .ct-student-table {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.contable-page .ct-student-table .entity-table-wrap,
+.contable-page .ct-student-table .global-divTable__body {
+  height: calc(100vh - 410px) !important;
+  max-height: calc(100vh - 410px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
 }
 
 .contable-grid {
@@ -1003,4 +1039,16 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .02em;
+}
+
+/* =========================================================
+   CONTABILIDAD · FILAS
+   Recupera el min-height estándar de las filas. La tabla se hace más baja
+   reduciendo su viewport (arriba), no comprimiendo el contenido de cada fila.
+   ========================================================= */
+.contable-table .mov-gridCell,
+.contable-table .mov-gridCell--head,
+.contable-page .ct-student-table .mov-gridCell,
+.contable-page .ct-student-table .mov-gridCell--head {
+  min-height: 44px;
 }
