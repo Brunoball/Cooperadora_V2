@@ -200,7 +200,7 @@ export function FloatingField({
   active = false,
   wide = false,
   textarea = false,
-  placeholderOnFloat = false,
+  placeholderOnFloat = true,
   className = "",
   children,
 }) {

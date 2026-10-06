@@ -1,5 +1,5 @@
 // src/components/BotPanel/modales/GaleriaModal.jsx
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useMemo } from "react";
 import { useModalEscapeStack } from "./useModalEscapeStack";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowUpRightFromSquare, faFilePdf, faImages, faXmark } from "@fortawesome/free-solid-svg-icons";
@@ -13,24 +13,7 @@ const getPdfPreviewUrl = (url) => {
 };
 
 const GaleriaModal = ({ open, inactive = false, onClose, items, onOpenItem, title }) => {
-  const boxRef = useRef(null);
-
   useModalEscapeStack(open, onClose);
-
-  useEffect(() => {
-    if (!open || inactive) return;
-
-    const onDown = (e) => {
-      const box = boxRef.current;
-      if (!box) return;
-      if (!box.contains(e.target)) onClose?.();
-    };
-
-    document.addEventListener("mousedown", onDown);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-    };
-  }, [open, inactive, onClose]);
 
   const arr = useMemo(() => (Array.isArray(items) ? items : []), [items]);
 
@@ -38,7 +21,7 @@ const GaleriaModal = ({ open, inactive = false, onClose, items, onOpenItem, titl
 
   return (
     <div className="wp-gal-backdrop" role="dialog" aria-label="Galería del chat" aria-hidden={inactive || undefined}>
-      <div className="wp-gal-modal" ref={boxRef}>
+      <div className="wp-gal-modal">
         <div className="wp-gal-top">
           <div className="wp-gal-heading">
             <span className="wp-gal-eyebrow">Archivos del chat</span>

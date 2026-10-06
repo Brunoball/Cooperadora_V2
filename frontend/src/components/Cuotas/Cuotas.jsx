@@ -647,6 +647,7 @@ export default function Cuotas() {
           itemLabel="registros"
           ariaLabel="Paginación de cuotas"
           onPageChange={setPagina}
+          compactPageItems
           showSummary={false}
           leftContent={(
             <div className="cuotas-footerActions" aria-label="Filtros y acciones de cuotas">

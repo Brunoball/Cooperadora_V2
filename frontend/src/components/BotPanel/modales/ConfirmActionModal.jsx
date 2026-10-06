@@ -19,7 +19,7 @@ const ConfirmActionModal = ({
   if (!open) return null;
 
   return (
-    <div className="bp-confirm-overlay" role="dialog" aria-modal="true" onMouseDown={onClose}>
+    <div className="bp-confirm-overlay" role="dialog" aria-modal="true">
       <div className={`bp-confirm-card ${danger ? "is-danger" : ""}`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="bp-confirm-head">
           <div className="bp-confirm-heading">

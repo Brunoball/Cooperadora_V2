@@ -88,14 +88,15 @@
 }
 
 /*
- * CONTABILIDAD · ALTURA PROPIA DE TABLAS
- * La altura del viewport de la tabla se controla únicamente desde este módulo.
- * Así las tarjetas/filtros superiores no obligan a usar la altura global del resto
- * del sistema y el scroll aparece dentro de la tabla sin modificar otras secciones.
+ * CONTABILIDAD · TABLA NORMAL
+ * Ingresos manuales y Egresos vuelven a usar la altura normal del sistema.
+ * El wrapper debe ocupar el espacio disponible: si queda en flex auto, la tabla
+ * se contrae a la cantidad de filas y la paginación queda flotando arriba,
+ * dejando un bloque vacío debajo (el problema que se veía en Ingresos).
  */
 .contable-table {
   display: flex;
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
@@ -105,30 +106,20 @@
 
 .contable-table__data {
   min-height: 0;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
 }
 
 /*
- * CONTABILIDAD · VIEWPORT DE TABLAS
- * Contabilidad controla su altura desde este archivo para no depender de
- * ajustes de otros módulos. Las filas conservan el min-height global de 44px.
- *
- * Ingresos manuales / Egresos usan el tamaño NORMAL del sistema.
+ * El cuerpo de Ingresos manuales / Egresos hereda el viewport global
+ * (calc(100vh - x)) definido para las tablas normales. Acá sólo mantenemos
+ * el scroll dentro de la tabla y evitamos cualquier desborde horizontal.
  */
 .contable-table .entity-table-wrap,
 .contable-table .global-divTable__body {
   width: 100%;
   max-width: 100%;
-  height: calc(100vh - 240px) !important;
-  max-height: calc(100vh - 240px) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
-}
-
-.contable-table .global-divTable.has-bottom-pagination > .entity-table-wrap,
-.contable-table .global-divTable.has-bottom-pagination > .global-divTable__body {
-  height: calc(100vh - 272px) !important;
-  max-height: calc(100vh - 272px) !important;
 }
 
 /*

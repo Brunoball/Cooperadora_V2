@@ -55,7 +55,9 @@ export default function ModalPerfil({
 
     const timer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") onClose?.();
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -63,7 +65,7 @@ export default function ModalPerfil({
       window.clearTimeout(timer);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const view = useMemo(() => {
     if (!usuario) return null;

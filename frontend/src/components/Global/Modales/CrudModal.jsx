@@ -51,6 +51,8 @@ export default function CrudModal({
   loading = false,
   loadingLabel = "Cargando...",
   loadingText = "",
+  showLoadingEffect = true,
+  showSavingEffect = true,
   submitLabel = "Guardar",
   danger = false,
   wide = false,
@@ -60,8 +62,6 @@ export default function CrudModal({
   cancelLabel = "Cancelar",
   footerStart = null,
   modalClassName = "",
-  closeOnBackdrop = true,
-  closeOnEscape = true,
   // Los formularios controlados deben normalizar el texto dentro de su
   // onChange. Mutar el valor del DOM durante input puede dejar el estado React
   // desactualizado y hacer que el contenido vuelva atrás en el próximo render.
@@ -75,10 +75,6 @@ export default function CrudModal({
     titleIdRef.current = `entity-modal-title-${modalTitleSequence}`;
   }
   const titleId = titleIdRef.current;
-  const onCloseRef = useRef(onClose);
-  const savingRef = useRef(saving);
-  onCloseRef.current = onClose;
-  savingRef.current = saving;
   useAnimatedModalSize(modalRef, open);
 
   useEffect(() => {
@@ -97,7 +93,8 @@ export default function CrudModal({
       event.stopPropagation();
       event.stopImmediatePropagation?.();
 
-      if (closeOnEscape && !savingRef.current) onCloseRef.current?.();
+      // Cierre global protegido: Escape no cierra modales.
+      // Solo se permite cerrar mediante acciones explícitas del propio modal.
     };
 
     document.body.style.overflow = "hidden";
@@ -107,14 +104,15 @@ export default function CrudModal({
       document.body.style.overflow = previous;
       document.removeEventListener("keydown", onKey, true);
     };
-  }, [open, closeOnEscape]);
+  }, [open]);
 
   if (!open) return null;
+  const visualLoading = loading && showLoadingEffect;
   return createPortal(
     <div
       className="entity-modal-overlay"
       role="presentation"
-      onMouseDown={() => closeOnBackdrop && !saving && onClose?.()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       <div
         ref={modalRef}
@@ -145,10 +143,10 @@ export default function CrudModal({
           onInputCapture={autoUppercaseInputs ? uppercaseModalTextField : undefined}
         >
           <div
-            className={`entity-modal__body ${loading ? "is-loading" : ""}`.trim()}
+            className={`entity-modal__body ${visualLoading ? "is-loading" : ""}`.trim()}
             aria-busy={loading}
           >
-            {loading ? (
+            {visualLoading ? (
               <GlobalLoader
                 variant="modal"
                 label={loadingLabel}
@@ -158,9 +156,9 @@ export default function CrudModal({
               children
             )}
           </div>
-          {(footerStart && !loading) || !hideCancel || !hideSubmit ? (
+          {(footerStart && !visualLoading) || !hideCancel || !hideSubmit ? (
             <footer className="entity-modal__footer">
-              {footerStart && !loading ? (
+              {footerStart && !visualLoading ? (
                 <div className="entity-modal__footer-start">{footerStart}</div>
               ) : null}
               {!hideCancel ? (
@@ -179,7 +177,7 @@ export default function CrudModal({
                   type="submit"
                   disabled={saving || loading || submitDisabled}
                 >
-                  {saving ? "Guardando..." : submitLabel}
+                  {saving && showSavingEffect ? "Guardando..." : submitLabel}
                 </button>
               ) : null}
             </footer>

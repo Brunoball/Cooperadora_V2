@@ -9,6 +9,145 @@
   min-width: 0;
 }
 
+/* En Ventas el título queda centrado verticalmente respecto de filtros y acciones. */
+.ventas-page .module-card__head,
+.ventas-page .module-card__headLeft {
+  align-items: center;
+}
+
+.ventas-page .module-titleBox {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.ventas-page .module-titleRow {
+  min-height: 44px;
+  align-items: center;
+}
+
+/* =========================================================
+   VENTAS · RESUMEN Y FILTROS
+   El resumen se integra al pie, en la misma fila de la paginación.
+   Los filtros mantienen anchos fijos y compactos.
+   ========================================================= */
+.ventas-pagination-stats {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ventas-pagination-stat {
+  min-width: 118px;
+  max-width: 150px;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid var(--mov-border, var(--border-color));
+  border-radius: 9px;
+  background: var(--surface-color, #fff);
+  box-shadow: none;
+}
+
+.ventas-pagination-stat__icon {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--balto-action);
+  background: color-mix(in srgb, var(--balto-action) 8%, #fff);
+  font-size: 10px;
+}
+
+.ventas-pagination-stat__content {
+  min-width: 0;
+  flex: 1;
+}
+
+.ventas-pagination-stat__label {
+  display: block;
+  overflow: hidden;
+  color: var(--mov-muted, var(--text-secondary));
+  font-size: 8.5px;
+  font-weight: 580;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ventas-pagination-stat__values {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.ventas-pagination-stat__values strong {
+  flex: 0 0 auto;
+  color: var(--balto-ink);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1;
+}
+
+.ventas-pagination-stat__values small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mov-muted, var(--text-secondary));
+  font-size: 8px;
+  font-weight: 450;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.ventas-tableFooter .global-pagination__controls button {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.ventas-tableFooter .global-pagination__ellipsis {
+  flex: 0 0 22px;
+}
+
+.ventas-page .module-headFilters {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ventas-page .module-filter--search {
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  flex: 0 0 220px;
+  margin-left: auto;
+}
+
+.ventas-page .module-filter--select {
+  width: 138px;
+  min-width: 138px;
+  max-width: 138px;
+  flex: 0 0 138px;
+}
+
 .ventas-global-table {
   min-width: 0;
   flex: 1;
@@ -76,6 +215,41 @@
   text-overflow: ellipsis;
 }
 
+/* Productos y campañas: la fila completa funciona como control de estado.
+   Los botones, inputs y links internos conservan su interacción propia. */
+.ventas-activatable-row {
+  cursor: pointer;
+  transition: background .14s ease, box-shadow .14s ease, opacity .14s ease;
+}
+
+.ventas-activatable-row:hover {
+  background: color-mix(in srgb, var(--balto-action) 4%, var(--surface-color, #fff));
+}
+
+.ventas-activatable-row:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--balto-action) 5%, var(--surface-color, #fff));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--balto-action) 28%, transparent);
+}
+
+.ventas-activatable-row.is-changing {
+  cursor: wait;
+  opacity: .7;
+}
+
+.ventas-activatable-row .mov-actionsInline,
+.ventas-activatable-row button,
+.ventas-activatable-row label,
+.ventas-activatable-row input {
+  cursor: default;
+}
+
+.ventas-activatable-row button:not(:disabled),
+.ventas-activatable-row label:not(:has(input:disabled)),
+.ventas-activatable-row input:not(:disabled) {
+  cursor: pointer;
+}
+
 .ventas-money {
   font-variant-numeric: tabular-nums;
 }
@@ -135,7 +309,30 @@
 .ventas-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 14px;
+}
+
+.ventas-modal-field {
+  min-width: 0;
+}
+
+.ventas-form-grid--order-head {
+  grid-template-columns:
+    minmax(220px, 1.35fr)
+    minmax(180px, 1fr)
+    minmax(150px, .8fr)
+    minmax(145px, .72fr);
+  align-items: center;
+}
+
+.ventas-form-grid--buyer {
+  margin-top: 14px;
+}
+
+.ventas-form-grid--campaign .ventas-check--field,
+.ventas-form-grid--product .ventas-check--field {
+  align-self: stretch;
 }
 
 .ventas-field {
@@ -143,7 +340,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .ventas-field--wide {
@@ -159,9 +356,9 @@
   padding: 0 5px;
   overflow: hidden;
   color: var(--balto-text);
-  background: #fff;
+  background: linear-gradient(180deg, #fff 72%, transparent 72%);
   font-size: 9px;
-  font-weight: 650;
+  font-weight: 620;
   letter-spacing: .045em;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -193,8 +390,26 @@
 }
 
 .ventas-field textarea {
-  padding: 13px 11px 9px;
+  min-height: 76px;
+  padding: 15px 11px 9px;
   resize: vertical;
+  line-height: 1.4;
+}
+
+.ventas-field--textarea {
+  align-self: stretch;
+}
+
+.ventas-field input::placeholder,
+.ventas-field textarea::placeholder {
+  color: color-mix(in srgb, var(--mov-muted) 72%, transparent);
+  opacity: 1;
+  font-weight: 430;
+}
+
+.ventas-field:focus-within > span,
+.ventas-item-field:focus-within > span {
+  color: var(--balto-action);
 }
 
 .ventas-field input:focus,
@@ -207,19 +422,157 @@
 }
 
 .ventas-check {
-  display: flex;
   min-height: 42px;
+  display: inline-flex;
+  align-self: end;
   align-items: center;
   gap: 9px;
+  margin-top: 6px;
   color: var(--balto-ink);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 560;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
 }
 
-.ventas-check input {
+/* Checkbox único para todo Ventas: modales, filtros de Planillas y acciones.
+   Evita el checkbox nativo distinto entre navegadores y conserva la estética
+   usada en el resto de Cooperadora. */
+.ventas-check input[type="checkbox"] {
+  appearance: none;
   width: 17px;
+  min-width: 17px;
   height: 17px;
-  accent-color: var(--balto-action);
+  display: grid;
+  place-content: center;
+  flex: 0 0 17px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--balto-ink) 25%, #fff);
+  border-radius: 5px;
+  outline: none;
+  background: var(--surface-color, #fff);
+  box-shadow: 0 1px 2px rgb(15 23 42 / .06);
+  cursor: pointer;
+  transition:
+    border-color .14s ease,
+    background .14s ease,
+    box-shadow .14s ease,
+    transform .14s ease;
+}
+
+.ventas-check input[type="checkbox"]::before {
+  width: 8px;
+  height: 5px;
+  content: "";
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform .12s ease;
+}
+
+.ventas-check input[type="checkbox"]:checked {
+  border-color: var(--balto-action);
+  background: var(--balto-action);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--balto-action) 12%, transparent);
+}
+
+.ventas-check input[type="checkbox"]:checked::before {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+.ventas-check input[type="checkbox"]:focus-visible {
+  border-color: var(--balto-action);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--balto-action) 18%, transparent);
+}
+
+.ventas-check input[type="checkbox"]:active:not(:disabled) {
+  transform: scale(.94);
+}
+
+.ventas-check input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.ventas-check__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ventas-check--field {
+  min-height: 44px;
+  align-self: end;
+  margin-top: 5px;
+  padding: 0 12px;
+  border: 1px solid var(--mov-border);
+  border-radius: 11px;
+  background: var(--surface-color, #fff);
+  transition:
+    border-color .14s ease,
+    background .14s ease,
+    box-shadow .14s ease;
+}
+
+.ventas-check--field:hover {
+  border-color: color-mix(in srgb, var(--balto-action) 32%, var(--mov-border));
+  background: color-mix(in srgb, var(--balto-action) 2.5%, var(--surface-color, #fff));
+}
+
+.ventas-check--field:has(input:checked) {
+  border-color: color-mix(in srgb, var(--balto-action) 38%, var(--mov-border));
+  background: color-mix(in srgb, var(--balto-action) 6%, var(--surface-color, #fff));
+}
+
+.ventas-check--field:has(input:focus-visible) {
+  border-color: color-mix(in srgb, var(--balto-action) 58%, var(--mov-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--balto-action) 9%, transparent);
+}
+
+.ventas-check--field:has(input:disabled) {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
+/* En la columna Acciones el estado se maneja con un checkbox real y único:
+   marcado = activo, desmarcado = inactivo. */
+.ventas-check--action {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  display: inline-grid;
+  place-items: center;
+  align-self: center;
+  flex: 0 0 30px;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease;
+}
+
+.ventas-check--action:hover {
+  border-color: color-mix(in srgb, var(--balto-action) 14%, transparent);
+  background: color-mix(in srgb, var(--balto-action) 6%, transparent);
+}
+
+.ventas-check--action input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.ventas-check--action:has(input:disabled) {
+  cursor: wait;
+  opacity: .48;
 }
 
 .ventas-note {
@@ -237,8 +590,115 @@
   max-width: 1180px !important;
 }
 
+/* Nueva venta: los conceptos se administran en un modal secundario para
+   mantener el formulario principal limpio y fácil de recorrer. */
+.ventas-concepts-launcher {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 14px;
+  background: #fff;
+}
+
+.ventas-concepts-launcher__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ventas-concepts-launcher__copy strong {
+  color: var(--balto-ink);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.ventas-concepts-launcher__copy small {
+  max-width: 560px;
+  color: var(--mov-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ventas-concepts-launcher__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ventas-concepts-launcher__total {
+  min-width: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.ventas-concepts-launcher__total span {
+  color: var(--mov-muted);
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.ventas-concepts-launcher__total strong {
+  color: var(--balto-action);
+  font-size: 16px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.ventas-concepts-modal {
+  width: min(1160px, calc(100vw - 32px)) !important;
+  max-width: 1160px !important;
+}
+
+.ventas-concepts-editor {
+  min-width: 0;
+}
+
+.ventas-concepts-editor__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.ventas-concepts-editor__top > div {
+  min-width: 0;
+}
+
+.ventas-concepts-editor__top strong {
+  display: block;
+  color: var(--balto-ink);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.ventas-concepts-editor__top small {
+  display: block;
+  margin-top: 3px;
+  color: var(--mov-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ventas-concepts-modal .ventas-items-editor {
+  padding: 2px 1px 6px;
+}
+
+.ventas-order-total--concepts {
+  padding-top: 12px;
+  border-top: 1px solid var(--mov-border);
+}
+
 .ventas-modal-section {
-  margin-top: 18px;
+  margin-top: 16px;
   padding: 14px;
   border: 1px solid var(--mov-border);
   border-radius: var(--mov-radius, 13px);
@@ -274,21 +734,89 @@
 
 .ventas-item-row {
   display: grid;
-  grid-template-columns: 1.45fr 1.4fr 1fr .85fr .55fr .8fr 34px;
-  min-width: 950px;
+  grid-template-columns:
+    minmax(165px, 1.45fr)
+    minmax(155px, 1.35fr)
+    minmax(118px, .92fr)
+    minmax(102px, .74fr)
+    minmax(76px, .52fr)
+    minmax(108px, .74fr)
+    34px;
+  min-width: 930px;
+  align-items: end;
+  gap: 8px;
+  padding-top: 5px;
+}
+
+.ventas-item-field {
+  min-width: 0;
+  margin-top: 5px;
+}
+
+.ventas-item-field.entity-floating-field > input,
+.ventas-item-field.entity-floating-field > select {
+  height: 44px;
+  min-height: 44px;
+  padding-inline: 10px;
+}
+
+.ventas-item-field.entity-floating-field > span {
+  max-width: calc(100% - 18px);
+  font-size: 9px;
+}
+
+.ventas-item-field.entity-floating-field.is-active > span,
+.ventas-item-field.entity-floating-field:focus-within > span {
+  font-size: 8.5px;
+}
+
+.ventas-item-total > span {
+  position: absolute;
+  top: 0;
+  left: 9px;
+  z-index: 2;
+  max-width: calc(100% - 18px);
+  padding: 0 4px;
+  overflow: hidden;
+  transform: translateY(-50%);
+  color: var(--balto-action);
+  background: #fff;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.ventas-item-total {
+  position: relative;
+  min-width: 0;
+  height: 44px;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  justify-content: flex-end;
+  padding: 4px 10px 0;
+  border: 1px solid var(--mov-border);
+  border-radius: 10px;
+  background: #fff;
 }
 
-.ventas-item-row input,
-.ventas-item-row select {
-  height: 38px;
-  padding: 0 9px;
+.ventas-item-total strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--balto-ink);
+  font-size: 11px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ventas-item-row > strong {
-  text-align: right;
-  font-size: 12px;
+.ventas-item-action {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ventas-order-total {
@@ -315,7 +843,7 @@
 
 .ventas-search-results {
   position: absolute;
-  top: 66px;
+  top: 54px;
   right: 0;
   left: 0;
   z-index: 10;
@@ -354,60 +882,144 @@
   font-size: 11px;
 }
 
-/* Planillas pasa a verse como un panel global, no como una sección aislada. */
+/* =========================================================
+   PLANILLAS · panel compacto y consistente con Ventas
+   ========================================================= */
+.ventas-page--planillas .module-card {
+  display: flex;
+  flex-direction: column;
+}
+
 .ventas-planillas-panel {
-  margin: 14px;
-  padding: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 18px;
+  border: 0;
+  border-top: 1px solid var(--mov-border);
+  border-radius: 0;
+  background: var(--surface-color, #fff);
+  box-shadow: none;
+}
+
+.ventas-planillas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
   border: 1px solid var(--mov-border);
-  border-radius: var(--mov-radius, 14px);
-  background: #fff;
-  box-shadow: var(--mov-shadow-sm);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--balto-bg) 30%, #fff);
 }
 
 .ventas-planillas-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 240px 180px 112px 128px;
+  align-items: center;
+  justify-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ventas-planillas-grid .ventas-field {
+  margin-top: 6px;
+}
+
+.ventas-planillas-active {
+  flex: 0 0 auto;
+  align-self: center;
+  min-height: 42px;
+  margin: 6px 0 0 auto;
+  padding: 0 11px;
+  border: 1px solid var(--mov-border);
+  border-radius: 10px;
+  background: var(--surface-color, #fff);
+  white-space: nowrap;
+}
+
+.ventas-planillas-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
 }
 
 .ventas-planillas-preview {
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-top: 16px;
-  padding: 14px;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
   border: 1px solid var(--mov-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--balto-bg) 48%, #fff);
+  border-radius: 10px;
+  background: var(--surface-color, #fff);
 }
 
-.ventas-planillas-preview > svg {
+.ventas-planillas-preview__icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
   color: var(--balto-action);
-  font-size: 24px;
+  background: color-mix(in srgb, var(--balto-action) 8%, #fff);
+  font-size: 12px;
+}
+
+.ventas-planillas-preview > div {
+  min-width: 0;
+}
+
+.ventas-planillas-preview strong,
+.ventas-planillas-preview span:not(.ventas-planillas-preview__icon) {
+  display: block;
 }
 
 .ventas-planillas-preview strong {
-  font-size: 14px;
+  color: var(--balto-ink);
+  font-size: 12px;
+  font-weight: 630;
 }
 
-.ventas-planillas-preview p {
-  margin: 4px 0 0;
+.ventas-planillas-preview span:not(.ventas-planillas-preview__icon) {
+  margin-top: 2px;
   color: var(--mov-muted);
-  font-size: 11px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .ventas-back-link {
-  margin-top: 14px;
-  padding: 0;
-  border: 0;
+  flex: 0 0 auto;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--balto-action);
   background: transparent;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 620;
   cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.ventas-back-link:hover {
+  border-color: color-mix(in srgb, var(--balto-action) 16%, transparent);
+  background: color-mix(in srgb, var(--balto-action) 6%, transparent);
 }
 
 @media (max-width: 1180px) {
+  .ventas-page .module-card__head {
+    align-items: center;
+  }
+
+  .ventas-page .module-card__headLeft {
+    align-items: center;
+  }
   .ventas-grid--products,
   .ventas-grid--campaigns {
     font-size: 11px;
@@ -436,30 +1048,388 @@
     font-size: 9px;
   }
 
-  .ventas-form-grid {
-    grid-template-columns: 1fr;
+  .ventas-form-grid--order-head {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ventas-field--wide {
     grid-column: auto;
   }
 
+  .ventas-page .module-headFilters {
+    flex-wrap: wrap;
+  }
+
+  .ventas-planillas-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .ventas-planillas-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    grid-template-columns: minmax(210px, 1.35fr) minmax(170px, 1fr) 110px 125px;
+  }
+
+  .ventas-planillas-active {
+    margin-left: 0;
+  }
+
+  .ventas-pagination-stats {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ventas-pagination-stat {
+    flex: 1 1 calc(50% - 6px);
+    max-width: none;
   }
 }
 
 @media (max-width: 700px) {
   .ventas-planillas-panel {
-    margin: 10px;
-    padding: 12px;
+    padding: 12px 10px;
+  }
+
+  .ventas-planillas-toolbar {
+    padding: 12px 10px;
   }
 
   .ventas-planillas-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ventas-planillas-active {
+    width: 100%;
+  }
+
+  .ventas-planillas-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ventas-planillas-preview {
+    width: 100%;
+  }
+
+  .ventas-back-link {
+    align-self: flex-start;
+  }
+
+  .ventas-page .module-filter--search,
+  .ventas-page .module-filter--select {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  .ventas-pagination-stat {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .ventas-order-modal,
+  .ventas-concepts-modal {
+    width: calc(100vw - 18px) !important;
+  }
+
+  .ventas-concepts-launcher {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ventas-concepts-launcher__actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .ventas-concepts-editor__top {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ventas-concepts-editor__top .mov-btn {
+    width: 100%;
+  }
+
+  .ventas-form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .ventas-form-grid .entity-field--wide {
+    grid-column: auto;
+  }
+
+  .ventas-check--field {
+    width: 100%;
+    align-self: stretch;
+  }
+
+  .ventas-item-row {
+    min-width: 860px;
+  }
+}
+
+/* =========================================================
+   VENTAS REGISTRADAS · mismo patrón que Alumnos / Cuotas
+   - En escritorio las acciones viven en la cabecera con el
+     tamaño global de 44px.
+   - Debajo de 1500px pasan al pie, a la izquierda de la
+     paginación, con la escala compacta de 32px.
+   - La paginación conserva la distribución global: acciones
+     y resumen a la izquierda, páginas a la derecha.
+   ========================================================= */
+.ventas-pagination-actions {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.ventas-pagination-actions--summary-only {
+  width: auto;
+  min-width: 0;
+}
+
+.ventas-footer-action {
+  min-width: 0;
+  min-height: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color .16s ease,
+    background .16s ease,
+    color .16s ease,
+    transform .16s ease;
+}
+
+.ventas-footer-action svg {
+  font-size: 12px;
+}
+
+.ventas-footer-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.ventas-footer-action:focus-visible {
+  outline: none;
+  box-shadow: var(--mov-focus);
+}
+
+.ventas-footer-action:disabled {
+  opacity: .5;
+  cursor: default;
+  transform: none;
+}
+
+/* Filtro de origen: azul secundario, como las acciones auxiliares globales. */
+.ventas-footer-action--origin {
+  border-color: var(--secondary-300);
+  background: var(--secondary-50);
+  color: var(--secondary-800);
+}
+
+.ventas-footer-action--origin:hover:not(:disabled) {
+  border-color: var(--secondary-400);
+  background: var(--secondary-100);
+  color: var(--secondary-900);
+}
+
+/* Resumen: acción informativa suave, con presencia sin competir con "Nueva venta". */
+.ventas-footer-action--summary {
+  border-color: var(--primary-200);
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.ventas-footer-action--summary:hover:not(:disabled) {
+  border-color: var(--primary-300);
+  background: var(--primary-100);
+  color: var(--primary-800);
+}
+
+/* Alta: replica el botón "Nuevo" compacto que ya usan Alumnos y Cuotas. */
+.ventas-footer-action--new {
+  border-color: var(--primary-200);
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.ventas-footer-action--new:hover:not(:disabled) {
+  border-color: var(--primary-300);
+  background: var(--primary-100);
+  color: var(--primary-800);
+}
+
+/* Cabecera: misma escala y jerarquía visual que Alumnos / Cuotas. */
+.ventas-page .module-card__actions .ventas-headAction {
+  border-radius: 9px;
+  padding-inline: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.ventas-page--orders .module-card__actions .ventas-headAction--origin {
+  border-color: var(--secondary-300);
+  background: var(--secondary-50);
+  color: var(--secondary-800);
+}
+
+.ventas-page--orders .module-card__actions .ventas-headAction--origin:hover:not(:disabled),
+.ventas-page--orders .module-card__actions .ventas-headAction--origin:focus-visible {
+  border-color: var(--secondary-400);
+  background: var(--secondary-100);
+  color: var(--secondary-900);
+}
+
+.ventas-page .module-card__actions .ventas-headAction--summary {
+  border-color: var(--primary-200);
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.ventas-page .module-card__actions .ventas-headAction--summary:hover:not(:disabled),
+.ventas-page .module-card__actions .ventas-headAction--summary:focus-visible {
+  border-color: var(--primary-300);
+  background: var(--primary-100);
+  color: var(--primary-800);
+}
+
+.ventas-page--orders .module-card__actions .ventas-headAction--new {
+  border-color: var(--primary-500);
+  background: var(--primary-500);
+  color: #fff;
+}
+
+.ventas-page--orders .module-card__actions .ventas-headAction--new:hover:not(:disabled),
+.ventas-page--orders .module-card__actions .ventas-headAction--new:focus-visible {
+  border-color: var(--primary-600);
+  background: var(--primary-600);
+  color: #fff;
+}
+
+.ventas-summary-modal .entity-modal__body {
+  padding: 20px;
+}
+
+.ventas-summary-modal .ventas-pagination-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.ventas-summary-modal .ventas-pagination-stat {
+  width: 100%;
+  max-width: none;
+  min-height: 92px;
+  padding: 14px;
+  gap: 12px;
+  border-radius: 12px;
+}
+
+.ventas-summary-modal .ventas-pagination-stat__icon {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.ventas-summary-modal .ventas-pagination-stat__label,
+.ventas-summary-modal .ventas-pagination-stat__values small {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.ventas-summary-modal .ventas-pagination-stat__label {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.ventas-summary-modal .ventas-pagination-stat__values {
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ventas-summary-modal .ventas-pagination-stat__values strong {
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.ventas-summary-modal .ventas-pagination-stat__values small {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+@media (max-width: 1499px) {
+  .ventas-pagination-actions {
+    display: flex;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__left {
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__summary {
+    margin-left: auto;
+  }
+
+  /* Mismo alto global que cualquier tabla con paginación: no se agrega
+     una segunda fila artificial para las acciones. */
+  .ventas-page--orders .module-card .global-divTable.has-bottom-pagination > .mov-tableWrap {
+    height: calc(100vh - 282px);
+    max-height: calc(100vh - 282px);
+  }
+}
+
+@media (max-width: 720px) {
+  .ventas-page--orders .ventas-tableFooter .global-pagination__left {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .ventas-page--orders .ventas-pagination-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__summary {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .ventas-summary-modal .entity-modal__body {
+    padding: 14px 10px;
+  }
+
+  .ventas-summary-modal .ventas-pagination-stats {
     grid-template-columns: 1fr;
   }
 
-  .ventas-order-modal {
-    width: calc(100vw - 18px) !important;
+  .ventas-summary-modal .ventas-pagination-stat {
+    min-height: 78px;
   }
 }

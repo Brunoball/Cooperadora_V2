@@ -514,7 +514,7 @@ export default function CategoriasModule({ section = "categorias" }) {
           type: "search",
           value: search,
           onChange: setSearch,
-          placeholder: " ",
+          placeholder: "Buscar categoría...",
         },
       ];
 

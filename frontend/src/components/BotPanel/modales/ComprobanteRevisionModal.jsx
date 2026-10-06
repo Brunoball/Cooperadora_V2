@@ -58,7 +58,7 @@ const ComprobanteRevisionModal = ({
   const archivoEsPdf = isPdfFile(archivoUrl, mediaTipo);
 
   return (
-    <div className="bp-comp-overlay" role="dialog" aria-modal="true" onMouseDown={onClose}>
+    <div className="bp-comp-overlay" role="dialog" aria-modal="true">
       <div className={`bp-comp-card ${esRechazo ? "is-danger" : ""}`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="bp-comp-head">
           <div>

@@ -239,9 +239,7 @@ const EditEtiquetaModal = ({
       aria-modal="true"
       onKeyDown={onKeyDown}
       tabIndex={-1}
-      onMouseDown={(e) => {
-        if (e.target?.classList?.contains("bp-tag-overlay")) onClose?.();
-      }}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="bp-tag-card" onMouseDown={(e) => e.stopPropagation()}>
         <div className="bp-tag-head">

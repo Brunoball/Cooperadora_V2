@@ -1756,13 +1756,13 @@ const ModalExportarGlobal = ({
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        if (!loading && !exportando) onClose?.();
+        event.stopPropagation();
       }
     };
 
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [exportando, isOpen, loading, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

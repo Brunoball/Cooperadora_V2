@@ -1599,3 +1599,31 @@ body.pp-lockScroll{ overflow:hidden !important; }
   display: block;
   object-fit: contain;
 }
+
+/* =========================================================
+   Centrado consistente de los escudos institucionales
+   Barra superior: marca izquierda + acceso de perfil
+========================================================= */
+.mov-topbar__appBrandMark--image {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mov-topbar__appBrandMark--image .rh-brand-mark {
+  width: 100%;
+  height: 100%;
+  margin: auto;
+  object-fit: contain;
+  object-position: 50% 50%;
+}
+
+.mov-topbar__usericon.has-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mov-topbar__userlogo {
+  object-position: 50% 50%;
+}

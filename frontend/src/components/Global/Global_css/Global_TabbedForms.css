@@ -162,28 +162,49 @@
 .entity-floating-field {
   position: relative;
   gap: 0;
+  margin-top: 5px;
 }
 
 .entity-floating-field > input,
 .entity-floating-field > select,
 .entity-floating-field > textarea {
-  min-height: 47px;
-  padding: 12px 6px;
-  border-color: color-mix(in srgb, var(--text-primary) 13%, transparent);
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 13%, transparent);
+  border-radius: var(--entity-modal-field-radius, 11px);
+  outline: none;
+  color: var(--entity-modal-ink, var(--text-primary));
   background: #fff;
   box-shadow: 0 1px 0 rgb(15 23 42 / 0.025);
+  font: inherit;
+  transition:
+    border-color var(--entity-modal-transition),
+    box-shadow var(--entity-modal-transition),
+    background var(--entity-modal-transition);
+}
+
+.entity-floating-field > input,
+.entity-floating-field > select {
+  height: 44px;
+  padding: 12px 12px 5px;
+}
+
+.entity-floating-field > select {
+  padding-right: 34px;
 }
 
 .entity-floating-field > textarea {
-  min-height: 72px;
-  padding-top: 18px;
+  min-height: 78px;
+  padding: 18px 12px 10px;
+  resize: vertical;
+  line-height: 1.42;
 }
 
 /*
- * Placeholder opcional para floating labels:
- * queda oculto mientras el label ocupa el centro del campo y aparece recién
- * cuando el label flota (focus o valor activo). El placeholder nativo vuelve
- * a desaparecer automáticamente apenas el usuario escribe.
+ * Placeholder global para floating labels:
+ * mientras el label está centrado el placeholder queda oculto; al hacer foco
+ * o cuando el campo ya tiene valor, el label sube y el ejemplo aparece.
  */
 .entity-floating-field.has-placeholder-on-float > input::placeholder,
 .entity-floating-field.has-placeholder-on-float > textarea::placeholder {
@@ -198,7 +219,7 @@
 .entity-floating-field.has-placeholder-on-float:focus-within > textarea::placeholder,
 .entity-floating-field.has-placeholder-on-float.is-active > input::placeholder,
 .entity-floating-field.has-placeholder-on-float.is-active > textarea::placeholder {
-  color: color-mix(in srgb, var(--entity-modal-text) 56%, transparent);
+  color: color-mix(in srgb, var(--entity-modal-text) 58%, transparent);
   opacity: 1;
 }
 
@@ -206,12 +227,12 @@
   position: absolute;
   top: 50%;
   left: 12px;
-  z-index: 1;
+  z-index: 2;
   max-width: calc(100% - 24px);
   padding: 0;
   overflow: hidden;
   transform: translateY(-50%);
-  color: color-mix(in srgb, var(--entity-modal-text) 86%, #000);
+  color: color-mix(in srgb, var(--entity-modal-text) 88%, #000);
   background: transparent;
   font-size: 11.5px;
   font-weight: 620;
@@ -223,6 +244,7 @@
   pointer-events: none;
   transition:
     top var(--entity-modal-transition),
+    left var(--entity-modal-transition),
     color var(--entity-modal-transition),
     font-size var(--entity-modal-transition),
     padding var(--entity-modal-transition),
@@ -230,7 +252,7 @@
 }
 
 .entity-floating-field.is-textarea > span {
-  top: 23px;
+  top: 22px;
 }
 
 .entity-floating-field.is-active > span,
@@ -242,15 +264,16 @@
   color: var(--entity-modal-action);
   background: #fff;
   font-size: 9.5px;
-  font-weight: 750;
+  font-weight: 720;
 }
 
 /*
  * Respaldo para controles no controlados o actualizados directamente por el
- * DOM. Va separado para conservar la regla base en navegadores sin :has().
+ * DOM. Selects y campos nativos de fecha mantienen siempre el label arriba.
  */
 @supports selector(:has(*)) {
   .entity-floating-field:has(> select) > span,
+  .entity-floating-field:has(> input:is([type="date"], [type="datetime-local"], [type="month"], [type="time"], [type="week"])) > span,
   .entity-floating-field:has(> input:not([type="checkbox"]):not([type="hidden"]):not([type="radio"]):not(:placeholder-shown)) > span,
   .entity-floating-field:has(> textarea:not(:placeholder-shown)) > span {
     top: 0;
@@ -260,17 +283,25 @@
     color: var(--entity-modal-action);
     background: #fff;
     font-size: 9.5px;
-    font-weight: 750;
+    font-weight: 720;
   }
 }
 
 .entity-floating-field > input:focus,
 .entity-floating-field > select:focus,
 .entity-floating-field > textarea:focus {
-  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+  border-color: color-mix(in srgb, var(--primary-color) 42%, transparent);
+  background: #fff;
   box-shadow:
-    0 0 0 4px color-mix(in srgb, var(--primary-color) 10%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--primary-color) 9%, transparent),
     0 8px 18px -18px rgb(15 23 42 / 0.5);
+}
+
+.entity-floating-field > input:disabled,
+.entity-floating-field > select:disabled,
+.entity-floating-field > textarea:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 
 @media (max-width: 720px) {

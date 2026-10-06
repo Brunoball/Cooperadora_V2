@@ -21,6 +21,30 @@ export function getGlobalPaginationItems(currentPage, totalPages) {
 }
 
 /**
+ * Variante compacta para módulos cuyo paginado tiene pocas páginas pero debe
+ * conservar el mismo patrón visual que los listados largos: extremos visibles
+ * y puntos suspensivos en el tramo omitido.
+ */
+export function getCompactPaginationItems(currentPage, totalPages) {
+  const safeTotal = Math.max(0, Number(totalPages || 0));
+  const safeCurrent = Math.min(Math.max(1, Number(currentPage || 1)), Math.max(1, safeTotal));
+
+  if (safeTotal <= 5) {
+    return Array.from({ length: safeTotal }, (_, index) => index + 1);
+  }
+
+  if (safeCurrent <= 3) {
+    return [1, 2, 3, "ellipsis-right", safeTotal];
+  }
+
+  if (safeCurrent >= safeTotal - 2) {
+    return [1, "ellipsis-left", safeTotal - 2, safeTotal - 1, safeTotal];
+  }
+
+  return [1, "ellipsis-left", safeCurrent, "ellipsis-right", safeTotal];
+}
+
+/**
  * Paginación global inspirada en RH.
  * Centraliza estructura, pestañas numéricas, elipsis, estados de carga y resumen.
  * Los módulos solo aportan sus datos y, si hace falta, acciones laterales.
@@ -42,13 +66,17 @@ export default function GlobalPagination({
   showSummary = true,
   showControls = true,
   showWhenEmpty = false,
+  compactPageItems = false,
 }) {
   const records = Math.max(0, Number(totalRecords || 0));
   const pages = Math.max(0, Number(totalPages || 0));
   const page = Math.min(Math.max(1, Number(currentPage || 1)), Math.max(1, pages));
   const first = records ? Math.max(1, Number(from || 0)) : 0;
   const last = records ? Math.max(first, Number(to || 0)) : 0;
-  const pageItems = useMemo(() => getGlobalPaginationItems(page, pages), [page, pages]);
+  const pageItems = useMemo(
+    () => (compactPageItems ? getCompactPaginationItems(page, pages) : getGlobalPaginationItems(page, pages)),
+    [compactPageItems, page, pages],
+  );
   const hasRecords = records > 0;
   const hasLeft = Boolean(leftContent) || (showSummary && (hasRecords || showWhenEmpty));
   const hasRight = Boolean(rightContent) || (showControls && hasRecords);

@@ -152,10 +152,14 @@ const getGroupKeyForPath = (pathname) =>
 function LogoutModal({ open, onClose, onConfirm }) {
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (event) => event.key === "Escape" && onClose();
+    const onKey = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

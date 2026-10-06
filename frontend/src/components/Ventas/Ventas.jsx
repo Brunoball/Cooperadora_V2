@@ -8,11 +8,10 @@ import {
   faEye,
   faFileLines,
   faPen,
+  faPlus,
   faPrint,
   faReceipt,
   faRotateLeft,
-  faToggleOff,
-  faToggleOn,
   faTrashCan,
   faTruckRampBox,
   faUsers,
@@ -23,6 +22,7 @@ import GlobalDivTable from "../Global/GlobalDivTable";
 import GlobalPagination from "../Global/GlobalPagination";
 import ModuleFeedback from "../Global/ModuleFeedback";
 import CrudModal from "../Global/Modales/CrudModal";
+import { FloatingField } from "../Global/Formularios/TabbedForm";
 import ModalEliminarGlobal from "../Global/Modales/ModalEliminarGlobal";
 import { canWrite } from "../_shared/auth/session";
 import ventasApi from "./api/ventasApi";
@@ -64,6 +64,98 @@ function ActionButton({ icon, title, tone = "", ...props }) {
     >
       <FontAwesomeIcon icon={icon} />
     </button>
+  );
+}
+
+function VentasCheckbox({
+  checked,
+  onChange,
+  label = "",
+  disabled = false,
+  action = false,
+  className = "",
+  title,
+  ariaLabel,
+}) {
+  const classes = [
+    "ventas-check",
+    action ? "ventas-check--action" : "ventas-check--field",
+    className,
+  ].filter(Boolean).join(" ");
+
+  return (
+    <label className={classes} title={title}>
+      <input
+        type="checkbox"
+        checked={Boolean(checked)}
+        disabled={disabled}
+        aria-label={ariaLabel || label || title}
+        onChange={(event) => onChange?.(event.target.checked, event)}
+      />
+      {label ? <span className="ventas-check__label">{label}</span> : null}
+    </label>
+  );
+}
+
+function VentasInlineStats({ stats = [] }) {
+  if (!stats.length) return null;
+
+  return (
+    <div className="ventas-pagination-stats" aria-label="Resumen de ventas">
+      {stats.map((stat) => (
+        <article className="ventas-pagination-stat" key={stat.label}>
+          <span className="ventas-pagination-stat__icon" aria-hidden="true">
+            <FontAwesomeIcon icon={stat.icon} />
+          </span>
+          <div className="ventas-pagination-stat__content">
+            <span className="ventas-pagination-stat__label">{stat.label}</span>
+            <div className="ventas-pagination-stat__values">
+              <strong>{stat.value}</strong>
+              <small>{stat.detail}</small>
+            </div>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function VentasSummaryModal({ open, onClose, summary }) {
+  return (
+    <CrudModal
+      open={open}
+      title="Resumen de ventas"
+      subtitle="Indicadores generales del módulo de ventas."
+      onClose={onClose}
+      hideSubmit
+      hideCancel
+      wide
+      closeOnBackdrop={false}
+      modalClassName="ventas-modal ventas-summary-modal"
+    >
+      <VentasInlineStats stats={summary} />
+    </CrudModal>
+  );
+}
+
+function VentasSummaryFooterButton({ onClick }) {
+  return (
+    <div className="ventas-pagination-actions ventas-pagination-actions--summary-only">
+      <button
+        type="button"
+        className="ventas-footer-action ventas-footer-action--summary"
+        onClick={onClick}
+      >
+        <FontAwesomeIcon icon={faEye} />
+        <span>Ver resumen</span>
+      </button>
+    </div>
+  );
+}
+
+function isInteractiveRowTarget(target) {
+  return target instanceof Element && Boolean(
+    target.closest("button, a, input, label, select, textarea, [data-no-row-toggle]"),
   );
 }
 
@@ -128,14 +220,28 @@ function ProductModal({ open, initial, saving, onClose, onSave }) {
   };
 
   return (
-    <CrudModal open={open} title={form.id_producto ? "Editar producto" : "Nuevo producto"} subtitle="Catálogo de productos o conceptos vendibles." onClose={onClose} onSubmit={submit} saving={saving} wide>
-      <div className="ventas-form-grid">
-        <label className="ventas-field ventas-field--wide"><span>Nombre</span><input required maxLength={150} value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} /></label>
-        <label className="ventas-field ventas-field--wide"><span>Descripción</span><textarea rows="3" value={form.descripcion || ""} onChange={(e) => setForm((v) => ({ ...v, descripcion: e.target.value.slice(0, 3000) }))} /></label>
-        <label className="ventas-field"><span>Precio anticipado</span><input required type="number" min="0" step="0.01" value={form.precio_anticipada} onChange={(e) => setForm((v) => ({ ...v, precio_anticipada: e.target.value }))} /></label>
-        <label className="ventas-field"><span>Precio en puerta</span><input required type="number" min="0" step="0.01" value={form.precio_puerta} onChange={(e) => setForm((v) => ({ ...v, precio_puerta: e.target.value }))} /></label>
-        <label className="ventas-field"><span>Stock</span><input type="number" min="0" step="1" placeholder="Vacío = sin control" value={form.stock ?? ""} onChange={(e) => setForm((v) => ({ ...v, stock: e.target.value }))} /></label>
-        <label className="ventas-check"><input type="checkbox" checked={Boolean(form.activo)} onChange={(e) => setForm((v) => ({ ...v, activo: e.target.checked }))} /><span>Producto activo</span></label>
+    <CrudModal open={open} title={form.id_producto ? "Editar producto" : "Nuevo producto"} subtitle="Catálogo de productos o conceptos vendibles." onClose={onClose} onSubmit={submit} saving={saving} showSavingEffect={false} wide modalClassName="ventas-modal ventas-product-modal">
+      <div className="ventas-form-grid ventas-form-grid--product">
+        <FloatingField label="Nombre" wide className="ventas-modal-field">
+          <input required maxLength={150} placeholder="Ej.: Entrada fiesta de fin de año" value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} />
+        </FloatingField>
+        <FloatingField label="Descripción" wide textarea className="ventas-modal-field">
+          <textarea rows="3" placeholder="Ej.: Entrada anticipada para la fiesta escolar." value={form.descripcion || ""} onChange={(e) => setForm((v) => ({ ...v, descripcion: e.target.value.slice(0, 3000) }))} />
+        </FloatingField>
+        <FloatingField label="Precio anticipado" className="ventas-modal-field">
+          <input required type="number" min="0" step="0.01" placeholder="Ej.: 3500" value={form.precio_anticipada} onChange={(e) => setForm((v) => ({ ...v, precio_anticipada: e.target.value }))} />
+        </FloatingField>
+        <FloatingField label="Precio en puerta" className="ventas-modal-field">
+          <input required type="number" min="0" step="0.01" placeholder="Ej.: 4500" value={form.precio_puerta} onChange={(e) => setForm((v) => ({ ...v, precio_puerta: e.target.value }))} />
+        </FloatingField>
+        <FloatingField label="Stock" className="ventas-modal-field">
+          <input type="number" min="0" step="1" placeholder="Ej.: 100 · vacío = sin control" value={form.stock ?? ""} onChange={(e) => setForm((v) => ({ ...v, stock: e.target.value }))} />
+        </FloatingField>
+        <VentasCheckbox
+          checked={Boolean(form.activo)}
+          label="Producto activo"
+          onChange={(checked) => setForm((v) => ({ ...v, activo: checked }))}
+        />
       </div>
     </CrudModal>
   );
@@ -176,17 +282,40 @@ function CampaignModal({ open, initial, products, saving, onClose, onSave }) {
   };
 
   return (
-    <CrudModal open={open} title={form.id_campania ? "Editar configuración de venta" : "Nueva venta / campaña"} subtitle="Define qué se ofrece, sus fechas y los mensajes que consume el bot." onClose={onClose} onSubmit={submit} saving={saving} wide>
-      <div className="ventas-form-grid">
-        <label className="ventas-field ventas-field--wide"><span>Nombre de la venta</span><input required maxLength={150} value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} /></label>
-        <label className="ventas-field ventas-field--wide"><span>Producto principal</span><select value={form.id_producto_principal} onChange={(e) => setForm((v) => ({ ...v, id_producto_principal: e.target.value }))}><option value="">Sin producto principal</option>{products.map((p) => <option key={p.id_producto} value={p.id_producto}>{p.nombre}{yes(p.activo) ? "" : " (inactivo)"}</option>)}</select></label>
-        <label className="ventas-field"><span>Fecha inicio</span><input type="date" value={form.fecha_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_inicio: e.target.value }))} /></label>
-        <label className="ventas-field"><span>Fecha fin</span><input type="date" value={form.fecha_fin || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_fin: e.target.value }))} /></label>
-        <label className="ventas-field ventas-field--wide"><span>Pregunta de identificación</span><textarea rows="2" value={form.pregunta_persona || ""} onChange={(e) => setForm((v) => ({ ...v, pregunta_persona: e.target.value.slice(0, 1000) }))} /></label>
-        <label className="ventas-field ventas-field--wide"><span>Mensaje inicial</span><textarea rows="2" value={form.mensaje_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, mensaje_inicio: e.target.value.slice(0, 1000) }))} /></label>
-        <label className="ventas-field ventas-field--wide"><span>Mensaje aprobado</span><textarea rows="2" value={form.mensaje_aprobado || ""} onChange={(e) => setForm((v) => ({ ...v, mensaje_aprobado: e.target.value.slice(0, 1000) }))} /></label>
-        <label className="ventas-check"><input type="checkbox" checked={Boolean(form.activo)} onChange={(e) => setForm((v) => ({ ...v, activo: e.target.checked }))} /><span>Activa</span></label>
-        <label className="ventas-check"><input type="checkbox" checked={Boolean(form.visible_menu)} disabled={!form.activo} onChange={(e) => setForm((v) => ({ ...v, visible_menu: e.target.checked }))} /><span>Visible en WhatsApp</span></label>
+    <CrudModal open={open} title={form.id_campania ? "Editar configuración de venta" : "Nueva venta / campaña"} subtitle="Define qué se ofrece, sus fechas y los mensajes que consume el bot." onClose={onClose} onSubmit={submit} saving={saving} showSavingEffect={false} wide modalClassName="ventas-modal ventas-campaign-modal">
+      <div className="ventas-form-grid ventas-form-grid--campaign">
+        <FloatingField label="Nombre de la venta" className="ventas-modal-field">
+          <input required maxLength={150} placeholder="Ej.: Fiesta de fin de año" value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} />
+        </FloatingField>
+        <FloatingField label="Producto principal" className="ventas-modal-field">
+          <select value={form.id_producto_principal} onChange={(e) => setForm((v) => ({ ...v, id_producto_principal: e.target.value }))}><option value="">Seleccionar producto (opcional)</option>{products.map((p) => <option key={p.id_producto} value={p.id_producto}>{p.nombre}{yes(p.activo) ? "" : " (inactivo)"}</option>)}</select>
+        </FloatingField>
+        <FloatingField label="Fecha inicio" className="ventas-modal-field">
+          <input type="date" value={form.fecha_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_inicio: e.target.value }))} />
+        </FloatingField>
+        <FloatingField label="Fecha fin" className="ventas-modal-field">
+          <input type="date" value={form.fecha_fin || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_fin: e.target.value }))} />
+        </FloatingField>
+        <FloatingField label="Pregunta de identificación" wide textarea className="ventas-modal-field">
+          <textarea rows="2" placeholder="Ej.: Ingresá el DNI de la persona o alumno que realiza la compra." value={form.pregunta_persona || ""} onChange={(e) => setForm((v) => ({ ...v, pregunta_persona: e.target.value.slice(0, 1000) }))} />
+        </FloatingField>
+        <FloatingField label="Mensaje inicial" textarea className="ventas-modal-field">
+          <textarea rows="2" placeholder="Ej.: Indicá la cantidad que querés comprar." value={form.mensaje_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, mensaje_inicio: e.target.value.slice(0, 1000) }))} />
+        </FloatingField>
+        <FloatingField label="Mensaje aprobado" textarea className="ventas-modal-field">
+          <textarea rows="2" placeholder="Ej.: Pago aprobado. Te enviamos el comprobante." value={form.mensaje_aprobado || ""} onChange={(e) => setForm((v) => ({ ...v, mensaje_aprobado: e.target.value.slice(0, 1000) }))} />
+        </FloatingField>
+        <VentasCheckbox
+          checked={Boolean(form.activo)}
+          label="Campaña activa"
+          onChange={(checked) => setForm((v) => ({ ...v, activo: checked }))}
+        />
+        <VentasCheckbox
+          checked={Boolean(form.visible_menu)}
+          label="Visible en WhatsApp"
+          disabled={!form.activo}
+          onChange={(checked) => setForm((v) => ({ ...v, visible_menu: checked }))}
+        />
       </div>
       <div className="ventas-note">Solo puede existir una campaña activa a la vez. Al activar esta, cualquier otra campaña activa se desactivará automáticamente.</div>
     </CrudModal>
@@ -208,12 +337,190 @@ const emptyOrder = {
   items: [blankItem()],
 };
 
+function OrderItemsModal({ open, items, products, initialId, onClose, onApply }) {
+  const [draft, setDraft] = useState([blankItem()]);
+
+  useEffect(() => {
+    if (!open) return;
+    const source = Array.isArray(items) && items.length ? items : [blankItem()];
+    setDraft(source.map((item) => ({ ...item })));
+  }, [open, items]);
+
+  const setDraftItem = (index, patch) => {
+    setDraft((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  };
+
+  const chooseDraftProduct = (index, id) => {
+    const product = products.find((item) => String(item.id_producto) === String(id));
+    if (!product) {
+      setDraftItem(index, { id_producto: "" });
+      return;
+    }
+    const current = draft[index];
+    const type = current?.tipo_precio || "anticipada";
+    const price = type === "puerta"
+      ? product.precio_puerta
+      : type === "normal"
+        ? product.precio
+        : product.precio_anticipada;
+    setDraftItem(index, {
+      id_producto: String(id),
+      producto_nombre: product.nombre,
+      precio_unitario: price,
+    });
+  };
+
+  const chooseDraftPriceType = (index, type) => {
+    const item = draft[index];
+    const product = products.find((productItem) => String(productItem.id_producto) === String(item.id_producto));
+    const price = product
+      ? type === "puerta"
+        ? product.precio_puerta
+        : type === "normal"
+          ? product.precio
+          : type === "anticipada"
+            ? product.precio_anticipada
+            : item.precio_unitario
+      : item.precio_unitario;
+    setDraftItem(index, { tipo_precio: type, precio_unitario: price });
+  };
+
+  const isValidItem = (item) => (
+    String(item.producto_nombre || "").trim().length > 0
+    && item.precio_unitario !== ""
+    && item.precio_unitario != null
+    && Number(item.precio_unitario) >= 0
+    && Number(item.cantidad || 0) >= 1
+  );
+
+  const canApply = draft.length > 0 && draft.every(isValidItem);
+  const draftTotal = useMemo(
+    () => draft.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0),
+    [draft],
+  );
+
+  const apply = (event) => {
+    event.preventDefault();
+    if (!canApply) return;
+    onApply(draft.map((item) => ({ ...item })));
+    onClose();
+  };
+
+  return (
+    <CrudModal
+      open={open}
+      title="Productos y conceptos"
+      subtitle="Agregá los conceptos de la venta. El total y el stock se validan nuevamente al confirmar la operación."
+      onClose={onClose}
+      onSubmit={apply}
+      submitLabel="Aplicar conceptos"
+      submitDisabled={!canApply}
+      wide
+      modalClassName="ventas-modal ventas-concepts-modal"
+      closeOnBackdrop={false}
+    >
+      <div className="ventas-concepts-editor">
+        <div className="ventas-concepts-editor__top">
+          <div>
+            <strong>Detalle de la venta</strong>
+            <small>Podés seleccionar un producto existente o cargar un concepto manual.</small>
+          </div>
+          <button
+            type="button"
+            className="mov-btn mov-btn--ghost"
+            onClick={() => setDraft((current) => [...current, blankItem()])}
+          >
+            Agregar concepto
+          </button>
+        </div>
+
+        <div className="ventas-items-editor">
+          {draft.map((item, index) => (
+            <div className="ventas-item-row" key={`draft-item-${index}`}>
+              <FloatingField label="Producto" className="ventas-item-field">
+                <select value={item.id_producto || ""} onChange={(e) => chooseDraftProduct(index, e.target.value)}>
+                  <option value="">Concepto manual</option>
+                  {products
+                    .filter((product) => yes(product.activo) || (initialId && String(product.id_producto) === String(item.id_producto)))
+                    .map((product) => (
+                      <option key={product.id_producto} value={product.id_producto}>
+                        {product.nombre}{yes(product.activo) ? "" : " · Inactivo histórico"}{product.stock == null ? "" : ` · Stock ${product.stock}`}
+                      </option>
+                    ))}
+                </select>
+              </FloatingField>
+              <FloatingField label="Concepto" className="ventas-item-field">
+                <input
+                  required
+                  placeholder="Ej.: Entrada anticipada"
+                  maxLength={150}
+                  value={item.producto_nombre || ""}
+                  onChange={(e) => setDraftItem(index, { producto_nombre: upper(e.target.value, 150) })}
+                />
+              </FloatingField>
+              <FloatingField label="Tipo de precio" className="ventas-item-field">
+                <select value={item.tipo_precio || "personalizado"} onChange={(e) => chooseDraftPriceType(index, e.target.value)}>
+                  <option value="anticipada">Anticipada</option>
+                  <option value="puerta">Puerta</option>
+                  <option value="normal">Normal</option>
+                  <option value="personalizado">Personalizado</option>
+                </select>
+              </FloatingField>
+              <FloatingField label="Precio unitario" className="ventas-item-field">
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ej.: 3500"
+                  value={item.precio_unitario ?? ""}
+                  onChange={(e) => setDraftItem(index, { precio_unitario: e.target.value })}
+                />
+              </FloatingField>
+              <FloatingField label="Cantidad" className="ventas-item-field">
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Ej.: 1"
+                  value={item.cantidad ?? 1}
+                  onChange={(e) => setDraftItem(index, { cantidad: e.target.value })}
+                />
+              </FloatingField>
+              <div className="ventas-item-total">
+                <span>Subtotal</span>
+                <strong>{money(Number(item.precio_unitario || 0) * Number(item.cantidad || 0))}</strong>
+              </div>
+              <div className="ventas-item-action">
+                <ActionButton
+                  icon={faTrashCan}
+                  title="Quitar concepto"
+                  tone="danger"
+                  disabled={draft.length <= 1}
+                  onClick={() => setDraft((current) => current.filter((_, i) => i !== index))}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="ventas-order-total ventas-order-total--concepts">
+          <span>Total calculado</span>
+          <strong>{money(draftTotal)}</strong>
+        </div>
+      </div>
+    </CrudModal>
+  );
+}
+
 function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeedback }) {
   const [form, setForm] = useState(emptyOrder);
   const [loading, setLoading] = useState(false);
   const [personSearch, setPersonSearch] = useState("");
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  const [conceptsOpen, setConceptsOpen] = useState(false);
   const searchTimer = useRef(null);
   const personSearchSeq = useRef(0);
 
@@ -230,6 +537,7 @@ function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeed
     personSearchSeq.current += 1;
     setPersonSearch("");
     setPeople([]);
+    setConceptsOpen(false);
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
       return undefined;
@@ -298,27 +606,23 @@ function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeed
     setPeople([]);
   };
 
-  const setItem = (index, patch) => setForm((v) => ({ ...v, items: v.items.map((item, i) => i === index ? { ...item, ...patch } : item) }));
-  const chooseProduct = (index, id) => {
-    const product = products.find((p) => String(p.id_producto) === String(id));
-    if (!product) { setItem(index, { id_producto: "" }); return; }
-    const current = form.items[index];
-    const type = current?.tipo_precio || "anticipada";
-    const price = type === "puerta" ? product.precio_puerta : type === "normal" ? product.precio : product.precio_anticipada;
-    setItem(index, { id_producto: String(id), producto_nombre: product.nombre, precio_unitario: price });
-  };
-  const choosePriceType = (index, type) => {
-    const item = form.items[index];
-    const product = products.find((p) => String(p.id_producto) === String(item.id_producto));
-    const price = product ? (type === "puerta" ? product.precio_puerta : type === "normal" ? product.precio : type === "anticipada" ? product.precio_anticipada : item.precio_unitario) : item.precio_unitario;
-    setItem(index, { tipo_precio: type, precio_unitario: price });
-  };
-
   const total = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
-  const allDoor = form.items.length > 0 && form.items.every((item) => item.tipo_precio === "puerta");
+  const configuredItems = form.items.filter((item) => String(item.producto_nombre || "").trim());
+  const hasConfiguredItems = configuredItems.length > 0 && configuredItems.every((item) => (
+    item.precio_unitario !== ""
+    && item.precio_unitario != null
+    && Number(item.precio_unitario) >= 0
+    && Number(item.cantidad || 0) >= 1
+  ));
+  const allDoor = hasConfiguredItems && configuredItems.every((item) => item.tipo_precio === "puerta");
 
   const submit = (event) => {
     event.preventDefault();
+    if (!hasConfiguredItems) {
+      setConceptsOpen(true);
+      onFeedback("error", "Agregá al menos un concepto válido antes de guardar la venta.");
+      return;
+    }
     onSave({
       ...form,
       id_orden: form.id_orden || null,
@@ -330,48 +634,83 @@ function OrderModal({ open, initialId, catalogs, saving, onClose, onSave, onFeed
   };
 
   return (
-    <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} saving={saving} loading={loading} wide modalClassName="ventas-order-modal">
-      <div className="ventas-form-grid">
-        <label className="ventas-field"><span>Venta / campaña</span><select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="">Seleccionar...</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva · histórica)"}</option>)}</select></label>
-        <label className="ventas-field"><span>Medio de pago</span><select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="">Seleccionar...</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{m.medio_pago}</option>)}</select></label>
-        <label className="ventas-field"><span>Fecha de venta</span><input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} /></label>
-        <label className="ventas-field"><span>Estado</span><select value={form.estado} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select></label>
+    <>
+      <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!hasConfiguredItems} wide modalClassName="ventas-modal ventas-order-modal">
+      <div className="ventas-form-grid ventas-form-grid--order-head">
+        <FloatingField label="Venta / campaña" className="ventas-modal-field">
+          <select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="" disabled>Seleccionar venta o campaña</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva · histórica)"}</option>)}</select>
+        </FloatingField>
+        <FloatingField label="Medio de pago" className="ventas-modal-field">
+          <select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="" disabled>Seleccionar medio de pago</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{m.medio_pago}</option>)}</select>
+        </FloatingField>
+        <FloatingField label="Fecha de venta" className="ventas-modal-field">
+          <input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
+        </FloatingField>
+        <FloatingField label="Estado" className="ventas-modal-field">
+          <select value={form.estado} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select>
+        </FloatingField>
       </div>
 
-      <section className="ventas-modal-section">
-        <header><div><strong>Productos y conceptos</strong><small>El backend recalcula el total y valida stock antes de confirmar.</small></div><button type="button" className="mov-btn mov-btn--ghost" onClick={() => setForm((v) => ({ ...v, items: [...v.items, blankItem()] }))}>Agregar concepto</button></header>
-        <div className="ventas-items-editor">
-          {form.items.map((item, index) => (
-            <div className="ventas-item-row" key={`item-${index}`}>
-              <select value={item.id_producto || ""} onChange={(e) => chooseProduct(index, e.target.value)}><option value="">Concepto manual</option>{products.filter((p) => yes(p.activo) || (initialId && String(p.id_producto) === String(item.id_producto))).map((p) => <option key={p.id_producto} value={p.id_producto}>{p.nombre}{yes(p.activo) ? "" : " · Inactivo histórico"}{p.stock == null ? "" : ` · Stock ${p.stock}`}</option>)}</select>
-              <input required placeholder="Nombre visible" maxLength={150} value={item.producto_nombre || ""} onChange={(e) => setItem(index, { producto_nombre: upper(e.target.value, 150) })} />
-              <select value={item.tipo_precio || "personalizado"} onChange={(e) => choosePriceType(index, e.target.value)}><option value="anticipada">Anticipada</option><option value="puerta">Puerta</option><option value="normal">Normal</option><option value="personalizado">Personalizado</option></select>
-              <input required type="number" min="0" step="0.01" value={item.precio_unitario ?? ""} onChange={(e) => setItem(index, { precio_unitario: e.target.value })} />
-              <input required type="number" min="1" step="1" value={item.cantidad ?? 1} onChange={(e) => setItem(index, { cantidad: e.target.value })} />
-              <strong>{money(Number(item.precio_unitario || 0) * Number(item.cantidad || 0))}</strong>
-              <ActionButton icon={faTrashCan} title="Quitar concepto" tone="danger" disabled={form.items.length <= 1} onClick={() => setForm((v) => ({ ...v, items: v.items.filter((_, i) => i !== index) }))} />
-            </div>
-          ))}
+      <section className="ventas-modal-section ventas-concepts-launcher">
+        <div className="ventas-concepts-launcher__copy">
+          <strong>Productos y conceptos</strong>
+          <small>
+            {hasConfiguredItems
+              ? `${configuredItems.length} ${configuredItems.length === 1 ? "concepto agregado" : "conceptos agregados"}`
+              : "Agregá los productos o conceptos que forman parte de esta venta."}
+          </small>
         </div>
-        <div className="ventas-order-total"><span>Total calculado</span><strong>{money(total)}</strong></div>
+        <div className="ventas-concepts-launcher__actions">
+          <div className="ventas-concepts-launcher__total">
+            <span>Total</span>
+            <strong>{money(total)}</strong>
+          </div>
+          <button
+            type="button"
+            className="mov-btn mov-btn--primary"
+            onClick={() => setConceptsOpen(true)}
+          >
+            {hasConfiguredItems ? "Editar conceptos" : "Agregar conceptos"}
+          </button>
+        </div>
       </section>
 
       <section className="ventas-modal-section ventas-person-section">
         <header><div><strong>Comprador o alumno</strong><small>{allDoor ? "Opcional porque todos los conceptos son precio en puerta." : "Obligatorio para ventas anticipadas."}</small></div></header>
         <div className="ventas-person-search">
-          <label className="ventas-field ventas-field--wide"><span>Buscar por DNI o nombre</span><input value={personSearch} placeholder="Escribí al menos 2 caracteres..." onChange={(e) => searchPeople(e.target.value)} /></label>
-          {peopleLoading ? <div className="ventas-search-results"><span>Buscando...</span></div> : people.length ? (
+          <FloatingField label="Buscar por DNI o nombre" wide className="ventas-modal-field">
+            <input value={personSearch} placeholder="Ej.: 40123456 o Juan Pérez" onChange={(e) => searchPeople(e.target.value)} />
+          </FloatingField>
+          {peopleLoading ? null : people.length ? (
             <div className="ventas-search-results">{people.map((person, index) => <button type="button" key={`${person.id_persona || "a"}-${person.id_alumno || index}`} onClick={() => selectPerson(person)}><strong>{person.nombre_apellido}</strong><small>DNI {person.dni}{person.nombre_anio ? ` · ${person.nombre_anio} ${person.nombre_division || ""}` : ""}</small></button>)}</div>
           ) : null}
         </div>
-        <div className="ventas-form-grid">
-          <label className="ventas-field"><span>DNI</span><input inputMode="numeric" value={form.dni || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", dni: e.target.value.replace(/\D/g, "").slice(0, 12) }))} /></label>
-          <label className="ventas-field"><span>Nombre y apellido</span><input value={form.nombre_apellido || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", nombre_apellido: upper(e.target.value, 160) }))} /></label>
-          <label className="ventas-field"><span>Referencia de pago</span><input value={form.referencia_pago || ""} onChange={(e) => setForm((v) => ({ ...v, referencia_pago: e.target.value.slice(0, 180) }))} /></label>
-          <label className="ventas-field ventas-field--wide"><span>Observación</span><textarea rows="2" value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: e.target.value.slice(0, 3000) }))} /></label>
+        <div className="ventas-form-grid ventas-form-grid--buyer">
+          <FloatingField label="DNI" className="ventas-modal-field">
+            <input inputMode="numeric" placeholder="Ej.: 40123456" value={form.dni || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", dni: e.target.value.replace(/\D/g, "").slice(0, 12) }))} />
+          </FloatingField>
+          <FloatingField label="Nombre y apellido" className="ventas-modal-field">
+            <input placeholder="Ej.: Juan Pérez" value={form.nombre_apellido || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", nombre_apellido: upper(e.target.value, 160) }))} />
+          </FloatingField>
+          <FloatingField label="Referencia de pago" wide className="ventas-modal-field">
+            <input placeholder="Ej.: transferencia 45821, recibo 1024 o comprobante" value={form.referencia_pago || ""} onChange={(e) => setForm((v) => ({ ...v, referencia_pago: e.target.value.slice(0, 180) }))} />
+          </FloatingField>
+          <FloatingField label="Observación" wide textarea className="ventas-modal-field">
+            <textarea rows="2" placeholder="Ej.: Retira el comprobante en secretaría." value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: e.target.value.slice(0, 3000) }))} />
+          </FloatingField>
         </div>
       </section>
-    </CrudModal>
+      </CrudModal>
+
+      <OrderItemsModal
+        open={open && conceptsOpen}
+        items={form.items}
+        products={products}
+        initialId={initialId}
+        onClose={() => setConceptsOpen(false)}
+        onApply={(items) => setForm((current) => ({ ...current, items }))}
+      />
+    </>
   );
 }
 
@@ -383,8 +722,10 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
   const [active, setActive] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingStateId, setChangingStateId] = useState(null);
   const [modal, setModal] = useState({ open: false, row: null });
   const [confirm, setConfirm] = useState(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -406,12 +747,34 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
   };
 
   const changeState = async (row) => {
-    try { const result = await ventasApi.estadoProducto({ id_producto: row.id_producto, activo: !yes(row.activo) }); showFeedback("success", result.mensaje); await load(); }
-    catch (err) { showFeedback("error", err.message); }
+    setChangingStateId(row.id_producto);
+    try {
+      const result = await ventasApi.estadoProducto({ id_producto: row.id_producto, activo: !yes(row.activo) });
+      showFeedback("success", result.mensaje);
+      await load();
+    } catch (err) {
+      showFeedback("error", err.message);
+    } finally {
+      setChangingStateId(null);
+    }
   };
 
   return (
-    <ModulePage className="ventas-page" title="Productos de ventas" description="Catálogo con precios anticipados, en puerta y stock opcional con control real." stats={summary} filters={[{ key: "buscar", type: "search", label: "Buscar", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]} canCreate={writable} primaryActionLabel="Nuevo producto" onPrimaryAction={() => setModal({ open: true, row: null })}>
+    <ModulePage
+      className="ventas-page ventas-page--products"
+      title="Productos de ventas"
+      filters={[{ key: "buscar", type: "search", label: "Buscar", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]}
+      canCreate={writable}
+      primaryActionLabel="Nuevo producto"
+      onPrimaryAction={() => setModal({ open: true, row: null })}
+      secondaryActions={[{
+        key: "resumen",
+        label: "Ver resumen",
+        icon: faEye,
+        className: "mov-btn--ghost global-tableAction--top ventas-headAction ventas-headAction--summary",
+        onClick: () => setSummaryOpen(true),
+      }]}
+    >
       <GlobalDivTable
         className="ventas-global-table has-bottom-pagination"
         bodyClassName="entity-table-wrap"
@@ -426,7 +789,7 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
           { label: "Acciones", align: "center" },
         ]}
         loading={loading}
-        loadingLabel="Cargando productos..."
+        loadingLabel=""
         skeletonActionColumn
         ariaLabel="Productos de ventas"
         empty={!rows.length}
@@ -440,9 +803,22 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
         ) : null}
         {rows.map((row) => (
           <div
-            className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--products"
+            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--products ventas-activatable-row ${changingStateId === row.id_producto ? "is-changing" : ""}`.trim()}
             role="row"
             key={row.id_producto}
+            tabIndex={writable ? 0 : undefined}
+            title={writable ? (yes(row.activo) ? "Click en la fila para desactivar" : "Click en la fila para activar") : undefined}
+            onClick={(event) => {
+              if (!writable || changingStateId !== null || isInteractiveRowTarget(event.target)) return;
+              changeState(row);
+            }}
+            onKeyDown={(event) => {
+              if (!writable || changingStateId !== null || event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                changeState(row);
+              }
+            }}
           >
             <div className="mov-gridCell entity-main-cell">
               <strong>{row.nombre}</strong>
@@ -466,7 +842,14 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
                 {writable ? (
                   <>
                     <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
-                    <ActionButton icon={yes(row.activo) ? faToggleOff : faToggleOn} title={yes(row.activo) ? "Desactivar" : "Activar"} onClick={() => changeState(row)} />
+                    <VentasCheckbox
+                      action
+                      checked={yes(row.activo)}
+                      disabled={changingStateId !== null}
+                      title={yes(row.activo) ? "Desactivar producto" : "Activar producto"}
+                      ariaLabel={yes(row.activo) ? `Desactivar ${row.nombre}` : `Activar ${row.nombre}`}
+                      onChange={() => changeState(row)}
+                    />
                     <ActionButton icon={faTrashCan} title="Eliminar o archivar" tone="danger" onClick={() => setConfirm(row)} />
                   </>
                 ) : null}
@@ -482,12 +865,17 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
         from={Number(pagination.desde || ((Number(pagination.pagina || page) - 1) * 20 + (rows.length ? 1 : 0)))}
         to={Number(pagination.hasta || Math.min(Number(pagination.total || 0), Number(pagination.pagina || page) * 20))}
         loading={loading}
+        loadingLabel=""
         itemLabel="productos"
         ariaLabel="Paginación de productos"
         onPageChange={setPage}
+        compactPageItems
+        className="ventas-tableFooter"
+        leftContent={<VentasSummaryFooterButton onClick={() => setSummaryOpen(true)} />}
       />
+      <VentasSummaryModal open={summaryOpen} onClose={() => setSummaryOpen(false)} summary={summary} />
       <ProductModal open={modal.open} initial={modal.row} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="eliminar" title="Eliminar producto" message="Si el producto ya fue utilizado no se borrará: quedará archivado para conservar el historial." details={confirm ? [{ label: "Producto", value: confirm.nombre }, { label: "Usos", value: confirm.cantidad_usos }] : []} onClose={() => setConfirm(null)} onConfirm={async () => { const result = await ventasApi.eliminarProducto({ id_producto: confirm.id_producto }); setConfirm(null); await load(); return { mensaje: result.mensaje }; }} />
+      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="eliminar" showLoadingEffect={false} title="Eliminar producto" message="Si el producto ya fue utilizado no se borrará: quedará archivado para conservar el historial." details={confirm ? [{ label: "Producto", value: confirm.nombre }, { label: "Usos", value: confirm.cantidad_usos }] : []} onClose={() => setConfirm(null)} onConfirm={async () => { const result = await ventasApi.eliminarProducto({ id_producto: confirm.id_producto }); setConfirm(null); await load(); return { mensaje: result.mensaje }; }} />
       {feedback}
     </ModulePage>
   );
@@ -498,8 +886,10 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [changingStateId, setChangingStateId] = useState(null);
   const [modal, setModal] = useState({ open: false, row: null });
   const [confirm, setConfirm] = useState(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -520,14 +910,35 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
     finally { setSaving(false); }
   };
   const changeState = async (row) => {
-    try { const result = await ventasApi.estadoCampania({ id_campania: row.id_campania, activo: !yes(row.activo) }); showFeedback("success", result.mensaje); await load(); }
-    catch (err) { showFeedback("error", err.message); }
+    setChangingStateId(row.id_campania);
+    try {
+      const result = await ventasApi.estadoCampania({ id_campania: row.id_campania, activo: !yes(row.activo) });
+      showFeedback("success", result.mensaje);
+      await load();
+    } catch (err) {
+      showFeedback("error", err.message);
+    } finally {
+      setChangingStateId(null);
+    }
   };
 
   return (
-    <ModulePage className="ventas-page" title="Configuración de ventas" description="Campañas disponibles para ventas manuales y para el menú del bot de WhatsApp." stats={summary} canCreate={writable} primaryActionLabel="Nueva campaña" onPrimaryAction={() => setModal({ open: true, row: null })}>
+    <ModulePage
+      className="ventas-page ventas-page--campaigns"
+      title="Configuración de ventas"
+      canCreate={writable}
+      primaryActionLabel="Nueva campaña"
+      onPrimaryAction={() => setModal({ open: true, row: null })}
+      secondaryActions={[{
+        key: "resumen",
+        label: "Ver resumen",
+        icon: faEye,
+        className: "mov-btn--ghost global-tableAction--top ventas-headAction ventas-headAction--summary",
+        onClick: () => setSummaryOpen(true),
+      }]}
+    >
       <GlobalDivTable
-        className="ventas-global-table"
+        className="ventas-global-table has-bottom-pagination"
         bodyClassName="entity-table-wrap"
         gridClassName="ventas-grid ventas-grid--campaigns"
         columns={[
@@ -540,7 +951,7 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
           { label: "Acciones", align: "center" },
         ]}
         loading={loading}
-        loadingLabel="Cargando campañas..."
+        loadingLabel=""
         skeletonActionColumn
         ariaLabel="Configuración de ventas"
         empty={!rows.length}
@@ -554,9 +965,22 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
         ) : null}
         {rows.map((row) => (
           <div
-            className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns"
+            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns ventas-activatable-row ${changingStateId === row.id_campania ? "is-changing" : ""}`.trim()}
             role="row"
             key={row.id_campania}
+            tabIndex={writable ? 0 : undefined}
+            title={writable ? (yes(row.activo) ? "Click en la fila para desactivar" : "Click en la fila para activar") : undefined}
+            onClick={(event) => {
+              if (!writable || changingStateId !== null || isInteractiveRowTarget(event.target)) return;
+              changeState(row);
+            }}
+            onKeyDown={(event) => {
+              if (!writable || changingStateId !== null || event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                changeState(row);
+              }
+            }}
           >
             <div className="mov-gridCell entity-main-cell">
               <strong>{row.nombre}</strong>
@@ -584,7 +1008,14 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
                 {writable ? (
                   <>
                     <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
-                    <ActionButton icon={yes(row.activo) ? faToggleOff : faToggleOn} title={yes(row.activo) ? "Desactivar" : "Activar"} onClick={() => changeState(row)} />
+                    <VentasCheckbox
+                      action
+                      checked={yes(row.activo)}
+                      disabled={changingStateId !== null}
+                      title={yes(row.activo) ? "Desactivar campaña" : "Activar campaña"}
+                      ariaLabel={yes(row.activo) ? `Desactivar ${row.nombre}` : `Activar ${row.nombre}`}
+                      onChange={() => changeState(row)}
+                    />
                     <ActionButton icon={faTrashCan} title="Eliminar o archivar" tone="danger" onClick={() => setConfirm(row)} />
                   </>
                 ) : null}
@@ -593,8 +1024,24 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
           </div>
         ))}
       </GlobalDivTable>
+      <GlobalPagination
+        currentPage={1}
+        totalPages={rows.length ? 1 : 0}
+        totalRecords={rows.length}
+        from={rows.length ? 1 : 0}
+        to={rows.length}
+        loading={loading}
+        loadingLabel=""
+        itemLabel="campañas"
+        ariaLabel="Resumen de configuración de ventas"
+        className="ventas-tableFooter"
+        showControls={false}
+        showWhenEmpty
+        leftContent={<VentasSummaryFooterButton onClick={() => setSummaryOpen(true)} />}
+      />
+      <VentasSummaryModal open={summaryOpen} onClose={() => setSummaryOpen(false)} summary={summary} />
       <CampaignModal open={modal.open} initial={modal.row} products={products} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="eliminar" title="Eliminar campaña" message="Las campañas con ventas no se eliminan físicamente: se archivan para mantener la trazabilidad." details={confirm ? [{ label: "Campaña", value: confirm.nombre }, { label: "Ventas asociadas", value: confirm.cantidad_ordenes }] : []} onClose={() => setConfirm(null)} onConfirm={async () => { const result = await ventasApi.eliminarCampania({ id_campania: confirm.id_campania }); setConfirm(null); await load(); return { mensaje: result.mensaje }; }} />
+      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="eliminar" showLoadingEffect={false} title="Eliminar campaña" message="Las campañas con ventas no se eliminan físicamente: se archivan para mantener la trazabilidad." details={confirm ? [{ label: "Campaña", value: confirm.nombre }, { label: "Ventas asociadas", value: confirm.cantidad_ordenes }] : []} onClose={() => setConfirm(null)} onConfirm={async () => { const result = await ventasApi.eliminarCampania({ id_campania: confirm.id_campania }); setConfirm(null); await load(); return { mensaje: result.mensaje }; }} />
       {feedback}
     </ModulePage>
   );
@@ -615,6 +1062,7 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
   const [modal, setModal] = useState({ open: false, id: null });
   const [confirm, setConfirm] = useState(null);
   const [retreatConfirm, setRetreatConfirm] = useState(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   const loadCatalogs = useCallback(async () => {
     try { const data = await ventasApi.catalogos(); setCatalogs(data); }
@@ -652,8 +1100,41 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
     { key: "retiro", type: "select", label: "Retiro", value: retreat, placeholder: "Todos", options: [{ value: "pendiente", label: "Pendientes" }, { value: "retirado", label: "Retirados" }], onChange: (v) => { setPage(1); setRetreat(v); } },
   ];
 
+  const cycleOrigin = () => {
+    setPage(1);
+    setOrigin((current) => current === "" ? "manual" : current === "manual" ? "bot_whatsapp" : "");
+  };
+  const originLabel = origin === "bot_whatsapp"
+    ? "Mostrando bot"
+    : origin === "manual"
+      ? "Mostrando manuales"
+      : "Todos los orígenes";
+
   return (
-    <ModulePage className="ventas-page" title="Ventas registradas" description="Ventas manuales y del bot con stock, trazabilidad, retiro y asiento contable sincronizado." stats={summary} filters={filters} canCreate={writable} primaryActionLabel="Nueva venta" onPrimaryAction={() => setModal({ open: true, id: null })} secondaryActions={[{ key: "origen", label: origin === "bot_whatsapp" ? "Mostrando bot" : origin === "manual" ? "Mostrando manuales" : "Todos los orígenes", className: "mov-btn--ghost", onClick: () => setOrigin((current) => current === "" ? "manual" : current === "manual" ? "bot_whatsapp" : "") }]}>
+    <ModulePage
+      className="ventas-page ventas-page--orders"
+      title="Ventas registradas"
+      filters={filters}
+      canCreate={writable}
+      primaryActionLabel="Nueva venta"
+      primaryActionClassName="global-tableAction--top ventas-headAction ventas-headAction--new"
+      onPrimaryAction={() => setModal({ open: true, id: null })}
+      secondaryActions={[
+        {
+          key: "origen",
+          label: originLabel,
+          className: "mov-btn--ghost global-tableAction--top ventas-headAction ventas-headAction--origin",
+          onClick: cycleOrigin,
+        },
+        {
+          key: "resumen",
+          label: "Ver resumen",
+          icon: faEye,
+          className: "mov-btn--ghost global-tableAction--top ventas-headAction ventas-headAction--summary",
+          onClick: () => setSummaryOpen(true),
+        },
+      ]}
+    >
       <GlobalDivTable
         className="ventas-global-table has-bottom-pagination"
         bodyClassName="entity-table-wrap"
@@ -670,7 +1151,7 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
           { label: "Acciones", align: "center" },
         ]}
         loading={loading}
-        loadingLabel="Cargando ventas..."
+        loadingLabel=""
         skeletonActionColumn
         ariaLabel="Ventas registradas"
         empty={!rows.length}
@@ -729,6 +1210,7 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
           </div>
         ))}
       </GlobalDivTable>
+
       <GlobalPagination
         currentPage={Number(pagination.pagina || page)}
         totalPages={Number(pagination.total_paginas || 1)}
@@ -736,15 +1218,51 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
         from={Number(pagination.desde || ((Number(pagination.pagina || page) - 1) * 20 + (rows.length ? 1 : 0)))}
         to={Number(pagination.hasta || Math.min(Number(pagination.total || 0), Number(pagination.pagina || page) * 20))}
         loading={loading}
+        loadingLabel=""
         itemLabel="ventas"
         ariaLabel="Paginación de ventas registradas"
         onPageChange={setPage}
+        compactPageItems
+        className="ventas-tableFooter"
+        leftContent={
+          <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
+            <button
+              type="button"
+              className="ventas-footer-action ventas-footer-action--origin"
+              onClick={cycleOrigin}
+            >
+              {originLabel}
+            </button>
+            <button
+              type="button"
+              className="ventas-footer-action ventas-footer-action--summary"
+              onClick={() => setSummaryOpen(true)}
+            >
+              <FontAwesomeIcon icon={faEye} />
+              <span>Ver resumen</span>
+            </button>
+            {writable ? (
+              <button
+                type="button"
+                className="ventas-footer-action ventas-footer-action--new"
+                onClick={() => setModal({ open: true, id: null })}
+              >
+                <FontAwesomeIcon icon={faPlus} />
+                <span>Nueva venta</span>
+              </button>
+            ) : null}
+          </div>
+        }
       />
+
+      <VentasSummaryModal open={summaryOpen} onClose={() => setSummaryOpen(false)} summary={summary} />
+
       <OrderModal open={modal.open} initialId={modal.id} catalogs={catalogs} saving={saving} onClose={() => setModal({ open: false, id: null })} onSave={save} onFeedback={showFeedback} />
       <ModalEliminarGlobal
         open={Boolean(retreatConfirm)}
         row={retreatConfirm}
         operacion="advertencia"
+        showLoadingEffect={false}
         tone={retreatConfirm && yes(retreatConfirm.retirado) ? "warning" : "success"}
         icon={retreatConfirm && yes(retreatConfirm.retirado) ? faRotateLeft : faCheckCircle}
         title={retreatConfirm && yes(retreatConfirm.retirado) ? "Quitar retiro" : "Confirmar retiro"}
@@ -763,7 +1281,7 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
           return { mensaje: result.mensaje };
         }}
       />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || `${confirm.cantidad_items || 0} conceptos` }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); setConfirm(null); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
+      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || `${confirm.cantidad_items || 0} conceptos` }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); setConfirm(null); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
       {feedback}
     </ModulePage>
   );
@@ -779,6 +1297,7 @@ function PlanillasSection({ summary, feedback, showFeedback }) {
   const [division, setDivision] = useState("");
   const [onlyActive, setOnlyActive] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const navigate = useNavigate();
 
   const load = useCallback(async ({ silent = false } = {}) => {
@@ -892,17 +1411,49 @@ function PlanillasSection({ summary, feedback, showFeedback }) {
   };
 
   return (
-    <ModulePage className="ventas-page" title="Planillas de ventas" description="Planillas A4 para cursos/divisiones o docentes, con información actual de la venta seleccionada." stats={summary} canCreate={false} secondaryActions={[{ key: "imprimir", label: "Generar planilla", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || !campaign }]}>
+    <ModulePage
+      className="ventas-page ventas-page--planillas"
+      title="Planillas de ventas"
+      canCreate={false}
+      secondaryActions={[
+        { key: "resumen", label: "Ver resumen", icon: faEye, className: "mov-btn--ghost ventas-headAction ventas-headAction--summary", onClick: () => setSummaryOpen(true) },
+        { key: "imprimir", label: "Generar planilla", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || !campaign },
+      ]}
+    >
       <div className="ventas-planillas-panel">
-        <div className="ventas-planillas-grid">
-          <label className="ventas-field"><span>Venta / campaña</span><select value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">Seleccionar...</option>{(options.campanias || []).map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva)"}</option>)}</select></label>
-          <label className="ventas-field"><span>Tipo de planilla</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="cursos">Cursos y alumnos</option><option value="docentes">Docentes</option></select></label>
-          {type === "cursos" && <><label className="ventas-field"><span>Año</span><select value={year} onChange={(e) => setYear(e.target.value)}><option value="">Todos</option>{(options.anios || []).map((a) => <option key={a.id_anio} value={a.id_anio}>{a.nombre_anio}</option>)}</select></label><label className="ventas-field"><span>División</span><select value={division} onChange={(e) => setDivision(e.target.value)}><option value="">Todas</option>{(options.divisiones || []).map((d) => <option key={d.id_division} value={d.id_division}>{d.nombre_division}</option>)}</select></label></>}
+        <div className="ventas-planillas-toolbar">
+          <div className="ventas-planillas-grid">
+            <label className="ventas-field ventas-planillas-field--campaign"><span>Venta / campaña</span><select value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">Seleccionar...</option>{(options.campanias || []).map((c) => <option key={c.id_campania} value={c.id_campania}>{c.nombre}{yes(c.activo) ? "" : " (inactiva)"}</option>)}</select></label>
+            <label className="ventas-field ventas-planillas-field--type"><span>Tipo de planilla</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="cursos">Cursos y alumnos</option><option value="docentes">Docentes</option></select></label>
+            {type === "cursos" && (
+              <>
+                <label className="ventas-field ventas-planillas-field--year"><span>Año</span><select value={year} onChange={(e) => setYear(e.target.value)}><option value="">Todos</option>{(options.anios || []).map((a) => <option key={a.id_anio} value={a.id_anio}>{a.nombre_anio}</option>)}</select></label>
+                <label className="ventas-field ventas-planillas-field--division"><span>División</span><select value={division} onChange={(e) => setDivision(e.target.value)}><option value="">Todas</option>{(options.divisiones || []).map((d) => <option key={d.id_division} value={d.id_division}>{d.nombre_division}</option>)}</select></label>
+              </>
+            )}
+          </div>
+
+          <VentasCheckbox
+            checked={onlyActive}
+            label={type === "docentes" ? "Solo docentes activos" : "Solo alumnos activos"}
+            className="ventas-planillas-active"
+            onChange={setOnlyActive}
+          />
         </div>
-        <label className="ventas-check"><input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} /><span>{type === "docentes" ? "Solo docentes activos" : "Solo alumnos activos"}</span></label>
-        <div className="ventas-planillas-preview"><FontAwesomeIcon icon={type === "docentes" ? faUsers : faFileLines} /><div><strong>{type === "docentes" ? `${options.total_docentes || 0} docentes disponibles` : "Una hoja por curso y división"}</strong><p>El documento se arma con datos actuales, se abre en una pestaña nueva y queda listo para imprimir o guardar como PDF desde el navegador.</p></div></div>
-        <button type="button" className="ventas-back-link" onClick={() => navigate("/ventas/registradas")}>Volver a ventas registradas</button>
+
+        <div className="ventas-planillas-meta">
+          <div className="ventas-planillas-preview">
+            <span className="ventas-planillas-preview__icon" aria-hidden="true"><FontAwesomeIcon icon={type === "docentes" ? faUsers : faFileLines} /></span>
+            <div>
+              <strong>{type === "docentes" ? `${options.total_docentes || 0} docentes disponibles` : "Una hoja por curso y división"}</strong>
+              <span>{type === "docentes" ? "La planilla se divide automáticamente en hojas listas para imprimir." : "Podés filtrar por año y división antes de generar el documento."}</span>
+            </div>
+          </div>
+          <button type="button" className="ventas-back-link" onClick={() => navigate("/ventas/registradas")}>Volver a ventas registradas</button>
+        </div>
       </div>
+
+      <VentasSummaryModal open={summaryOpen} onClose={() => setSummaryOpen(false)} summary={summary} />
       {feedback}
     </ModulePage>
   );

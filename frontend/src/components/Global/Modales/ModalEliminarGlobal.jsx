@@ -132,6 +132,7 @@ export default function ModalEliminarGlobal({
   cancelLabel = "Cancelar",
   loadingLabel,
   loadingMessage,
+  showLoadingEffect = true,
   successMessage,
   errorMessage,
   tone,
@@ -240,7 +241,9 @@ export default function ModalEliminarGlobal({
     }
 
     setProcessing(true);
-    showToast("cargando", resolvedLoadingMessage, 12000);
+    if (showLoadingEffect) {
+      showToast("cargando", resolvedLoadingMessage, 12000);
+    }
     let shouldClose = false;
     try {
       const result = await onConfirm({
@@ -277,6 +280,7 @@ export default function ModalEliminarGlobal({
     row,
     showReason,
     reasonRequired,
+    showLoadingEffect,
     showToast,
   ]);
 
@@ -291,7 +295,6 @@ export default function ModalEliminarGlobal({
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        close();
       } else if (
         event.key === "Enter" &&
         event.target?.tagName !== "TEXTAREA" &&
@@ -308,7 +311,7 @@ export default function ModalEliminarGlobal({
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [close, confirm, confirmDisabled, isLoading, open, showReason]);
+  }, [confirm, confirmDisabled, isLoading, open, showReason]);
 
   if (!open) return null;
 
@@ -414,7 +417,7 @@ export default function ModalEliminarGlobal({
               onClick={confirm}
               disabled={isLoading || confirmDisabled}
             >
-              {isLoading ? resolvedLoadingLabel : resolvedConfirmLabel}
+              {isLoading && showLoadingEffect ? resolvedLoadingLabel : resolvedConfirmLabel}
             </button>
           </div>
         </div>

@@ -623,21 +623,6 @@ const MediaViewerModal = ({ open, onClose, item }) => {
 
   useModalEscapeStack(open, onClose);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const onDown = (e) => {
-      const box = boxRef.current;
-      if (!box) return;
-      if (!box.contains(e.target)) onClose?.();
-    };
-
-    document.addEventListener("mousedown", onDown);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-    };
-  }, [open, onClose]);
-
   if (!open || !item?.url) return null;
 
   const mime = item.mime || inferMimeFromUrl(item.url);

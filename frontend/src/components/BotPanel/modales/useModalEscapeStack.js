@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 /**
  * Pila compartida de modales abiertos.
- * Escape actúa únicamente sobre el modal que se abrió último.
+ * Escape queda capturado por el modal superior, pero no lo cierra.
+ * Los modales solo se cierran mediante controles explícitos (X / Cerrar / Cancelar).
  */
 const openModalStack = [];
 let escapeListenerAttached = false;
@@ -15,7 +16,7 @@ const handleEscape = (event) => {
 
   event.preventDefault();
   event.stopImmediatePropagation();
-  topModal.close();
+  event.stopPropagation();
 };
 
 const attachEscapeListener = () => {
@@ -30,17 +31,11 @@ const detachEscapeListener = () => {
   escapeListenerAttached = false;
 };
 
-export const useModalEscapeStack = (open, onClose) => {
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
+export const useModalEscapeStack = (open) => {
   useEffect(() => {
     if (!open) return undefined;
 
-    const modalEntry = {
-      id: Symbol("modal"),
-      close: () => closeRef.current?.(),
-    };
+    const modalEntry = { id: Symbol("modal") };
 
     openModalStack.push(modalEntry);
     attachEscapeListener();

@@ -34,7 +34,7 @@ const EditNombreModal = ({
   };
 
   return (
-    <div className="bp-name-overlay" role="dialog" aria-modal="true" onMouseDown={onClose}>
+    <div className="bp-name-overlay" role="dialog" aria-modal="true">
       <div className="bp-name-card" onMouseDown={(e) => e.stopPropagation()}>
         <div className="bp-name-head">
           <div className="bp-name-heading">
