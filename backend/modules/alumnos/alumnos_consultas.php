@@ -5,7 +5,7 @@ trait AlumnosConsultas
 {
     private static function listarDatos(PDO $db, array $filters): array
     {
-        $where = ['a.activo = 1'];
+        $where = ['a.activo = 1', 'a.eliminado = 0', 'a.ingreso <= CURDATE()'];
         $params = [];
 
         self::appendSearch($where, $params, $filters['buscar'] ?? '');
@@ -41,7 +41,7 @@ trait AlumnosConsultas
 
     private static function listarEgresadosDatos(PDO $db, array $filters): array
     {
-        $where = ['a.activo = 0'];
+        $where = ['a.activo = 0', 'a.eliminado = 0'];
         $params = [];
         self::appendSearch($where, $params, $filters['buscar'] ?? '');
         self::appendIdFilter($where, $params, $filters, ['id_anio', 'anio'], 'a.id_anio', 'id_anio');
@@ -86,7 +86,7 @@ trait AlumnosConsultas
 
     private static function obtenerDatos(PDO $db, int $id): array
     {
-        $statement = $db->prepare('SELECT ' . self::baseSelectSql() . ' ' . self::baseFromSql() . ' WHERE a.id_alumno = ? LIMIT 1');
+        $statement = $db->prepare('SELECT ' . self::baseSelectSql() . ' ' . self::baseFromSql() . ' WHERE a.id_alumno = ? AND a.eliminado = 0 LIMIT 1');
         $statement->execute([$id]);
         $row = $statement->fetch();
         if (!$row) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
@@ -156,6 +156,13 @@ trait AlumnosConsultas
             $row['id_auditoria'] = (int)$row['id_auditoria'];
             $row['datos_anteriores'] = $row['datos_anteriores'] ? json_decode((string)$row['datos_anteriores'], true) : null;
             $row['datos_nuevos'] = $row['datos_nuevos'] ? json_decode((string)$row['datos_nuevos'], true) : null;
+            $semantic = self::describirHistorialAlumno(
+                (string)($row['accion'] ?? ''),
+                is_array($row['datos_anteriores']) ? $row['datos_anteriores'] : null,
+                is_array($row['datos_nuevos']) ? $row['datos_nuevos'] : null
+            );
+            $row['etiqueta'] = $semantic['etiqueta'];
+            $row['detalle'] = $semantic['detalle'];
             return $row;
         }, $statement->fetchAll());
         return ['items' => $items];
@@ -165,7 +172,7 @@ trait AlumnosConsultas
     {
         $statement = $db->query(
             'SELECT ' . self::baseSelectSql() . ' ' . self::baseFromSql() .
-            ' WHERE a.activo = 1 ORDER BY a.apellido, a.nombre, a.id_alumno'
+            ' WHERE a.activo = 1 AND a.eliminado = 0 AND a.ingreso <= CURDATE() ORDER BY a.apellido, a.nombre, a.id_alumno'
         );
         return array_map(static function (array $row): array {
             $alumno = self::normalizarAlumno($row);
@@ -201,7 +208,7 @@ trait AlumnosConsultas
         return 'a.id_alumno, a.apellido, a.nombre, a.id_tipo_documento, a.num_documento,
                 a.id_sexo, a.domicilio, a.localidad, a.cp, a.telefono, a.lugar_nacimiento,
                 a.fecha_nacimiento, a.id_anio, a.id_division, a.id_categoria, a.id_cat_monto,
-                a.es_cobrador, a.activo, a.motivo, a.ingreso, a.observaciones, a.id_familia,
+                a.es_cobrador, a.activo, a.eliminado, a.eliminado_en, a.motivo, a.ingreso, a.observaciones, a.id_familia,
                 a.creado_en, a.actualizado_en,
                 td.descripcion AS tipo_documento, td.sigla AS tipo_documento_sigla,
                 s.sexo, an.nombre_anio, d.nombre_division,
@@ -218,6 +225,7 @@ trait AlumnosConsultas
         }
         $row['es_cobrador'] = (bool)$row['es_cobrador'];
         $row['activo'] = (bool)$row['activo'];
+        $row['eliminado'] = (bool)($row['eliminado'] ?? false);
         $row['monto_mensual'] = $row['monto_mensual'] !== null ? (float)$row['monto_mensual'] : null;
         $row['monto_anual'] = $row['monto_anual'] !== null ? (float)$row['monto_anual'] : null;
         $row['nombre'] = $row['nombre'] ?? '';
@@ -250,7 +258,9 @@ trait AlumnosConsultas
                 SUM(a.activo = 0 AND ae.id_egresado IS NOT NULL) AS egresados,
                 SUM(a.activo = 0 AND ae.id_egresado IS NULL) AS bajas
              FROM alumnos a
-             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno'
+             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno
+             WHERE a.eliminado = 0
+               AND (a.activo = 0 OR a.ingreso <= CURDATE())'
         )->fetch() ?: [];
         return [
             'total' => (int)($summary['total'] ?? 0),
@@ -259,6 +269,97 @@ trait AlumnosConsultas
             'egresados' => (int)($summary['egresados'] ?? 0),
             'bajas' => (int)($summary['bajas'] ?? 0),
         ];
+    }
+
+    private static function describirHistorialAlumno(string $action, ?array $before, ?array $after): array
+    {
+        $action = strtoupper(trim($action));
+        $before = $before ?? [];
+        $after = $after ?? [];
+
+        $wasActive = isset($before['activo']) ? (bool)$before['activo'] : null;
+        $isActive = isset($after['activo']) ? (bool)$after['activo'] : null;
+        $wasDeleted = (int)($before['eliminado'] ?? 0) === 1;
+        $isDeleted = (int)($after['eliminado'] ?? 0) === 1;
+        $reason = trim((string)($after['motivo'] ?? $before['motivo'] ?? ''));
+        $reasonUpper = strtoupper($reason);
+
+        if (in_array($action, ['ALTA_MANUAL', 'INSERT'], true)) {
+            return ['etiqueta' => 'Alumno dado de alta', 'detalle' => 'Se creó el registro del alumno.'];
+        }
+        if (in_array($action, ['ALTA_INGRESANTE'], true)) {
+            return ['etiqueta' => 'Alta desde Ingresantes', 'detalle' => 'El ingresante pasó a ser alumno conservando su identidad y matrícula.'];
+        }
+        if (in_array($action, ['PADRON_ALTA', 'IMPORT_INSERT'], true)) {
+            return ['etiqueta' => 'Alta desde padrón', 'detalle' => 'El alumno fue incorporado desde el padrón importado.'];
+        }
+        if ($action === 'DELETE_LOGICO' || (!$wasDeleted && $isDeleted)) {
+            $detail = $reason !== '' ? preg_replace('/^ELIMINADO:\s*/iu', 'Motivo: ', $reason) : 'Se retiró del padrón operativo conservando todo su historial.';
+            return ['etiqueta' => 'Alumno eliminado del padrón', 'detalle' => $detail ?: null];
+        }
+        if (in_array($action, ['REACTIVACION', 'REACTIVACION_INGRESANTE'], true) || ($wasActive === false && $isActive === true)) {
+            $egresoAnterior = is_array($before['_egreso_anterior'] ?? null) ? $before['_egreso_anterior'] : null;
+            $extra = $egresoAnterior && !empty($egresoAnterior['fecha_egreso'])
+                ? ' El egreso anterior del ' . self::fechaCortaHistorial((string)$egresoAnterior['fecha_egreso']) . ' quedó preservado en la auditoría.'
+                : '';
+            if ($wasDeleted) {
+                return ['etiqueta' => 'Alumno recuperado', 'detalle' => 'Volvió al padrón activo conservando el mismo ID histórico.' . $extra];
+            }
+            return ['etiqueta' => 'Alumno reactivado', 'detalle' => 'Volvió a quedar activo en el padrón.' . $extra];
+        }
+        if (in_array($action, ['EGRESO', 'RECLASIFICACION_EGRESO', 'PADRON_EGRESO'], true)
+            || ($wasActive === true && $isActive === false && str_contains($reasonUpper, 'EGRESO'))) {
+            return ['etiqueta' => 'Alumno marcado como egresado', 'detalle' => $reason !== '' ? 'Motivo: ' . $reason : 'Se registró el egreso del alumno.'];
+        }
+        if (in_array($action, ['BAJA', 'RECLASIFICACION_BAJA', 'PADRON_BAJA', 'IMPORT_BAJA'], true)
+            || ($wasActive === true && $isActive === false)) {
+            $label = str_contains($action, 'RECLASIFICACION') ? 'Reclasificado como baja' : 'Alumno dado de baja';
+            $detail = $reason !== '' ? 'Motivo: ' . $reason : 'El alumno dejó de estar activo.';
+            $egresoAnterior = is_array($before['_egreso_anterior'] ?? null) ? $before['_egreso_anterior'] : null;
+            if ($egresoAnterior && !empty($egresoAnterior['fecha_egreso'])) {
+                $detail .= ' El egreso anterior del ' . self::fechaCortaHistorial((string)$egresoAnterior['fecha_egreso']) . ' quedó preservado en la auditoría.';
+            }
+            return ['etiqueta' => $label, 'detalle' => $detail];
+        }
+        if (in_array($action, ['PADRON_ACTUALIZACION', 'IMPORT'], true)) {
+            return ['etiqueta' => 'Datos sincronizados desde padrón', 'detalle' => self::detalleCamposModificados($before, $after)];
+        }
+        if ($action === 'ACTUALIZACION_DATOS' || $action === 'UPDATE') {
+            return ['etiqueta' => 'Datos del alumno actualizados', 'detalle' => self::detalleCamposModificados($before, $after)];
+        }
+
+        $friendly = str_replace('_', ' ', mb_strtolower($action ?: 'cambio', 'UTF-8'));
+        $friendly = function_exists('mb_convert_case') ? mb_convert_case($friendly, MB_CASE_TITLE, 'UTF-8') : ucfirst($friendly);
+        return ['etiqueta' => $friendly, 'detalle' => self::detalleCamposModificados($before, $after)];
+    }
+
+    private static function fechaCortaHistorial(string $value): string
+    {
+        $date = DateTimeImmutable::createFromFormat('Y-m-d', substr($value, 0, 10));
+        return $date ? $date->format('d/m/Y') : $value;
+    }
+
+    private static function detalleCamposModificados(array $before, array $after): ?string
+    {
+        if (!$before || !$after) return null;
+        $labels = [
+            'apellido' => 'apellido', 'nombre' => 'nombre', 'num_documento' => 'documento',
+            'domicilio' => 'domicilio', 'localidad' => 'localidad', 'cp' => 'código postal',
+            'telefono' => 'teléfono', 'fecha_nacimiento' => 'fecha de nacimiento',
+            'id_anio' => 'año', 'id_division' => 'división', 'id_categoria' => 'categoría',
+            'id_cat_monto' => 'categoría de monto', 'id_familia' => 'familia',
+            'es_cobrador' => 'cobrador', 'ingreso' => 'fecha de ingreso', 'observaciones' => 'observaciones',
+        ];
+        $changed = [];
+        foreach ($labels as $field => $label) {
+            if (!array_key_exists($field, $before) && !array_key_exists($field, $after)) continue;
+            if ((string)($before[$field] ?? '') !== (string)($after[$field] ?? '')) $changed[] = $label;
+        }
+        if (!$changed) return null;
+        $shown = array_slice($changed, 0, 5);
+        $text = 'Se modificó: ' . implode(', ', $shown);
+        if (count($changed) > count($shown)) $text .= ' y ' . (count($changed) - count($shown)) . ' campo(s) más';
+        return $text . '.';
     }
 
     private static function appendSearch(array &$where, array &$params, mixed $value): void

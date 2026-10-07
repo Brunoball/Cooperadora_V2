@@ -47,18 +47,18 @@ trait FamiliasGestion
                 // Se desvinculan únicamente quienes pertenecían a esta familia y ya no
                 // fueron seleccionados, sin tocar alumnos de otras familias.
                 if ($memberIds === []) {
-                    $db->prepare('UPDATE alumnos SET id_familia = NULL, actualizado_en = NOW() WHERE id_familia = ?')
+                    $db->prepare('UPDATE alumnos SET id_familia = NULL, actualizado_en = NOW() WHERE id_familia = ? AND eliminado = 0')
                         ->execute([$familyId]);
                 } else {
                     $placeholders = implode(',', array_fill(0, count($memberIds), '?'));
                     $db->prepare(
                         "UPDATE alumnos SET id_familia = NULL, actualizado_en = NOW()
-                         WHERE id_familia = ? AND id_alumno NOT IN ({$placeholders})"
+                         WHERE id_familia = ? AND eliminado = 0 AND id_alumno NOT IN ({$placeholders})"
                     )->execute(array_merge([$familyId], $memberIds));
 
                     $db->prepare(
                         "UPDATE alumnos SET id_familia = ?, actualizado_en = NOW()
-                         WHERE id_alumno IN ({$placeholders})"
+                         WHERE eliminado = 0 AND id_alumno IN ({$placeholders})"
                     )->execute(array_merge([$familyId], $memberIds));
                 }
 
@@ -110,7 +110,23 @@ trait FamiliasGestion
                 api_error('Primero debés dar de baja la familia antes de eliminarla definitivamente.', 'FAMILIA_ACTIVA', 409);
             }
             $before['integrantes'] = self::idsFamilia($db, $id);
-            $db->prepare('UPDATE alumnos SET id_familia = NULL, actualizado_en = NOW() WHERE id_familia = ?')->execute([$id]);
+
+            // Un alumno eliminado conserva su relación histórica con la familia.
+            // Borrar físicamente la familia haría que la FK ON DELETE SET NULL
+            // mutile ese contexto. En ese caso la familia debe quedar inactiva.
+            $historical = $db->prepare(
+                'SELECT COUNT(*) FROM alumnos WHERE id_familia = ? AND eliminado = 1'
+            );
+            $historical->execute([$id]);
+            if ((int)$historical->fetchColumn() > 0) {
+                api_error(
+                    'No se puede eliminar definitivamente esta familia porque está vinculada al historial de alumnos eliminados. Mantenela dada de baja para conservar la trazabilidad.',
+                    'FAMILIA_CON_HISTORIAL',
+                    409
+                );
+            }
+
+            $db->prepare('UPDATE alumnos SET id_familia = NULL, actualizado_en = NOW() WHERE id_familia = ? AND eliminado = 0')->execute([$id]);
             $db->prepare('DELETE FROM familias WHERE id_familia = ?')->execute([$id]);
             audit_change($db, $auth, 'FAMILIAS', 'DELETE', 'familias', $id, 'Eliminación definitiva', $before, null);
             return ['id_familia' => $id];
@@ -144,7 +160,7 @@ trait FamiliasGestion
         if ($ids === []) return;
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
         $statement = $db->prepare(
-            "SELECT a.id_alumno, a.apellido, a.nombre, a.activo, a.id_familia, f.nombre_familia
+            "SELECT a.id_alumno, a.apellido, a.nombre, a.activo, a.eliminado, a.ingreso, a.id_familia, f.nombre_familia
              FROM alumnos a
              LEFT JOIN familias f ON f.id_familia = a.id_familia
              WHERE a.id_alumno IN ({$placeholders}) FOR UPDATE"
@@ -154,6 +170,12 @@ trait FamiliasGestion
         if (count($rows) !== count($ids)) api_error('Uno de los alumnos seleccionados no existe.', 'ALUMNO_INVALIDO', 422);
 
         foreach ($rows as $row) {
+            if ((int)($row['eliminado'] ?? 0) === 1) {
+                api_error("{$row['apellido']}, {$row['nombre']} está eliminado y no puede incorporarse ni modificarse dentro de una familia.", 'ALUMNO_ELIMINADO', 409);
+            }
+            if ((bool)$row['activo'] && !empty($row['ingreso']) && (string)$row['ingreso'] > date('Y-m-d')) {
+                api_error("{$row['apellido']}, {$row['nombre']} todavía no inició su ciclo lectivo y no puede incorporarse como integrante activo.", 'ALUMNO_INGRESO_FUTURO', 409);
+            }
             $currentFamily = $row['id_familia'] !== null ? (int)$row['id_familia'] : null;
             // Un integrante histórico dado de baja puede seguir perteneciendo a la
             // misma familia. Lo que no permitimos es agregar un alumno inactivo a
@@ -185,7 +207,7 @@ trait FamiliasGestion
 
     private static function idsFamilia(PDO $db, int $familyId, bool $excludeNew = false, array $newIds = []): array
     {
-        $statement = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_familia = ? ORDER BY id_alumno');
+        $statement = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_familia = ? AND eliminado = 0 ORDER BY id_alumno');
         $statement->execute([$familyId]);
         $ids = array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
         if ($excludeNew && $newIds !== []) return array_values(array_diff($ids, $newIds));

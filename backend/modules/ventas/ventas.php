@@ -177,7 +177,7 @@ final class Ventas
         $alumno = self::fetchOne(
             $db,
             "SELECT id_alumno, TRIM(CONCAT(apellido, ' ', COALESCE(nombre, ''))) AS nombre
-               FROM alumnos WHERE num_documento = ? LIMIT 1",
+               FROM alumnos WHERE num_documento = ? AND eliminado = 0 AND ingreso <= CURDATE() LIMIT 1",
             [$dni]
         );
         if ($alumno) $name = clean_text($alumno['nombre'], 160, true);
@@ -696,7 +696,8 @@ final class Ventas
                   LEFT JOIN alumnos a ON a.id_alumno=vp.id_alumno
                   LEFT JOIN anio an ON an.id_anio=a.id_anio
                   LEFT JOIN division d ON d.id_division=a.id_division
-                 WHERE {$filter['sql']}
+                 WHERE (vp.id_alumno IS NULL OR (COALESCE(a.eliminado, 0) = 0 AND a.ingreso <= CURDATE()))
+                   AND {$filter['sql']}
                 UNION
                 SELECT NULL AS id_persona, a.num_documento AS dni, TRIM(CONCAT(a.apellido,' ',COALESCE(a.nombre,''))) AS nombre_apellido,
                        a.id_alumno, 'alumno' AS origen, a.telefono, an.nombre_anio, d.nombre_division
@@ -704,7 +705,7 @@ final class Ventas
                   LEFT JOIN ventas_personas vp ON vp.id_alumno=a.id_alumno OR vp.dni=a.num_documento
                   LEFT JOIN anio an ON an.id_anio=a.id_anio
                   LEFT JOIN division d ON d.id_division=a.id_division
-                 WHERE vp.id_persona IS NULL AND {$filter['sql']}
+                 WHERE a.eliminado = 0 AND a.ingreso <= CURDATE() AND vp.id_persona IS NULL AND {$filter['sql']}
              ) x ORDER BY nombre_apellido LIMIT 30";
         $statement=$db->prepare($sql); $statement->execute(array_merge($filter['params'],$filter['params']));
         api_success(['items'=>$statement->fetchAll(PDO::FETCH_ASSOC)?:[]]);
@@ -869,7 +870,7 @@ final class Ventas
         }
         $year=self::nullablePositiveId($_GET['id_anio'] ?? null);$division=self::nullablePositiveId($_GET['id_division'] ?? null);
         $principalId=(int)($campaign['id_producto_principal'] ?? 0);
-        $where=[];$params=[];if($onlyActive)$where[]='a.activo=1';if($year){$where[]='a.id_anio=?';$params[]=$year;}if($division){$where[]='a.id_division=?';$params[]=$division;}
+        $where=['a.eliminado=0'];$params=[];if($onlyActive){$where[]='a.activo=1';$where[]='a.ingreso<=CURDATE()';}if($year){$where[]='a.id_anio=?';$params[]=$year;}if($division){$where[]='a.id_division=?';$params[]=$division;}
         $sql="SELECT a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division,
                     COALESCE(SUM(CASE WHEN o.estado='aprobada' AND oi.id_producto={$principalId} THEN oi.cantidad ELSE 0 END),0) AS cantidad_ven,
                     COALESCE(SUM(CASE WHEN o.estado='aprobada' AND (oi.id_producto IS NULL OR oi.id_producto<>{$principalId}) THEN oi.cantidad ELSE 0 END),0) AS cantidad_gan,

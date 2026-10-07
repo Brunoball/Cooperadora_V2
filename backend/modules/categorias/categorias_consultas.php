@@ -27,7 +27,7 @@ trait CategoriasConsultas
             'SELECT cm.id_cat_monto, cm.nombre_categoria, cm.monto_mensual, cm.monto_anual,
                     cm.fecha_creacion,
                     (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto) AS cantidad_alumnos,
-                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto AND a.activo = 1) AS cantidad_alumnos_activos,
+                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto AND a.activo = 1 AND a.eliminado = 0 AND a.ingreso <= CURDATE()) AS cantidad_alumnos_activos,
                     (SELECT COUNT(*) FROM alumnos_egresados ae WHERE ae.id_cat_monto_final = cm.id_cat_monto) AS cantidad_egresados,
                     (SELECT COUNT(*) FROM categoria_hermanos ch WHERE ch.id_cat_monto = cm.id_cat_monto) AS cantidad_reglas_hermanos,
                     (SELECT MAX(ph.fecha_cambio) FROM precios_historicos ph WHERE ph.id_cat_monto = cm.id_cat_monto) AS ultimo_cambio
@@ -54,7 +54,7 @@ trait CategoriasConsultas
             "SELECT cm.id_cat_monto, cm.nombre_categoria, cm.monto_mensual, cm.monto_anual,
                     cm.fecha_creacion,
                     (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto) AS cantidad_alumnos,
-                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto AND a.activo = 1) AS cantidad_alumnos_activos,
+                    (SELECT COUNT(*) FROM alumnos a WHERE a.id_cat_monto = cm.id_cat_monto AND a.activo = 1 AND a.eliminado = 0 AND a.ingreso <= CURDATE()) AS cantidad_alumnos_activos,
                     (SELECT COUNT(*) FROM alumnos_egresados ae WHERE ae.id_cat_monto_final = cm.id_cat_monto) AS cantidad_egresados,
                     (SELECT COUNT(*) FROM categoria_hermanos ch WHERE ch.id_cat_monto = cm.id_cat_monto) AS cantidad_reglas_hermanos,
                     (SELECT MAX(ph.fecha_cambio) FROM precios_historicos ph WHERE ph.id_cat_monto = cm.id_cat_monto) AS ultimo_cambio

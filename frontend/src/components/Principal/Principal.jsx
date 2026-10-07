@@ -37,6 +37,7 @@ const NAV_ITEMS = [
     icon: faUsers,
     children: [
       { key: "alumnos-listado", label: "Alumnos", path: "/alumnos/listado" },
+      { key: "alumnos-ingresantes", label: "Ingresantes", path: "/alumnos/ingresantes" },
       { key: "alumnos-familias", label: "Familias", path: "/alumnos/familias" },
     ],
   },

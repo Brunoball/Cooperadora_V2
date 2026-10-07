@@ -438,7 +438,7 @@ export default function ContableModule({ view = "summary" }) {
   const [summaryMode, setSummaryMode] = useState("annual");
   const [incomeTab, setIncomeTab] = useState("students");
   const isStudentIncomeTab = incomeTab === "students";
-  const [feePeriod, setFeePeriod] = useState(String(CURRENT_MONTH));
+  const [feePeriod, setFeePeriod] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentPage, setStudentPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -503,7 +503,7 @@ export default function ContableModule({ view = "summary" }) {
 
   useEffect(() => {
     setStudentPage(1);
-  }, [year, feePeriod, studentSearch]);
+  }, [year, month, feePeriod, mean, studentSearch]);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -525,7 +525,9 @@ export default function ContableModule({ view = "summary" }) {
         if (view === "income" && isStudentIncomeTab) {
           response = await contableApi.ingresosAlumnos({
             anio: year,
+            mes: month,
             periodo: feePeriod,
+            medio: mean,
             buscar: studentSearch,
             pagina: studentPage,
           });
@@ -962,14 +964,28 @@ export default function ContableModule({ view = "summary" }) {
   ];
   const feePeriodFilter = {
     key: "periodo-cuotas",
-    label: "Período",
+    label: "Mes / concepto pagado",
     type: "select",
     className: "contable-filter--period",
     value: feePeriod,
     onChange: setFeePeriod,
-    includeEmptyOption: false,
+    includeEmptyOption: true,
+    placeholder: "Todos",
     options: (catalogs.periodos || []).map((item) => ({
       value: String(item.id_periodo),
+      label: item.nombre,
+    })),
+  };
+  const paymentMethodFilter = {
+    key: "medio",
+    label: "Medio de pago",
+    type: "select",
+    className: "contable-filter--payment",
+    placeholder: "Todos",
+    value: mean,
+    onChange: setMean,
+    options: catalogs.medios_pago.map((item) => ({
+      value: item.id_medio_pago,
       label: item.nombre,
     })),
   };
@@ -996,19 +1012,7 @@ export default function ContableModule({ view = "summary" }) {
         label: item.nombre,
       })),
     },
-    {
-      key: "medio",
-      label: "Medio de pago",
-      type: "select",
-      className: "contable-filter--payment",
-      placeholder: "Todos",
-      value: mean,
-      onChange: setMean,
-      options: catalogs.medios_pago.map((item) => ({
-        value: item.id_medio_pago,
-        label: item.nombre,
-      })),
-    },
+    paymentMethodFilter,
   ];
   const pageFilters =
     view === "summary"
@@ -1051,8 +1055,10 @@ export default function ContableModule({ view = "summary" }) {
                     value: studentSearch,
                     onChange: setStudentSearch,
                   },
-                  periodFilters[0],
+                  { ...periodFilters[0], label: "Año de cobro" },
+                  { ...periodFilters[1], label: "Mes de cobro" },
                   feePeriodFilter,
+                  paymentMethodFilter,
                 ]
               : detailFilters),
           ]

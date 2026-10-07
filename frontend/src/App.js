@@ -5,6 +5,7 @@ import Principal from "./components/Principal/Principal";
 import Dashboard from "./components/Dashboard/Dashboard";
 import Alumnos from "./components/Alumnos/Alumnos";
 import Familias from "./components/Alumnos/secciones/Familias";
+import Ingresantes from "./components/Alumnos/secciones/Ingresantes";
 import Cuotas from "./components/Cuotas/Cuotas";
 import Categorias from "./components/Categorias/Categorias";
 import DescuentosFamiliares from "./components/Categorias/secciones/DescuentosFamiliares";
@@ -174,6 +175,7 @@ export default function App() {
           <Route path="/alumnos" element={<Navigate to="/alumnos/listado" replace />} />
           <Route path="/alumnos/listado" element={<Alumnos />} />
           <Route path="/alumnos/familias" element={<Familias />} />
+          <Route path="/alumnos/ingresantes" element={<Ingresantes />} />
           <Route path="/alumnos/egresados" element={<Navigate to="/alumnos/listado" replace />} />
 
           <Route path="/cuotas" element={<Cuotas />} />

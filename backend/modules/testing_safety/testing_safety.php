@@ -9,12 +9,14 @@ declare(strict_types=1);
 final class TestingSafety
 {
     private const TABLES = [
-        'alumnos', 'alumnos_egresados', 'alumnos_eliminados', 'familias',
+        'alumnos', 'alumnos_egresados', 'alumnos_eliminados', 'ingresantes', 'familias',
         'pagos', 'ingresos', 'egresos',
         'categoria', 'categoria_monto', 'categoria_hermanos',
         'categoria_hermanos_historial', 'precios_historicos',
         'contable_categoria', 'contable_descripcion', 'contable_proveedor',
         'sexo', 'tipos_documentos',
+        'ventas_productos', 'ventas_campanias', 'ventas_personas',
+        'ventas_ordenes', 'ventas_orden_items',
         'anio', 'division', 'meses', 'medio_pago',
         'sis_usuarios', 'sis_sesiones', 'sis_login_auditoria', 'auditoria',
     ];
@@ -37,8 +39,7 @@ final class TestingSafety
             $auth['db'],
             "SELECT COUNT(*) FROM sis_login_auditoria
              WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
-                OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'
-                OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-RH-E2E-%'"
+                OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'"
         );
         $counts['auditoria_marcada'] = self::scalarCount(
             $auth['db'],
@@ -64,6 +65,9 @@ final class TestingSafety
         self::requireE2EHeader();
         $db = $auth['db'];
         $sets = self::e2eSets($db);
+        // La propia sesión de bootstrap se crea para poder calcular la huella.
+        // Excluir solamente esa PK evita que el setup altere artificialmente el baseline.
+        $sets['sesion_actual'] = isset($auth['id_sesion']) ? [(int)$auth['id_sesion']] : [];
         $tables = [];
 
         foreach (self::TABLES as $table) {
@@ -133,6 +137,63 @@ final class TestingSafety
         );
         $students = array_values(array_unique(array_merge($students, $archived)));
 
+        $incomingStudents = [];
+        if (self::tableExists($db, 'ingresantes')) {
+            $incomingStudents = self::ids(
+                $db,
+                "SELECT id_ingresante FROM ingresantes
+                 WHERE UPPER(COALESCE(apellido,'')) LIKE 'PW E2E INGRESANTE %'
+                    OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE INGRESANTE %'
+                    OR UPPER(COALESCE(nombre,'')) LIKE 'PW E2E INGRESANTE %'
+                    OR UPPER(COALESCE(nombre,'')) LIKE 'PW EEE INGRESANTE %'
+                    OR UPPER(COALESCE(observaciones,'')) LIKE '%PW E2E%'
+                    OR UPPER(COALESCE(observaciones,'')) LIKE '%PW EEE%'"
+            );
+            if ($students !== []) {
+                $linkedIncoming = self::idsPrepared(
+                    $db,
+                    'SELECT id_ingresante FROM ingresantes WHERE id_alumno_confirmado IN ('
+                        . self::placeholders(count($students)) . ')',
+                    $students
+                );
+                $incomingStudents = array_values(array_unique(array_merge($incomingStudents, $linkedIncoming)));
+            }
+        }
+
+        $salesProducts = self::ids(
+            $db,
+            "SELECT id_producto FROM ventas_productos
+             WHERE UPPER(nombre) LIKE 'PW E2E VTA PROD %'"
+        );
+        $salesCampaigns = self::ids(
+            $db,
+            "SELECT id_campania FROM ventas_campanias
+             WHERE UPPER(nombre) LIKE 'PW E2E VTA CAMP %'"
+        );
+        $salesPersons = self::ids(
+            $db,
+            "SELECT id_persona FROM ventas_personas
+             WHERE UPPER(nombre_apellido) LIKE 'PW E2E VTA PERSONA %'"
+        );
+        $salesOrders = self::ids(
+            $db,
+            "SELECT id_orden FROM ventas_ordenes
+             WHERE UPPER(COALESCE(observacion,'')) LIKE 'PW E2E VTA ORDEN %'"
+        );
+        $salesItems = $salesOrders === [] ? [] : self::idsPrepared(
+            $db,
+            'SELECT id_item FROM ventas_orden_items WHERE id_orden IN ('
+                . self::placeholders(count($salesOrders)) . ')',
+            $salesOrders
+        );
+        $salesIncomes = $salesOrders === [] ? [] : self::idsPrepared(
+            $db,
+            'SELECT id_ingreso FROM ventas_ordenes
+             WHERE id_orden IN (' . self::placeholders(count($salesOrders)) . ')
+               AND id_ingreso IS NOT NULL',
+            $salesOrders
+        );
+
         $amountCategories = self::ids(
             $db,
             "SELECT id_cat_monto FROM categoria_monto
@@ -181,13 +242,15 @@ final class TestingSafety
             $db,
             "SELECT id_cont_descripcion FROM contable_descripcion
              WHERE UPPER(nombre_descripcion) LIKE 'PW E2E CT %'
-                OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'"
+                OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'
+                OR UPPER(nombre_descripcion) LIKE 'VENTA PW E2E VTA CAMP %'"
         );
         $contableProviders = self::ids(
             $db,
             "SELECT id_cont_proveedor FROM contable_proveedor
              WHERE UPPER(nombre_proveedor) LIKE 'PW E2E CT %'
-                OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'"
+                OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'
+                OR UPPER(nombre_proveedor) LIKE 'PW E2E VTA PERSONA %'"
         );
         $contableIncomes = [];
         $contableExpenses = [];
@@ -207,12 +270,19 @@ final class TestingSafety
         return [
             'usuarios' => self::ids($db, "SELECT id_usuario FROM sis_usuarios WHERE LOWER(usuario) LIKE 'pw_e2e_%'"),
             'alumnos' => $students,
+            'ingresantes' => $incomingStudents,
             'familias' => self::ids(
                 $db,
                 "SELECT id_familia FROM familias
                  WHERE UPPER(nombre_familia) LIKE 'PW E2E FAM %'
                     OR UPPER(nombre_familia) LIKE 'PW EEE FAM %'"
             ),
+            'ventas_productos' => $salesProducts,
+            'ventas_campanias' => $salesCampaigns,
+            'ventas_personas' => $salesPersons,
+            'ventas_ordenes' => $salesOrders,
+            'ventas_orden_items' => $salesItems,
+            'ingresos_ventas' => $salesIncomes,
             'categoria_monto' => $amountCategories,
             'categoria' => self::ids(
                 $db,
@@ -261,9 +331,14 @@ final class TestingSafety
             'alumnos' => $in('alumnos', $row['id_alumno'] ?? null),
             'alumnos_egresados' => $in('alumnos', $row['id_alumno_original'] ?? null) || $containsMarker($row),
             'alumnos_eliminados' => $in('alumnos', $row['id_alumno_original'] ?? null) || $containsMarker($row),
+            'ingresantes' => $in('ingresantes', $row['id_ingresante'] ?? null)
+                || $in('alumnos', $row['id_alumno_confirmado'] ?? null)
+                || $containsMarker($row),
             'familias' => $in('familias', $row['id_familia'] ?? null),
             'pagos' => $in('pagos', $row['id_pago'] ?? null) || $in('alumnos', $row['id_alumno'] ?? null),
-            'ingresos' => $in('ingresos_contable', $row['id_ingreso'] ?? null) || $containsMarker($row),
+            'ingresos' => $in('ingresos_contable', $row['id_ingreso'] ?? null)
+                || $in('ingresos_ventas', $row['id_ingreso'] ?? null)
+                || $containsMarker($row),
             'egresos' => $in('egresos_comision', $row['id_egreso'] ?? null)
                 || $in('egresos_contable', $row['id_egreso'] ?? null)
                 || $in('pagos', $row['id_pago_origen'] ?? null)
@@ -280,12 +355,18 @@ final class TestingSafety
             'contable_proveedor' => $in('contable_proveedor', $row['id_cont_proveedor'] ?? null),
             'sexo' => $in('sexo', $row['id_sexo'] ?? null),
             'tipos_documentos' => $in('tipos_documentos', $row['id_tipo_documento'] ?? null),
+            'ventas_productos' => $in('ventas_productos', $row['id_producto'] ?? null),
+            'ventas_campanias' => $in('ventas_campanias', $row['id_campania'] ?? null),
+            'ventas_personas' => $in('ventas_personas', $row['id_persona'] ?? null),
+            'ventas_ordenes' => $in('ventas_ordenes', $row['id_orden'] ?? null),
+            'ventas_orden_items' => $in('ventas_orden_items', $row['id_item'] ?? null)
+                || $in('ventas_ordenes', $row['id_orden'] ?? null),
             'sis_usuarios' => $in('usuarios', $row['id_usuario'] ?? null),
-            'sis_sesiones' => $in('usuarios', $row['id_usuario'] ?? null),
+            'sis_sesiones' => $in('usuarios', $row['id_usuario'] ?? null)
+                || $in('sesion_actual', $row['id_sesion'] ?? null),
             'sis_login_auditoria' => $in('usuarios', $row['id_usuario'] ?? null)
                 || str_starts_with(strtolower((string)($row['usuario_intentado'] ?? '')), 'pw_e2e_')
-                || str_starts_with(strtoupper((string)($row['user_agent'] ?? '')), 'PW-COOP-E2E-')
-                || str_starts_with(strtoupper((string)($row['user_agent'] ?? '')), 'PW-RH-E2E-'),
+                || str_starts_with(strtoupper((string)($row['user_agent'] ?? '')), 'PW-COOP-E2E-'),
             'auditoria' => $in('usuarios', $row['id_usuario'] ?? null)
                 || $containsMarker($row)
                 || self::auditReferencesE2E($row, $sets),
@@ -303,10 +384,16 @@ final class TestingSafety
             'alumnos' => 'alumnos',
             'alumnos_egresados' => 'alumnos',
             'alumnos_eliminados' => 'alumnos',
+            'ingresantes' => 'ingresantes',
             'familias' => 'familias',
             'pagos' => 'pagos',
             'ingresos' => 'ingresos_contable',
             'egresos' => 'egresos_contable',
+            'ventas_productos' => 'ventas_productos',
+            'ventas_campanias' => 'ventas_campanias',
+            'ventas_personas' => 'ventas_personas',
+            'ventas_ordenes' => 'ventas_ordenes',
+            'ventas_orden_items' => 'ventas_orden_items',
             'categoria' => 'categoria',
             'categoria_monto' => 'categoria_monto',
             'categoria_hermanos' => 'categoria_hermanos',

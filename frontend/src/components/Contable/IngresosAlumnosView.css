@@ -19,6 +19,21 @@
   grid-template-columns: minmax(240px, 1.55fr) 120px 150px minmax(145px, .9fr) minmax(135px, .85fr) minmax(145px, .9fr);
 }
 
+
+.ct-student-period {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.ct-student-period small {
+  font-size: 10px;
+  font-weight: 800;
+  color: #64748b;
+}
+
 .ct-student-money {
   display: flex;
   flex-direction: column;

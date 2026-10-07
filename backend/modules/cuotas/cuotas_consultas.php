@@ -17,6 +17,10 @@ abstract class CuotasConsultas extends CuotasSoporte
         $collector = trim((string)($filters['cobrador'] ?? $filters['solo_cobrador'] ?? ''));
         $state = isset($filters['estado']) ? self::normalizarEstado($filters['estado']) : '';
 
+        // Cuotas es una vista operativa: los eliminados conservan sus pagos históricos,
+        // pero no vuelven a aparecer como alumnos disponibles para cobrar.
+        $where[] = 'a.eliminado = 0';
+
         if ($categoryId !== null) {
             $where[] = 'a.id_categoria = ?';
             $params[] = $categoryId;
@@ -40,6 +44,7 @@ abstract class CuotasConsultas extends CuotasSoporte
             // Los deudores siempre son alumnos activos. Filtrarlo en SQL evita
             // procesar bajas/egresados que nunca podrían aparecer en esta vista.
             $where[] = 'a.activo = 1';
+            $where[] = 'a.ingreso <= CURDATE()';
         }
 
         $search = clean_text($filters['buscar'] ?? $filters['busqueda'] ?? '', 160, false);
@@ -347,7 +352,7 @@ abstract class CuotasConsultas extends CuotasSoporte
         if ($familyIds !== []) {
             $placeholders = implode(',', array_fill(0, count($familyIds), '?'));
             $statement = $db->prepare(
-                "SELECT a.id_familia, a.id_alumno, a.ingreso, a.activo, a.actualizado_en,
+                "SELECT a.id_familia, a.id_alumno, a.ingreso, a.activo, a.eliminado, a.actualizado_en,
                         ae.id_egresado, ae.fecha_egreso
                  FROM alumnos a
                  LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno
@@ -359,7 +364,8 @@ abstract class CuotasConsultas extends CuotasSoporte
                 $familyMembers[(int)$member['id_familia']][] = [
                     'id_alumno' => (int)$member['id_alumno'],
                     'ingreso' => (string)$member['ingreso'],
-                    'activo' => (int)$member['activo'] === 1,
+                    'activo' => (int)$member['activo'] === 1 && (int)($member['eliminado'] ?? 0) === 0,
+                    'eliminado' => (int)($member['eliminado'] ?? 0) === 1,
                     'actualizado_en' => $member['actualizado_en'] !== null ? substr((string)$member['actualizado_en'], 0, 10) : null,
                     'es_egresado' => $member['id_egresado'] !== null,
                     'fecha_egreso' => $member['fecha_egreso'] !== null ? (string)$member['fecha_egreso'] : null,
@@ -835,7 +841,7 @@ abstract class CuotasConsultas extends CuotasSoporte
 
     protected static function comprobanteDatos(PDO $db, int $studentId, ?int $paymentId = null): array
     {
-        $student = self::alumno($db, $studentId);
+        $student = self::alumno($db, $studentId, true);
         $result = ['alumno' => self::receiptStudent($student), 'socio' => self::receiptStudent($student)];
         if ($paymentId !== null) {
             $statement = $db->prepare(

@@ -55,10 +55,11 @@ export default function IngresosAlumnosView({
   const items = data?.items || [];
   const summary = data?.resumen || {};
   const pagination = data?.paginacion || {};
-  const period = data?.periodo || {};
+  const filters = data?.filtros || {};
   const currentPage = Number(pagination.pagina || 1);
   const totalPages = Number(pagination.total_paginas || 0);
   const totalRecords = Number(pagination.total || 0);
+  const dateLabel = filters?.etiqueta_fecha || "Mes de cobro seleccionado";
 
   const exportSections = useMemo(
     () => [
@@ -68,8 +69,8 @@ export default function IngresosAlumnosView({
         columnas: [
           { label: "Alumno", key: "alumno" },
           { label: "Documento", key: "documento" },
-          { label: "Fecha", key: "fecha" },
-          { label: "Período", key: "periodo" },
+          { label: "Fecha de cobro", key: "fecha" },
+          { label: "Mes / concepto pagado", key: "periodo" },
           { label: "Categoría", key: "categoria" },
           { label: "Medio", key: "medio" },
           { label: "Monto", key: "monto" },
@@ -82,27 +83,24 @@ export default function IngresosAlumnosView({
   );
 
   const obtainAllSections = useCallback(async () => {
-    if (!period?.anio || !period?.id_periodo) return exportSections;
+    if (!filters?.anio_pago || !filters?.mes_pago) return exportSections;
     const records = [];
-    const first = await contableApi.ingresosAlumnos({
-      anio: period.anio,
-      periodo: period.id_periodo,
+    const baseFilters = {
+      anio: filters.anio_pago,
+      mes: filters.mes_pago,
+      periodo: filters.periodo || "",
+      medio: filters.id_medio_pago || "",
       buscar: search,
-      pagina: 1,
-    });
+    };
+    const first = await contableApi.ingresosAlumnos({ ...baseFilters, pagina: 1 });
     records.push(...(first?.items || []));
     const pages = Number(first?.paginacion?.total_paginas || 1);
     for (let page = 2; page <= pages; page += 1) {
-      const response = await contableApi.ingresosAlumnos({
-        anio: period.anio,
-        periodo: period.id_periodo,
-        buscar: search,
-        pagina: page,
-      });
+      const response = await contableApi.ingresosAlumnos({ ...baseFilters, pagina: page });
       records.push(...(response?.items || []));
     }
     return [{ ...exportSections[0], registros: records }];
-  }, [exportSections, period?.anio, period?.id_periodo, search]);
+  }, [exportSections, filters?.anio_pago, filters?.mes_pago, filters?.periodo, filters?.id_medio_pago, search]);
 
   return (
     <section className="ct-student-income">
@@ -115,15 +113,15 @@ export default function IngresosAlumnosView({
           {
             key: "students",
             icon: faPeopleGroup,
-            label: "Alumnos",
-            detail: `${Number(summary.pagos || 0).toLocaleString("es-AR")} pagos registrados`,
+            label: "Alumnos / ingresantes",
+            detail: `${Number(summary.pagos || 0).toLocaleString("es-AR")} cobros registrados`,
             value: Number(summary.alumnos || 0).toLocaleString("es-AR"),
           },
           {
             key: "amount",
             icon: faMoneyBillTransfer,
             label: "Total cobrado",
-            detail: period?.etiqueta || "Período seleccionado",
+            detail: `Cobrado en ${dateLabel}`,
             tone: "success",
             value: money(summary.importe),
           },
@@ -136,14 +134,14 @@ export default function IngresosAlumnosView({
         gridClassName="ct-student-grid"
         columns={[
           "Alumno",
-          { label: "Fecha", align: "center" },
-          { label: "Período", align: "center" },
+          { label: "Fecha de cobro", align: "center" },
+          { label: "Mes / concepto pagado", align: "center" },
           { label: "Categoría", align: "center" },
           { label: "Medio", align: "center" },
           { label: "Monto", align: "right" },
         ]}
         loading={loading}
-        loadingLabel="Cargando pagos de alumnos..."
+        loadingLabel="Cargando cobros de alumnos..."
         skeletonActionColumn={false}
         ariaLabel="Ingresos de alumnos"
         empty={!items.length}
@@ -151,8 +149,8 @@ export default function IngresosAlumnosView({
         {!items.length && !loading ? (
           <div className="module-empty">
             <FontAwesomeIcon icon={faMoneyBillTransfer} />
-            <strong>Sin pagos para mostrar</strong>
-            <span>No hay cobros de alumnos para el período seleccionado.</span>
+            <strong>Sin cobros para mostrar</strong>
+            <span>No hay cobros registrados en el mes de pago seleccionado.</span>
           </div>
         ) : null}
 
@@ -167,7 +165,10 @@ export default function IngresosAlumnosView({
               <small>DNI {item.documento || "—"}</small>
             </div>
             <div className="mov-gridCell is-center">{dateText(item.fecha)}</div>
-            <div className="mov-gridCell is-center"><span className="mov-categoryChip">{item.periodo}</span></div>
+            <div className="mov-gridCell is-center ct-student-period">
+              <span className="mov-categoryChip">{item.periodo}</span>
+              {item.es_ingresante ? <small>INGRESANTE</small> : null}
+            </div>
             <div className="mov-gridCell is-center">{item.categoria || "—"}</div>
             <div className="mov-gridCell is-center">{item.medio || "—"}</div>
             <AmountCell item={item} />
@@ -202,9 +203,9 @@ export default function IngresosAlumnosView({
       <ModalExportarGlobal
         open={exportOpen}
         title="Exportar ingresos de alumnos"
-        tituloArchivo={`Ingresos de alumnos · ${period?.etiqueta || ""}`}
-        subtituloArchivoActual={period?.etiqueta || ""}
-        nombreArchivo={`ingresos_alumnos_${period?.anio || ""}_${period?.id_periodo || ""}`}
+        tituloArchivo={`Ingresos de alumnos · ${dateLabel}`}
+        subtituloArchivoActual={dateLabel}
+        nombreArchivo={`ingresos_alumnos_${filters?.anio_pago || ""}_${filters?.mes_pago || ""}`}
         logoPdfUrl={logoIpetPdf}
         seccionesActuales={exportSections}
         obtenerSeccionesTodos={obtainAllSections}

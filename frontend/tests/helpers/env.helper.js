@@ -1,22 +1,19 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-let loaded = false;
+let cached = null;
 
-function parseEnv(text) {
+function parseEnvFile(file) {
+  if (!fs.existsSync(file)) return {};
   const result = {};
-  for (const rawLine of String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const separator = line.indexOf('=');
-    if (separator < 1) continue;
-    const key = line.slice(0, separator).trim();
-    let value = line.slice(separator + 1).trim();
-    if (
-      value.length >= 2 &&
-      ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'")))
-    ) {
+  for (const raw of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const index = line.indexOf("=");
+    if (index < 1) continue;
+    const key = line.slice(0, index).trim();
+    let value = line.slice(index + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
     result[key] = value;
@@ -24,145 +21,79 @@ function parseEnv(text) {
   return result;
 }
 
-function normalizeUrl(value) {
-  return String(value || '').trim().replace(/\/+$/, '');
+function bool(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["1", "true", "yes", "si", "sí", "on"].includes(String(value).trim().toLowerCase());
 }
 
-function activeEnvValues(text, key) {
-  const values = [];
-  for (const rawLine of String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) continue;
-    const separator = line.indexOf('=');
-    if (separator < 1 || line.slice(0, separator).trim() !== key) continue;
-    let value = line.slice(separator + 1).trim();
-    if (
-      value.length >= 2 &&
-      ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'")))
-    ) {
-      value = value.slice(1, -1);
+function cleanUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function loadTestEnv(rootDir = process.cwd()) {
+  if (cached) return cached;
+  const fileValues = parseEnvFile(path.resolve(rootDir, ".env.test"));
+  for (const [key, value] of Object.entries(fileValues)) {
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+
+  const target = String(process.env.PW_TARGET || "local").trim().toLowerCase();
+  if (!["local", "hostinger"].includes(target)) {
+    throw new Error(`PW_TARGET inválido: ${target}. Usá local u hostinger.`);
+  }
+
+  const local = target === "local";
+  const frontendBaseUrl = cleanUrl(
+    local ? process.env.PW_LOCAL_BASE_URL : process.env.PW_HOSTINGER_BASE_URL
+  );
+  const apiBaseUrl = cleanUrl(
+    local ? process.env.PW_LOCAL_API_URL : process.env.PW_HOSTINGER_API_URL
+  );
+  const username = String(
+    local ? process.env.PW_LOCAL_USER || "" : process.env.PW_HOSTINGER_USER || ""
+  ).trim();
+  const password = String(
+    local ? process.env.PW_LOCAL_PASSWORD || "" : process.env.PW_HOSTINGER_PASSWORD || ""
+  );
+
+  if (!frontendBaseUrl || !apiBaseUrl) {
+    throw new Error("Faltan PW_*_BASE_URL / PW_*_API_URL en .env.test.");
+  }
+  if (!username || !password) {
+    throw new Error(`Faltan credenciales Playwright para ${target} en .env.test.`);
+  }
+
+  if (!local) {
+    const allowed = new URL(apiBaseUrl);
+    if (allowed.hostname !== "cooperadora.ipet50.edu.ar") {
+      throw new Error(`Hostinger no autorizado para esta suite: ${allowed.hostname}`);
     }
-    values.push(value);
   }
-  return values;
+
+  cached = {
+    rootDir,
+    target,
+    isLocal: local,
+    frontendBaseUrl,
+    apiBaseUrl,
+    username,
+    password,
+    e2eHeader: String(process.env.PW_E2E_HEADER || "PLAYWRIGHT"),
+    startFrontend: bool(process.env.PW_START_FRONTEND, local),
+    startBackend: bool(process.env.PW_START_BACKEND, local),
+    allowRemoteWrites: bool(process.env.PW_ALLOW_REMOTE_WRITES, false),
+    finalCleanup: bool(process.env.PW_FINAL_CLEANUP, true),
+    verifyIntegrity: bool(process.env.PW_VERIFY_INTEGRITY, true),
+    backendDir: String(process.env.PW_BACKEND_DIR || "../backend"),
+    frontendCommand: String(process.env.PW_FRONTEND_COMMAND || "npm start"),
+    phpCommand: String(process.env.PW_PHP_COMMAND || 'php -c "C:\\php\\php.ini" -S localhost:3001'),
+    authFile: path.resolve(rootDir, "tests", ".auth", "cooperadora.json"),
+  };
+  return cached;
 }
 
-function isLocalUrl(url) {
-  try {
-    const hostname = new URL(String(url || '')).hostname.toLowerCase();
-    return ['localhost', '127.0.0.1', '::1'].includes(hostname);
-  } catch (_error) {
-    return false;
-  }
+function resetTestEnvCache() {
+  cached = null;
 }
 
-function validateSelectedApi(apiUrl) {
-  let parsed;
-  try {
-    parsed = new URL(apiUrl);
-  } catch (_error) {
-    throw new Error(`REACT_APP_API_URL inválida: ${apiUrl}`);
-  }
-
-  if (isLocalUrl(apiUrl)) {
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new Error('La API local debe usar http:// o https://.');
-    }
-    return 'local';
-  }
-
-  if (parsed.protocol !== 'https:') {
-    throw new Error('Hostinger debe probarse exclusivamente por HTTPS.');
-  }
-  if (parsed.hostname.toLowerCase() !== 'rhnegativo.3devsnet.com') {
-    throw new Error(
-      `Host remoto no autorizado para E2E RH: ${parsed.hostname}. ` +
-        'Sólo se permite rhnegativo.3devsnet.com.',
-    );
-  }
-  if (!/^\/api\/routes(?:\/api\.php)?\/?$/i.test(parsed.pathname)) {
-    throw new Error(
-      `Ruta remota no autorizada para E2E RH: ${parsed.pathname}. ` +
-        'Debe ser /api/routes o /api/routes/api.php.',
-    );
-  }
-  return 'hostinger';
-}
-
-function loadEnvFile(filePath, { overwrite = false } = {}) {
-  if (!fs.existsSync(filePath)) return {};
-  const values = parseEnv(fs.readFileSync(filePath, 'utf8'));
-  for (const [key, value] of Object.entries(values)) {
-    if (overwrite || process.env[key] === undefined) process.env[key] = value;
-  }
-  return values;
-}
-
-function loadTestEnv(rootDir = path.resolve(__dirname, '..', '..')) {
-  if (loaded) return process.env;
-
-  // .env.test contiene solamente credenciales/comandos fijos.
-  loadEnvFile(path.join(rootDir, '.env.test'));
-
-  // Selección EXCLUSIVA del testing: frontend/.env elige LOCAL <-> HOSTINGER.
-  // El uso normal de la SPA no depende de esta variable: config.jsx usa Hostinger
-  // salvo cuando REACT_APP_E2E=1, valor que este helper activa para Playwright.
-  const appEnvPath = path.join(rootDir, '.env');
-  if (!fs.existsSync(appEnvPath)) {
-    throw new Error(`No existe ${appEnvPath}.`);
-  }
-  const appEnvText = fs.readFileSync(appEnvPath, 'utf8');
-  const active = activeEnvValues(appEnvText, 'REACT_APP_API_URL');
-  if (active.length !== 1) {
-    throw new Error(
-      `frontend/.env debe tener exactamente una REACT_APP_API_URL activa; encontradas: ${active.length}.`,
-    );
-  }
-
-  const apiUrl = normalizeUrl(active[0]);
-  if (!apiUrl) throw new Error('REACT_APP_API_URL está vacía en frontend/.env.');
-  const environment = validateSelectedApi(apiUrl);
-
-  // La SPA SIEMPRE se sirve localmente durante Playwright. Sólo cambia la API.
-  const baseUrl = normalizeUrl(process.env.PW_LOCAL_BASE_URL || 'http://localhost:3000');
-  if (!isLocalUrl(baseUrl)) {
-    throw new Error('PW_LOCAL_BASE_URL debe ser localhost/127.0.0.1.');
-  }
-
-  process.env.PW_API_URL = apiUrl;
-  process.env.PW_BASE_URL = baseUrl;
-  process.env.PW_ENVIRONMENT = environment;
-  process.env.PW_START_FRONTEND = 'true';
-  process.env.PW_START_BACKEND = String(environment === 'local');
-  process.env.REACT_APP_API_URL = apiUrl;
-  process.env.REACT_APP_E2E = '1';
-
-  if (environment === 'local') {
-    process.env.PW_USER = String(process.env.PW_LOCAL_USER || '').trim();
-    process.env.PW_PASSWORD = String(process.env.PW_LOCAL_PASSWORD || '');
-  } else {
-    process.env.PW_USER = String(process.env.PW_HOSTINGER_USER || '').trim();
-    process.env.PW_PASSWORD = String(process.env.PW_HOSTINGER_PASSWORD || '');
-    process.env.PW_ALLOW_DB_CLEANUP = 'false';
-  }
-
-  loaded = true;
-  return process.env;
-}
-
-function envBoolean(name, fallback = false) {
-  const value = String(process.env[name] ?? '').trim().toLowerCase();
-  if (!value) return fallback;
-  return ['1', 'true', 'yes', 'si', 'sí', 'on'].includes(value);
-}
-
-module.exports = {
-  activeEnvValues,
-  envBoolean,
-  isLocalUrl,
-  loadTestEnv,
-  normalizeUrl,
-  parseEnv,
-  validateSelectedApi,
-};
+module.exports = { loadTestEnv, resetTestEnvCache };

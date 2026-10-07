@@ -32,6 +32,7 @@ trait FamiliasConsultas
                     SELECT 1
                     FROM alumnos ax
                     WHERE ax.id_familia = f.id_familia
+                      AND ax.eliminado = 0
                       AND (ax.apellido LIKE {$studentLastNameKey}
                            OR ax.nombre LIKE {$studentNameKey}
                            OR ax.num_documento LIKE {$studentDocumentKey})
@@ -47,14 +48,14 @@ trait FamiliasConsultas
         $statement = $db->prepare(
             "SELECT f.id_familia, f.nombre_familia, f.observaciones, f.activo, f.creado_en, f.actualizado_en,
                     COUNT(a.id_alumno) AS cantidad_integrantes,
-                    SUM(a.activo = 1) AS integrantes_activos,
+                    SUM(a.activo = 1 AND a.ingreso <= CURDATE()) AS integrantes_activos,
                     GROUP_CONCAT(
                         CASE WHEN a.id_alumno IS NULL THEN NULL
                              ELSE CONCAT(a.apellido, ', ', COALESCE(a.nombre, '')) END
                         ORDER BY a.apellido, a.nombre SEPARATOR ' · '
                     ) AS integrantes_resumen
              FROM familias f
-             LEFT JOIN alumnos a ON a.id_familia = f.id_familia
+             LEFT JOIN alumnos a ON a.id_familia = f.id_familia AND a.eliminado = 0
              {$sqlWhere}
              GROUP BY f.id_familia, f.nombre_familia, f.observaciones, f.activo, f.creado_en, f.actualizado_en
              ORDER BY f.nombre_familia ASC"
@@ -85,9 +86,9 @@ trait FamiliasConsultas
         $statement = $db->prepare(
             'SELECT f.id_familia, f.nombre_familia, f.observaciones, f.activo, f.creado_en, f.actualizado_en,
                     COUNT(a.id_alumno) AS cantidad_integrantes,
-                    SUM(a.activo = 1) AS integrantes_activos
+                    SUM(a.activo = 1 AND a.ingreso <= CURDATE()) AS integrantes_activos
              FROM familias f
-             LEFT JOIN alumnos a ON a.id_familia = f.id_familia
+             LEFT JOIN alumnos a ON a.id_familia = f.id_familia AND a.eliminado = 0
              WHERE f.id_familia = ?
              GROUP BY f.id_familia, f.nombre_familia, f.observaciones, f.activo, f.creado_en, f.actualizado_en
              LIMIT 1'
@@ -109,7 +110,7 @@ trait FamiliasConsultas
              LEFT JOIN division d ON d.id_division = a.id_division
              LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
              LEFT JOIN categoria_monto cm ON cm.id_cat_monto = a.id_cat_monto
-             WHERE a.id_familia = ?
+             WHERE a.id_familia = ? AND a.eliminado = 0
              ORDER BY a.activo DESC, a.apellido ASC, a.nombre ASC'
         );
         $members->execute([$id]);
@@ -157,7 +158,7 @@ trait FamiliasConsultas
              LEFT JOIN division d ON d.id_division = a.id_division
              LEFT JOIN familias f ON f.id_familia = a.id_familia
              LEFT JOIN tipos_documentos td ON td.id_tipo_documento = a.id_tipo_documento
-             WHERE a.activo = 1 OR a.id_familia IS NOT NULL
+             WHERE a.eliminado = 0 AND ((a.activo = 1 AND a.ingreso <= CURDATE()) OR a.id_familia IS NOT NULL)
              ORDER BY a.activo DESC, a.apellido, a.nombre'
         )->fetchAll();
 

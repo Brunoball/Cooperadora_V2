@@ -2348,3 +2348,14 @@
     grid-column: 1 / -1 !important;
   }
 }
+
+.alumnos-importCycle {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--mov-border, #d9dee7);
+  border-radius: 12px;
+}
+.alumnos-importCycle span { font-weight: 700; }
+.alumnos-importCycle input { min-height: 42px; padding: 8px 10px; border: 1px solid var(--mov-border, #d9dee7); border-radius: 9px; }
+.alumnos-importCycle small { opacity: .72; }

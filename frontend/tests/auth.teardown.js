@@ -1,94 +1,87 @@
-const fs = require('fs');
-const path = require('path');
-const { request } = require('@playwright/test');
-const { AUTH_FILE, apiCall, apiResult } = require('./helpers/api.helper');
-const { envBoolean, loadTestEnv } = require('./helpers/env.helper');
-
-loadTestEnv();
-const BASELINE_FILE = path.join(__dirname, '.auth', 'baseline.json');
-
-function cleanupSummary(body) {
-  const deleted = body?.datos?.eliminados || body?.eliminados || {};
-  const skipped = body?.datos?.omitidos_por_seguridad || body?.omitidos_por_seguridad || {};
-  return {
-    totalDeleted: Object.values(deleted).reduce((sum, value) => sum + (Number(value) || 0), 0),
-    skipped,
-  };
-}
+const fs = require("fs");
+const { request } = require("@playwright/test");
+const { loadTestEnv } = require("./helpers/env.helper");
+const { ok, logout, coverageFile } = require("./helpers/api.helper");
 
 module.exports = async function globalTeardown() {
-  if (!fs.existsSync(AUTH_FILE)) return;
+  const env = loadTestEnv();
+  if (!fs.existsSync(env.authFile)) return;
 
-  const session = JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
-  const api = await request.newContext({
-    ignoreHTTPSErrors: false,
-    extraHTTPHeaders: { 'User-Agent': 'PW-RH-E2E-TEARDOWN/2.0' },
-  });
-  const failures = [];
+  const state = JSON.parse(fs.readFileSync(env.authFile, "utf8"));
+  const api = await request.newContext();
+  let finalError = null;
 
   try {
-    // Primero comparamos la integridad mientras la sesión E2E todavía existe.
-    // Las filas E2E se excluyen de la huella, así que cualquier diferencia es
-    // un cambio real fuera del namespace de Playwright.
-    if (fs.existsSync(BASELINE_FILE)) {
-      try {
-        const baseline = JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8'));
-        const current = await apiCall(api, 'e2e_integridad', { session });
-        if (baseline.sha256 !== current.datos?.sha256) {
-          const changed = [];
-          const tables = new Set([
-            ...Object.keys(baseline.tablas || {}),
-            ...Object.keys(current.datos?.tablas || {}),
-          ]);
-          for (const table of [...tables].sort()) {
-            const before = baseline.tablas?.[table];
-            const after = current.datos?.tablas?.[table];
-            if (JSON.stringify(before) !== JSON.stringify(after)) changed.push({ table, before, after });
-          }
-          failures.push(
-            new Error(`La huella de datos reales cambió durante el testing: ${JSON.stringify(changed)}`),
-          );
-        } else {
-          console.log('[Playwright safety] Integridad OK: ningún registro NO E2E cambió durante la corrida.');
-        }
-      } catch (error) {
-        failures.push(error);
-      }
-    } else {
-      failures.push(new Error('No existe baseline de integridad E2E.'));
+    if (state.readOnly) {
+      if (state.bootstrapToken) await logout(api, state.bootstrapToken);
+      return;
     }
 
-    if (envBoolean('PW_FINAL_CLEANUP', true)) {
-      try {
-        const cleanup = await apiResult(api, 'e2e_cleanup', {
-          method: 'POST',
-          data: { confirmacion: 'LIMPIAR_PLAYWRIGHT' },
-          session,
-        });
-        if (!cleanup.ok) {
-          failures.push(new Error(
-            `Falló la limpieza final E2E (HTTP ${cleanup.status}): ${cleanup.body?.mensaje || 'respuesta inválida'}`,
-          ));
-        } else {
-          const summary = cleanupSummary(cleanup.body);
-          console.log(`[Playwright cleanup] ${summary.totalDeleted} registro(s)/archivo(s) E2E eliminados.`);
-          if (Object.keys(summary.skipped).length) {
-            failures.push(new Error(
-              `La limpieza final omitió elementos por seguridad: ${JSON.stringify(summary.skipped)}`,
-            ));
-          }
-        }
-      } catch (error) {
-        failures.push(error);
-      }
+    if (!state.bootstrapToken) {
+      throw new Error("Falta la sesión bootstrap necesaria para verificar y limpiar E2E.");
     }
+
+    // La huella previa puede diferir mientras todavía existen filas temporales E2E.
+    // La protección decisiva se hace después del cleanup: ahí la DB real debe quedar
+    // exactamente igual al baseline tomado antes de la suite.
+
+    if (env.finalCleanup) {
+      // Primera pasada: limpia el namespace pero conserva la sesión bootstrap
+      // para poder comprobar que efectivamente quedó TODO en cero.
+      const cleaned = await ok(api, "e2e_cleanup", {
+        token: state.bootstrapToken,
+        method: "POST",
+        data: { confirmacion: "LIMPIAR_PLAYWRIGHT", cerrar_sesion_actual: false },
+      });
+
+      const skipped = cleaned.omitidos_por_referencia_real || {};
+      if (Object.keys(skipped).length > 0 && !finalError) {
+        finalError = new Error(
+          `Cleanup E2E omitió raíces por referencias reales: ${JSON.stringify(skipped)}`
+        );
+      }
+
+      const residues = await ok(api, "e2e_residuos", { token: state.bootstrapToken });
+      if (Number(residues.datos?.total || 0) !== 0 && !finalError) {
+        finalError = new Error(
+          `Cleanup E2E dejó residuos: ${JSON.stringify(residues.datos?.conteos || {})}`
+        );
+      }
+
+      if (env.verifyIntegrity && state.baselineHash) {
+        const afterCleanup = await ok(api, "e2e_integridad", { token: state.bootstrapToken });
+        if (afterCleanup.datos?.sha256 !== state.baselineHash && !finalError) {
+          const baselineTables = state.baselineTables || {};
+          const currentTables = afterCleanup.datos?.tablas || {};
+          const changedTables = [...new Set([
+            ...Object.keys(baselineTables),
+            ...Object.keys(currentTables),
+          ])].filter((table) => {
+            const before = baselineTables[table] || {};
+            const after = currentTables[table] || {};
+            return before.sha256 !== after.sha256 || Number(before.filas || 0) !== Number(after.filas || 0);
+          });
+          finalError = new Error(
+            `INTEGRIDAD REAL POST-CLEANUP MODIFICADA: tablas=${changedTables.join(', ') || 'desconocidas'} ` +
+            `baseline=${state.baselineHash} actual=${afterCleanup.datos?.sha256}`
+          );
+        }
+      }
+
+      // Segunda pasada: elimina por PK exacta la propia sesión bootstrap.
+      await ok(api, "e2e_cleanup", {
+        token: state.bootstrapToken,
+        method: "POST",
+        data: { confirmacion: "LIMPIAR_PLAYWRIGHT", cerrar_sesion_actual: true },
+      });
+    }
+  } catch (error) {
+    if (!finalError) finalError = error;
   } finally {
     await api.dispose();
-    fs.rmSync(AUTH_FILE, { force: true });
-    fs.rmSync(BASELINE_FILE, { force: true });
+    try { fs.unlinkSync(env.authFile); } catch {}
+    try { fs.unlinkSync(coverageFile()); } catch {}
   }
 
-  if (failures.length) {
-    throw new Error(failures.map((error) => error?.message || String(error)).join('\n'));
-  }
+  if (finalError) throw finalError;
 };

@@ -301,7 +301,7 @@ abstract class CuotasSoporte
         $statement = $db->prepare(
             'SELECT id_alumno
              FROM alumnos
-             WHERE id_familia = ? AND activo = 1 AND ingreso <= ?
+             WHERE id_familia = ? AND activo = 1 AND eliminado = 0 AND ingreso <= ?
              ORDER BY id_alumno ASC'
         );
         $statement->execute([$familyId, $date]);
@@ -348,7 +348,7 @@ abstract class CuotasSoporte
     protected static function cantidadFamilia(PDO $db, ?int $familyId): int
     {
         if (!$familyId) return 1;
-        $statement = $db->prepare('SELECT COUNT(*) FROM alumnos WHERE id_familia = ?');
+        $statement = $db->prepare('SELECT COUNT(*) FROM alumnos WHERE id_familia = ? AND eliminado = 0');
         $statement->execute([$familyId]);
         return max(1, (int)$statement->fetchColumn());
     }
@@ -361,7 +361,7 @@ abstract class CuotasSoporte
     protected static function cantidadFamiliaActiva(PDO $db, ?int $familyId): int
     {
         if (!$familyId) return 1;
-        $statement = $db->prepare('SELECT COUNT(*) FROM alumnos WHERE id_familia = ? AND activo = 1');
+        $statement = $db->prepare('SELECT COUNT(*) FROM alumnos WHERE id_familia = ? AND activo = 1 AND eliminado = 0 AND ingreso <= CURDATE()');
         $statement->execute([$familyId]);
         return max(1, (int)$statement->fetchColumn());
     }
@@ -377,7 +377,7 @@ abstract class CuotasSoporte
              FROM alumnos a
              LEFT JOIN anio an ON an.id_anio = a.id_anio
              LEFT JOIN division d ON d.id_division = a.id_division
-             WHERE a.id_familia = ?
+             WHERE a.id_familia = ? AND a.eliminado = 0
              ORDER BY a.activo DESC, a.apellido ASC, a.nombre ASC, a.id_alumno ASC'
         );
         $statement->execute([$familyId]);
@@ -552,13 +552,13 @@ abstract class CuotasSoporte
         ];
     }
 
-    protected static function alumno(PDO $db, int $studentId): array
+    protected static function alumno(PDO $db, int $studentId, bool $permitirEliminado = false): array
     {
         $statement = $db->prepare(
             'SELECT
                 a.id_alumno, a.apellido, a.nombre, a.num_documento, a.domicilio,
                 a.localidad, a.cp, a.telefono, a.id_anio, a.id_division,
-                a.id_categoria, a.id_cat_monto, a.es_cobrador, a.activo,
+                a.id_categoria, a.id_cat_monto, a.es_cobrador, a.activo, a.eliminado,
                 a.ingreso, a.id_familia,
                 an.nombre_anio, d.nombre_division,
                 c.nombre_categoria AS categoria,
@@ -573,6 +573,9 @@ abstract class CuotasSoporte
         $statement->execute([$studentId]);
         $row = $statement->fetch(PDO::FETCH_ASSOC);
         if (!$row) api_error('El alumno seleccionado no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+        if (!$permitirEliminado && (int)($row['eliminado'] ?? 0) === 1) {
+            api_error('Este alumno fue eliminado del padrón operativo. Su historial se conserva, pero no se pueden registrar nuevos movimientos de cuotas.', 'ALUMNO_ELIMINADO', 409);
+        }
         return $row;
     }
 
@@ -736,7 +739,7 @@ abstract class CuotasSoporte
 
     protected static function receiptForPayment(PDO $db, array $payment): array
     {
-        $student = self::alumno($db, (int)$payment['id_alumno']);
+        $student = self::alumno($db, (int)$payment['id_alumno'], true);
         $receipt = self::receiptStudent($student);
         $receipt['id_pago'] = (int)$payment['id_pago'];
         $receipt['id_mes'] = (int)$payment['id_mes'];

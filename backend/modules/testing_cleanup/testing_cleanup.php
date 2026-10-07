@@ -22,10 +22,19 @@ final class TestingCleanup
             api_error('Confirmación de limpieza E2E inválida.', 'E2E_CLEANUP_CONFIRMACION_INVALIDA', 422);
         }
 
-        api_success(self::cleanup($auth['db']), 'Limpieza final de Playwright completada.');
+        $closeCurrentSession = filter_var(
+            $body['cerrar_sesion_actual'] ?? false,
+            FILTER_VALIDATE_BOOL
+        );
+        $currentSessionId = $closeCurrentSession ? (int)($auth['id_sesion'] ?? 0) : null;
+
+        api_success(
+            self::cleanup($auth['db'], $currentSessionId),
+            'Limpieza final de Playwright completada.'
+        );
     }
 
-    private static function cleanup(PDO $db): array
+    private static function cleanup(PDO $db, ?int $currentSessionId = null): array
     {
         $counts = [
             'egresos_comision' => 0,
@@ -34,8 +43,15 @@ final class TestingCleanup
             'pagos' => 0,
             'alumnos_egresados' => 0,
             'alumnos_eliminados' => 0,
+            'ingresantes' => 0,
             'alumnos' => 0,
             'familias' => 0,
+            'ventas_ingresos' => 0,
+            'ventas_orden_items' => 0,
+            'ventas_ordenes' => 0,
+            'ventas_personas' => 0,
+            'ventas_campanias' => 0,
+            'ventas_productos' => 0,
             'categoria_hermanos_historial' => 0,
             'categoria_hermanos' => 0,
             'precios_historicos' => 0,
@@ -47,11 +63,13 @@ final class TestingCleanup
             'sexo' => 0,
             'tipos_documentos' => 0,
             'sis_sesiones' => 0,
+            'sis_sesion_actual' => 0,
             'sis_login_auditoria' => 0,
             'auditoria' => 0,
             'sis_usuarios' => 0,
         ];
         $skipped = [];
+        $filesToDelete = [];
 
         $db->beginTransaction();
         try {
@@ -76,11 +94,120 @@ final class TestingCleanup
             );
             $testStudents = array_values(array_unique(array_merge($testStudents, $archivedStudentIds)));
 
+            $testIncoming = [];
+            if (self::tableExists($db, 'ingresantes')) {
+                $testIncoming = self::ids(
+                    $db,
+                    "SELECT id_ingresante FROM ingresantes
+                     WHERE UPPER(COALESCE(apellido,'')) LIKE 'PW E2E INGRESANTE %'
+                        OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE INGRESANTE %'
+                        OR UPPER(COALESCE(nombre,'')) LIKE 'PW E2E INGRESANTE %'
+                        OR UPPER(COALESCE(nombre,'')) LIKE 'PW EEE INGRESANTE %'
+                        OR UPPER(COALESCE(observaciones,'')) LIKE '%PW E2E%'
+                        OR UPPER(COALESCE(observaciones,'')) LIKE '%PW EEE%'"
+                );
+                if ($testStudents !== []) {
+                    $linkedIncoming = self::ids(
+                        $db,
+                        'SELECT id_ingresante FROM ingresantes WHERE id_alumno_confirmado IN ('
+                            . self::placeholders(count($testStudents)) . ')',
+                        $testStudents
+                    );
+                    $testIncoming = array_values(array_unique(array_merge($testIncoming, $linkedIncoming)));
+                }
+            }
+
+            // Ventas E2E. Se limpian primero para que una persona de prueba enlazada
+            // a un alumno E2E no impida después borrar ese alumno.
+            $testSalesProducts = self::ids(
+                $db,
+                "SELECT id_producto FROM ventas_productos
+                 WHERE UPPER(nombre) LIKE 'PW E2E VTA PROD %'"
+            );
+            $testSalesCampaigns = self::ids(
+                $db,
+                "SELECT id_campania FROM ventas_campanias
+                 WHERE UPPER(nombre) LIKE 'PW E2E VTA CAMP %'"
+            );
+            $testSalesPersons = self::ids(
+                $db,
+                "SELECT id_persona FROM ventas_personas
+                 WHERE UPPER(nombre_apellido) LIKE 'PW E2E VTA PERSONA %'"
+            );
+            $testSalesOrders = self::ids(
+                $db,
+                "SELECT id_orden FROM ventas_ordenes
+                 WHERE UPPER(COALESCE(observacion,'')) LIKE 'PW E2E VTA ORDEN %'"
+            );
+            $testSalesIncomes = $testSalesOrders === [] ? [] : self::ids(
+                $db,
+                'SELECT id_ingreso FROM ventas_ordenes
+                 WHERE id_orden IN (' . self::placeholders(count($testSalesOrders)) . ')
+                   AND id_ingreso IS NOT NULL',
+                $testSalesOrders
+            );
+
+            // Primero quitamos los hijos y las órdenes E2E. Recién después
+            // eliminamos sus ingresos sincronizados, y sólo si ningún registro
+            // real sigue referenciándolos. Esto evita que un caso histórico con
+            // un id_ingreso compartido provoque ON DELETE SET NULL sobre una venta real.
+            if ($testSalesOrders !== []) {
+                $counts['ventas_orden_items'] += self::deleteByIds(
+                    $db, 'ventas_orden_items', 'id_orden', $testSalesOrders
+                );
+                $counts['ventas_ordenes'] += self::deleteByIds(
+                    $db, 'ventas_ordenes', 'id_orden', $testSalesOrders
+                );
+            }
+            $safeSalesIncomes = self::withoutReferences($db, $testSalesIncomes, [
+                ['ventas_ordenes', 'id_ingreso'],
+            ]);
+            self::recordSkipped($skipped, 'ventas_ingresos', $testSalesIncomes, $safeSalesIncomes);
+            $counts['ventas_ingresos'] += self::deleteByIds(
+                $db, 'ingresos', 'id_ingreso', $safeSalesIncomes
+            );
+
+            // Una raíz E2E sólo se borra si no quedó referenciada por una fila real.
+            $safeSalesPersons = self::withoutReferences($db, $testSalesPersons, [
+                ['ventas_ordenes', 'id_venta_persona'],
+            ]);
+            self::recordSkipped($skipped, 'ventas_personas', $testSalesPersons, $safeSalesPersons);
+            $counts['ventas_personas'] += self::deleteByIds(
+                $db, 'ventas_personas', 'id_persona', $safeSalesPersons
+            );
+
+            $safeSalesCampaigns = self::withoutReferences($db, $testSalesCampaigns, [
+                ['ventas_ordenes', 'id_campania'],
+            ]);
+            self::recordSkipped($skipped, 'ventas_campanias', $testSalesCampaigns, $safeSalesCampaigns);
+            $counts['ventas_campanias'] += self::deleteByIds(
+                $db, 'ventas_campanias', 'id_campania', $safeSalesCampaigns
+            );
+
+            $safeSalesProducts = self::withoutReferences($db, $testSalesProducts, [
+                ['ventas_orden_items', 'id_producto'],
+                ['ventas_campanias', 'id_producto_principal'],
+            ]);
+            self::recordSkipped($skipped, 'ventas_productos', $testSalesProducts, $safeSalesProducts);
+            $counts['ventas_productos'] += self::deleteByIds(
+                $db, 'ventas_productos', 'id_producto', $safeSalesProducts
+            );
+
+            // Ingresantes E2E deben salir antes que alumnos: id_alumno_confirmado
+            // usa ON DELETE RESTRICT para preservar la trazabilidad en producción.
+            if (self::tableExists($db, 'ingresantes')) {
+                $counts['ingresantes'] += self::deleteByIds(
+                    $db, 'ingresantes', 'id_ingresante', $testIncoming
+                );
+            }
+
             // Un alumno E2E no se elimina si quedó enlazado desde un módulo externo
-            // al freeze (por ejemplo ventas_personas). Evitamos que un ON DELETE
-            // SET NULL modifique silenciosamente una fila que la suite no controla.
+            // al freeze. Después de retirar los ingresantes de prueba, cualquier
+            // referencia restante desde ingresantes se considera real y bloquea
+            // la eliminación para no alterar datos productivos.
             $safeStudents = self::withoutReferences($db, $testStudents, [
                 ['ventas_personas', 'id_alumno'],
+                ['ingresantes', 'id_alumno_confirmado'],
             ]);
             self::recordSkipped($skipped, 'alumnos', $testStudents, $safeStudents);
 
@@ -122,13 +249,15 @@ final class TestingCleanup
                     $db,
                     "SELECT id_cont_descripcion FROM contable_descripcion
                      WHERE UPPER(nombre_descripcion) LIKE 'PW E2E CT %'
-                        OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'"
+                        OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'
+                        OR UPPER(nombre_descripcion) LIKE 'VENTA PW E2E VTA CAMP %'"
                 ),
                 'contable_proveedor' => self::ids(
                     $db,
                     "SELECT id_cont_proveedor FROM contable_proveedor
                      WHERE UPPER(nombre_proveedor) LIKE 'PW E2E CT %'
-                        OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'"
+                        OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW E2E VTA PERSONA %'"
                 ),
                 'sexo' => self::ids(
                     $db,
@@ -169,6 +298,17 @@ final class TestingCleanup
                     'SELECT id_egreso FROM egresos WHERE id_pago_origen IS NULL AND ' . $catalogWhere,
                     $catalogParams
                 );
+                if ($testContableEgresos !== []) {
+                    $fileStatement = $db->prepare(
+                        'SELECT comprobante_url FROM egresos WHERE id_egreso IN ('
+                        . self::placeholders(count($testContableEgresos)) . ')'
+                    );
+                    $fileStatement->execute($testContableEgresos);
+                    foreach ($fileStatement->fetchAll(PDO::FETCH_COLUMN) as $storedPath) {
+                        $storedPath = trim((string)$storedPath);
+                        if ($storedPath !== '') $filesToDelete[] = $storedPath;
+                    }
+                }
             }
 
             $testPayments = $safeStudents === [] ? [] : self::ids(
@@ -184,6 +324,7 @@ final class TestingCleanup
                 $db,
                 $testUsers,
                 $testStudents,
+                $testIncoming,
                 $testFamilies,
                 $testAmountCategories,
                 $testCategoryTypes,
@@ -356,16 +497,14 @@ final class TestingCleanup
                     "DELETE FROM sis_login_auditoria
                      WHERE id_usuario IN (" . self::placeholders(count($testUsers)) . ")
                         OR LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
-                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'
-                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-RH-E2E-%'"
+                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'"
                 );
                 $statement->execute($testUsers);
             } else {
                 $statement = $db->prepare(
                     "DELETE FROM sis_login_auditoria
                      WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
-                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'
-                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-RH-E2E-%'"
+                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'"
                 );
                 $statement->execute();
             }
@@ -376,6 +515,7 @@ final class TestingCleanup
                 $db,
                 $testUsers,
                 $testStudents,
+                $testIncoming,
                 $testFamilies,
                 $testAmountCategories,
                 $testCategoryTypes,
@@ -387,7 +527,19 @@ final class TestingCleanup
             );
             $counts['sis_usuarios'] += self::deleteByIds($db, 'sis_usuarios', 'id_usuario', $testUsers);
 
+            // En el teardown local se puede cerrar exclusivamente la sesión real
+            // usada para bootstrap. Se borra por PK exacta: nunca afecta otras
+            // sesiones del administrador ni sesiones productivas.
+            if ($currentSessionId !== null && $currentSessionId > 0) {
+                $counts['sis_sesion_actual'] += self::deleteByIds(
+                    $db, 'sis_sesiones', 'id_sesion', [$currentSessionId]
+                );
+            }
+
             $db->commit();
+            foreach (array_values(array_unique($filesToDelete)) as $storedPath) {
+                self::deleteE2EUpload($storedPath);
+            }
             return [
                 'eliminados' => $counts,
                 'total_eliminado' => array_sum($counts),
@@ -403,6 +555,7 @@ final class TestingCleanup
         PDO $db,
         array $users,
         array $students,
+        array $incomingStudents,
         array $families,
         array $amountCategories,
         array $categoryTypes,
@@ -431,6 +584,7 @@ final class TestingCleanup
             ['alumnos', $students],
             ['alumnos_egresados', $students],
             ['alumnos_eliminados', $students],
+            ['ingresantes', $incomingStudents],
             ['familias', $families],
             ['categoria_monto', $amountCategories],
             ['categoria', $categoryTypes],
@@ -456,6 +610,26 @@ final class TestingCleanup
         $statement = $db->prepare('DELETE FROM auditoria WHERE ' . implode(' OR ', $clauses));
         $statement->execute($params);
         return $statement->rowCount();
+    }
+
+
+    private static function deleteE2EUpload(string $storedPath): void
+    {
+        $clean = str_replace('\\', '/', trim($storedPath));
+        if (!str_starts_with($clean, 'uploads/contable/egresos/')) return;
+        if (str_contains($clean, '..')) return;
+
+        $backendRoot = dirname(__DIR__, 2);
+        $uploadsRoot = realpath($backendRoot . '/uploads/contable/egresos');
+        $candidate = realpath($backendRoot . '/' . $clean);
+        if (
+            $uploadsRoot !== false
+            && $candidate !== false
+            && str_starts_with($candidate, $uploadsRoot . DIRECTORY_SEPARATOR)
+            && is_file($candidate)
+        ) {
+            @unlink($candidate);
+        }
     }
 
     private static function requireE2EHeader(): void

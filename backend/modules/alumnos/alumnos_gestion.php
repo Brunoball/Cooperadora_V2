@@ -53,6 +53,9 @@ trait AlumnosGestion
                 if ($id !== null) {
                     $before = self::alumnoSimple($db, $id, true);
                     if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+                    if ((int)($before['eliminado'] ?? 0) === 1) {
+                        api_error('El alumno fue eliminado del padrón. Si vuelve a ingresar, recuperalo mediante el padrón o desde Ingresantes para conservar su mismo ID histórico.', 'ALUMNO_ELIMINADO', 409);
+                    }
                 }
 
                 self::validarCatalogosAlumno($db, $data);
@@ -73,7 +76,7 @@ trait AlumnosGestion
                     );
                     $statement->execute($data);
                     $id = (int)$db->lastInsertId();
-                    $action = 'INSERT';
+                    $action = 'ALTA_MANUAL';
                 } else {
                     $statement = $db->prepare(
                         'UPDATE alumnos SET
@@ -87,7 +90,7 @@ trait AlumnosGestion
                          WHERE id_alumno = :id_alumno'
                     );
                     $statement->execute($data + ['id_alumno' => $id]);
-                    $action = 'UPDATE';
+                    $action = 'ACTUALIZACION_DATOS';
                 }
 
                 $after = self::alumnoSimple($db, $id, true);
@@ -107,9 +110,15 @@ trait AlumnosGestion
         transaction($db, static function () use ($db, $auth, $id, $active, $reason, $type): void {
             $before = self::alumnoSimple($db, $id, true);
             if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+            if ((int)($before['eliminado'] ?? 0) === 1) api_error('El alumno está eliminado del padrón.', 'ALUMNO_ELIMINADO', 409);
             if ((bool)$before['activo'] === $active) api_error($active ? 'El alumno ya se encuentra activo.' : 'El alumno ya se encuentra dado de baja.', 'ESTADO_SIN_CAMBIOS', 409);
+            if ($active && !empty($before['ingreso']) && (string)$before['ingreso'] > date('Y-m-d')) {
+                api_error('El alumno tiene una fecha de ingreso futura y no puede activarse antes de esa fecha.', 'ALUMNO_INGRESO_FUTURO', 409);
+            }
 
             if ($active) {
+                $egresoAnterior = self::egresoActual($db, $id, true);
+                if ($egresoAnterior) $before['_egreso_anterior'] = $egresoAnterior;
                 $db->prepare('UPDATE alumnos SET activo = 1, motivo = NULL, actualizado_en = NOW() WHERE id_alumno = ?')->execute([$id]);
                 $db->prepare('DELETE FROM alumnos_egresados WHERE id_alumno_original = ?')->execute([$id]);
                 $description = 'Reactivación';
@@ -127,7 +136,8 @@ trait AlumnosGestion
             }
 
             $after = self::alumnoSimple($db, $id, true);
-            audit_change($db, $auth, 'ALUMNOS', 'UPDATE', 'alumnos', $id, $description, $before, $after);
+            $auditAction = $active ? 'REACTIVACION' : ($type === 'EGRESO' ? 'EGRESO' : 'BAJA');
+            audit_change($db, $auth, 'ALUMNOS', $auditAction, 'alumnos', $id, $description, $before, $after);
         });
         return ['item' => self::obtenerDatos($db, $id)['item']];
     }
@@ -143,13 +153,14 @@ trait AlumnosGestion
         transaction($db, static function () use ($db, $auth, $id, $type): void {
             $before = self::alumnoSimple($db, $id, true);
             if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+            if ((int)($before['eliminado'] ?? 0) === 1) api_error('El alumno está eliminado del padrón.', 'ALUMNO_ELIMINADO', 409);
             if ((bool)$before['activo']) {
                 api_error('Sólo se pueden reclasificar alumnos que ya están dados de baja.', 'ALUMNO_ACTIVO', 409);
             }
 
-            $egreso = $db->prepare('SELECT id_egresado FROM alumnos_egresados WHERE id_alumno_original = ? LIMIT 1');
-            $egreso->execute([$id]);
-            $isGraduate = (bool)$egreso->fetchColumn();
+            $egresoAnterior = self::egresoActual($db, $id, true);
+            $isGraduate = $egresoAnterior !== null;
+            if ($isGraduate && $type === 'BAJA') $before['_egreso_anterior'] = $egresoAnterior;
             if (($type === 'EGRESO' && $isGraduate) || ($type === 'BAJA' && !$isGraduate)) {
                 api_error('El alumno ya se encuentra en esa clasificación.', 'ESTADO_SIN_CAMBIOS', 409);
             }
@@ -169,7 +180,8 @@ trait AlumnosGestion
             }
 
             $after = self::alumnoSimple($db, $id, true);
-            audit_change($db, $auth, 'ALUMNOS', 'UPDATE', 'alumnos', $id, $description, $before, $after);
+            $auditAction = $type === 'EGRESO' ? 'RECLASIFICACION_EGRESO' : 'RECLASIFICACION_BAJA';
+            audit_change($db, $auth, 'ALUMNOS', $auditAction, 'alumnos', $id, $description, $before, $after);
         });
 
         return ['item' => self::obtenerDatos($db, $id)['item']];
@@ -214,12 +226,19 @@ trait AlumnosGestion
         ]);
     }
 
-    private static function previsualizarPadronDatos(array $auth, array $rows): array
+    private static function previsualizarPadronDatos(array $auth, array $rows, int $cicloLectivo): array
     {
         $prepared = self::prepararPadron($auth['db'], $rows);
         $plan = self::calcularPlanPadron($auth['db'], $prepared['filas'], $prepared['catalogo']);
+        $ingresantes = Ingresantes::contarCoincidenciasPadron(
+            $auth['db'],
+            array_column($prepared['filas'], 'documento'),
+            $cicloLectivo
+        );
+        $plan['resumen'] = array_merge($plan['resumen'], $ingresantes);
         return [
-            'firma' => $prepared['firma'],
+            'firma' => hash('sha256', $prepared['firma'] . '|' . $cicloLectivo),
+            'ciclo_lectivo' => $cicloLectivo,
             'resumen' => $plan['resumen'],
             'muestras' => $plan['muestras'],
             'advertencias' => array_values(array_unique(array_merge($prepared['advertencias'], $plan['advertencias']))),
@@ -227,15 +246,19 @@ trait AlumnosGestion
         ];
     }
 
-    private static function importarPadronDatos(array $auth, array $rows, ?string $firmaEsperada): array
+    private static function importarPadronDatos(array $auth, array $rows, ?string $firmaEsperada, int $cicloLectivo): array
     {
+        if ($cicloLectivo > (int)date('Y')) {
+            api_error('El padrón de un ciclo futuro puede previsualizarse, pero no debe activarse todavía. Conservá esos chicos en Ingresantes y confirmalos cuando comience el ciclo lectivo.', 'CICLO_FUTURO_NO_ACTIVABLE', 409);
+        }
         $db = $auth['db'];
         $prepared = self::prepararPadron($db, $rows);
-        if (!$firmaEsperada || !hash_equals($prepared['firma'], $firmaEsperada)) {
+        $firmaActual = hash('sha256', $prepared['firma'] . '|' . $cicloLectivo);
+        if (!$firmaEsperada || !hash_equals($firmaActual, $firmaEsperada)) {
             api_error('El archivo cambió desde la vista previa. Volvé a analizarlo antes de confirmar la importación.', 'PREVIEW_DESACTUALIZADA', 409);
         }
 
-        return transaction($db, static function () use ($db, $auth, $prepared): array {
+        return transaction($db, static function () use ($db, $auth, $prepared, $cicloLectivo): array {
             $catalog = $prepared['catalogo'];
             $preparedRows = $prepared['filas'];
             $existingStatement = $db->query('SELECT * FROM alumnos FOR UPDATE');
@@ -249,7 +272,7 @@ trait AlumnosGestion
                     }
                     $existing[$key] = $row;
                 }
-                if ((bool)$row['activo']) $activeBefore[(int)$row['id_alumno']] = $row;
+                if ((bool)$row['activo'] && (int)($row['eliminado'] ?? 0) === 0) $activeBefore[(int)$row['id_alumno']] = $row;
             }
 
             $stats = [
@@ -260,6 +283,9 @@ trait AlumnosGestion
                 'sin_cambios' => 0,
                 'bajas' => 0,
                 'egresados' => 0,
+                'ingresantes_confirmados' => 0,
+                'matriculas_migradas' => 0,
+                'matriculas_existentes' => 0,
             ];
             $presentIds = [];
 
@@ -297,7 +323,8 @@ trait AlumnosGestion
                     if ($incoming['cp_presente']) $updates['cp'] = $incoming['cp'];
 
                     $wasInactive = !(bool)$before['activo'];
-                    $changed = $wasInactive;
+                    $wasDeleted = (int)($before['eliminado'] ?? 0) === 1;
+                    $changed = $wasInactive || $wasDeleted;
                     foreach ($updates as $field => $value) {
                         if ((string)($before[$field] ?? '') !== (string)($value ?? '')) {
                             $changed = true;
@@ -313,13 +340,18 @@ trait AlumnosGestion
                             $params[$field] = $value;
                         }
                         $sets[] = 'activo = 1';
+                        $sets[] = 'eliminado = 0';
+                        $sets[] = 'eliminado_en = NULL';
                         $sets[] = 'motivo = NULL';
                         $sets[] = 'actualizado_en = NOW()';
                         $params['id'] = $id;
+                        $auditBefore = $before;
+                        $egresoAnterior = self::egresoActual($db, $id, true);
+                        if ($egresoAnterior) $auditBefore['_egreso_anterior'] = $egresoAnterior;
                         $db->prepare('UPDATE alumnos SET ' . implode(', ', $sets) . ' WHERE id_alumno = :id')->execute($params);
                         $db->prepare('DELETE FROM alumnos_egresados WHERE id_alumno_original = ?')->execute([$id]);
                         $after = self::alumnoSimple($db, $id, true);
-                        audit_change($db, $auth, 'ALUMNOS', 'IMPORT', 'alumnos', $id, 'Sincronización desde padrón', $before, $after);
+                        audit_change($db, $auth, 'ALUMNOS', 'PADRON_ACTUALIZACION', 'alumnos', $id, 'Sincronización desde padrón', $auditBefore, $after);
                         $wasInactive ? $stats['reactivados']++ : $stats['actualizados']++;
                     } else {
                         $stats['sin_cambios']++;
@@ -353,9 +385,14 @@ trait AlumnosGestion
                     $id = (int)$db->lastInsertId();
                     $presentIds[$id] = true;
                     $after = self::alumnoSimple($db, $id, true);
-                    audit_change($db, $auth, 'ALUMNOS', 'IMPORT_INSERT', 'alumnos', $id, 'Alta desde padrón', null, $after);
+                    audit_change($db, $auth, 'ALUMNOS', 'PADRON_ALTA', 'alumnos', $id, 'Alta desde padrón', null, $after);
                     $stats['nuevos']++;
                 }
+
+                $confirmation = Ingresantes::confirmarDesdePadron($db, $auth, $id, $effectiveDocument, $cicloLectivo);
+                $stats['ingresantes_confirmados'] += (int)($confirmation['confirmado'] ?? 0);
+                $stats['matriculas_migradas'] += (int)($confirmation['matricula_migrada'] ?? 0);
+                $stats['matriculas_existentes'] += (int)($confirmation['matricula_existente'] ?? 0);
             }
 
             foreach ($activeBefore as $id => $before) {
@@ -373,7 +410,7 @@ trait AlumnosGestion
                     $stats['bajas']++;
                 }
                 $after = self::alumnoSimple($db, $id, true);
-                audit_change($db, $auth, 'ALUMNOS', 'IMPORT_BAJA', 'alumnos', $id, $reason, $before, $after);
+                audit_change($db, $auth, 'ALUMNOS', $isGraduate ? 'PADRON_EGRESO' : 'PADRON_BAJA', 'alumnos', $id, $reason, $before, $after);
             }
 
             $stats['advertencias'] = $prepared['advertencias'];
@@ -539,7 +576,7 @@ trait AlumnosGestion
                 }
                 $existing[$key] = $row;
             }
-            if ((bool)$row['activo']) $active[(int)$row['id_alumno']] = $row;
+            if ((bool)$row['activo'] && (int)($row['eliminado'] ?? 0) === 0) $active[(int)$row['id_alumno']] = $row;
         }
 
         $summary = [
@@ -597,14 +634,14 @@ trait AlumnosGestion
             if ($incoming['telefono_presente']) $updates['telefono'] = $incoming['telefono'];
             if ($incoming['cp_presente']) $updates['cp'] = $incoming['cp'];
 
-            $changed = !(bool)$before['activo'];
+            $changed = !(bool)$before['activo'] || (int)($before['eliminado'] ?? 0) === 1;
             foreach ($updates as $field => $value) {
                 if ((string)($before[$field] ?? '') !== (string)($value ?? '')) {
                     $changed = true;
                     break;
                 }
             }
-            if (!(bool)$before['activo']) {
+            if (!(bool)$before['activo'] || (int)($before['eliminado'] ?? 0) === 1) {
                 $summary['reactivados']++;
                 if (count($samples['reactivados']) < 8) $samples['reactivados'][] = $label;
             } elseif ($changed) {
@@ -797,140 +834,146 @@ trait AlumnosGestion
     {
         $db = $auth['db'];
 
-        try {
-            return transaction($db, static function () use ($db, $auth, $id, $reason): array {
-                $before = self::alumnoSimple($db, $id, true);
-                if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
-
-                // Un alumno con pagos no puede desaparecer físicamente de alumnos:
-                // pagos.id_alumno conserva la relación histórica y la FK es restrictiva.
-                $payments = $db->prepare(
-                    'SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto_pago), 0) AS total
-                     FROM pagos
-                     WHERE id_alumno = ?'
-                );
-                $payments->execute([$id]);
-                $paymentHistory = $payments->fetch() ?: ['cantidad' => 0, 'total' => 0];
-                if ((int)($paymentHistory['cantidad'] ?? 0) > 0) {
-                    api_error(
-                        'No se puede eliminar definitivamente este alumno porque tiene pagos registrados. Para conservar el historial financiero, mantenelo en Bajas o Egresados.',
-                        'ALUMNO_CON_PAGOS',
-                        409
-                    );
-                }
-
-                $graduateStatement = $db->prepare('SELECT * FROM alumnos_egresados WHERE id_alumno_original = ? LIMIT 1 FOR UPDATE');
-                $graduateStatement->execute([$id]);
-                $graduate = $graduateStatement->fetch() ?: null;
-
-                $contextStatement = $db->prepare(
-                    'SELECT
-                        td.sigla AS tipo_documento_sigla,
-                        td.descripcion AS tipo_documento,
-                        f.nombre_familia,
-                        an.nombre_anio,
-                        d.nombre_division,
-                        c.nombre_categoria,
-                        cm.nombre_categoria AS categoria_monto
-                     FROM alumnos a
-                     LEFT JOIN tipos_documentos td ON td.id_tipo_documento = a.id_tipo_documento
-                     LEFT JOIN familias f ON f.id_familia = a.id_familia
-                     LEFT JOIN anio an ON an.id_anio = a.id_anio
-                     LEFT JOIN division d ON d.id_division = a.id_division
-                     LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
-                     LEFT JOIN categoria_monto cm ON cm.id_cat_monto = a.id_cat_monto
-                     WHERE a.id_alumno = ?
-                     LIMIT 1'
-                );
-                $contextStatement->execute([$id]);
-                $context = $contextStatement->fetch() ?: [];
-
-                $salesStatement = $db->prepare('SELECT id_persona FROM ventas_personas WHERE id_alumno = ? ORDER BY id_persona');
-                $salesStatement->execute([$id]);
-                $salesPersonIds = array_map('intval', $salesStatement->fetchAll(PDO::FETCH_COLUMN));
-
-                $expensesStatement = $db->prepare('SELECT id_egreso FROM egresos WHERE id_alumno_origen = ? ORDER BY id_egreso');
-                $expensesStatement->execute([$id]);
-                $expenseIds = array_map('intval', $expensesStatement->fetchAll(PDO::FETCH_COLUMN));
-
-                $previousStatus = (bool)$before['activo'] ? 'ACTIVO' : ($graduate ? 'EGRESADO' : 'BAJA');
-                $snapshotData = [
-                    'alumno' => $before,
-                    'estado_anterior' => $previousStatus,
-                    'egreso' => $graduate,
-                    'catalogos' => $context,
-                    'referencias' => [
-                        'pagos' => [
-                            'cantidad' => (int)($paymentHistory['cantidad'] ?? 0),
-                            'total' => (float)($paymentHistory['total'] ?? 0),
-                        ],
-                        'ventas_personas_ids' => $salesPersonIds,
-                        'egresos_contables_ids' => $expenseIds,
-                    ],
-                    'eliminacion' => [
-                        'motivo' => $reason,
-                        'id_usuario' => (int)($auth['id_usuario'] ?? 0),
-                        'fecha' => date('Y-m-d H:i:s'),
-                    ],
-                ];
-                $snapshot = json_encode($snapshotData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
-                if ($snapshot === false) $snapshot = '{}';
-
-                $archive = $db->prepare(
-                    'INSERT INTO alumnos_eliminados
-                     (id_alumno_original, apellido, nombre, num_documento, tipo_documento_sigla,
-                      estado_anterior, familia_original, motivo_eliminacion, snapshot_json, id_usuario)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-                );
-                $archive->execute([
-                    $id,
-                    $before['apellido'] ?? null,
-                    $before['nombre'] ?? null,
-                    $before['num_documento'] ?? null,
-                    $context['tipo_documento_sigla'] ?? null,
-                    $previousStatus,
-                    $context['nombre_familia'] ?? null,
-                    $reason,
-                    $snapshot,
-                    $auth['id_usuario'] ?? null,
-                ]);
-                $archiveId = (int)$db->lastInsertId();
-
-                // El egreso es parte del snapshot. Se retira primero porque su FK
-                // al alumno es restrictiva; el resto de relaciones históricas que
-                // admiten SET NULL quedan preservadas por sus propias tablas.
-                $db->prepare('DELETE FROM alumnos_egresados WHERE id_alumno_original = ?')->execute([$id]);
-                $db->prepare('DELETE FROM alumnos WHERE id_alumno = ?')->execute([$id]);
-
-                audit_change(
-                    $db,
-                    $auth,
-                    'ALUMNOS',
-                    'DELETE',
-                    'alumnos',
-                    $id,
-                    'Eliminación definitiva con respaldo en alumnos_eliminados #' . $archiveId,
-                    $before,
-                    null
-                );
-
-                return [
-                    'id_alumno' => $id,
-                    'id_eliminado' => $archiveId,
-                    'estado_anterior' => $previousStatus,
-                ];
-            });
-        } catch (PDOException $error) {
-            $driverCode = (int)($error->errorInfo[1] ?? 0);
-            if ($driverCode === 1451) {
-                api_error(
-                    'No se puede eliminar definitivamente porque el alumno todavía tiene información histórica relacionada. Mantenelo en Bajas o Egresados.',
-                    'ALUMNO_CON_HISTORIAL',
-                    409
-                );
+        return transaction($db, static function () use ($db, $auth, $id, $reason): array {
+            $before = self::alumnoSimple($db, $id, true);
+            if (!$before) api_error('El alumno no existe.', 'ALUMNO_NO_ENCONTRADO', 404);
+            if ((int)($before['eliminado'] ?? 0) === 1) {
+                api_error('El alumno ya fue eliminado del padrón.', 'ALUMNO_YA_ELIMINADO', 409);
             }
-            throw $error;
-        }
+
+            // Los pagos y demás movimientos históricos NO se borran. El id_alumno
+            // permanece físicamente en alumnos para que todas las FK y el historial
+            // financiero sigan apuntando para siempre a la misma persona.
+            $payments = $db->prepare(
+                'SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto_pago), 0) AS total
+                 FROM pagos
+                 WHERE id_alumno = ?'
+            );
+            $payments->execute([$id]);
+            $paymentHistory = $payments->fetch() ?: ['cantidad' => 0, 'total' => 0];
+
+            $graduateStatement = $db->prepare('SELECT * FROM alumnos_egresados WHERE id_alumno_original = ? LIMIT 1 FOR UPDATE');
+            $graduateStatement->execute([$id]);
+            $graduate = $graduateStatement->fetch() ?: null;
+
+            $contextStatement = $db->prepare(
+                'SELECT
+                    td.sigla AS tipo_documento_sigla,
+                    td.descripcion AS tipo_documento,
+                    f.nombre_familia,
+                    an.nombre_anio,
+                    d.nombre_division,
+                    c.nombre_categoria,
+                    cm.nombre_categoria AS categoria_monto
+                 FROM alumnos a
+                 LEFT JOIN tipos_documentos td ON td.id_tipo_documento = a.id_tipo_documento
+                 LEFT JOIN familias f ON f.id_familia = a.id_familia
+                 LEFT JOIN anio an ON an.id_anio = a.id_anio
+                 LEFT JOIN division d ON d.id_division = a.id_division
+                 LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
+                 LEFT JOIN categoria_monto cm ON cm.id_cat_monto = a.id_cat_monto
+                 WHERE a.id_alumno = ?
+                 LIMIT 1'
+            );
+            $contextStatement->execute([$id]);
+            $context = $contextStatement->fetch() ?: [];
+
+            $salesStatement = $db->prepare('SELECT id_persona FROM ventas_personas WHERE id_alumno = ? ORDER BY id_persona');
+            $salesStatement->execute([$id]);
+            $salesPersonIds = array_map('intval', $salesStatement->fetchAll(PDO::FETCH_COLUMN));
+
+            $expensesStatement = $db->prepare('SELECT id_egreso FROM egresos WHERE id_alumno_origen = ? ORDER BY id_egreso');
+            $expensesStatement->execute([$id]);
+            $expenseIds = array_map('intval', $expensesStatement->fetchAll(PDO::FETCH_COLUMN));
+
+            $previousStatus = (bool)$before['activo'] ? 'ACTIVO' : ($graduate ? 'EGRESADO' : 'BAJA');
+            $snapshotData = [
+                'alumno' => $before,
+                'estado_anterior' => $previousStatus,
+                'egreso' => $graduate,
+                'catalogos' => $context,
+                'referencias' => [
+                    'pagos' => [
+                        'cantidad' => (int)($paymentHistory['cantidad'] ?? 0),
+                        'total' => (float)($paymentHistory['total'] ?? 0),
+                    ],
+                    'ventas_personas_ids' => $salesPersonIds,
+                    'egresos_contables_ids' => $expenseIds,
+                ],
+                'eliminacion' => [
+                    'tipo' => 'LOGICA',
+                    'motivo' => $reason,
+                    'id_usuario' => (int)($auth['id_usuario'] ?? 0),
+                    'fecha' => date('Y-m-d H:i:s'),
+                ],
+            ];
+            $snapshot = json_encode($snapshotData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+            if ($snapshot === false) $snapshot = '{}';
+
+            $archive = $db->prepare(
+                'INSERT INTO alumnos_eliminados
+                 (id_alumno_original, apellido, nombre, num_documento, tipo_documento_sigla,
+                  estado_anterior, familia_original, motivo_eliminacion, snapshot_json, id_usuario)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            );
+            $archive->execute([
+                $id,
+                $before['apellido'] ?? null,
+                $before['nombre'] ?? null,
+                $before['num_documento'] ?? null,
+                $context['tipo_documento_sigla'] ?? null,
+                $previousStatus,
+                $context['nombre_familia'] ?? null,
+                $reason,
+                $snapshot,
+                $auth['id_usuario'] ?? null,
+            ]);
+            $archiveId = (int)$db->lastInsertId();
+
+            // Se retira del padrón operativo sin borrar ni mutilar la identidad histórica.
+            // Curso, división, categoría y familia se conservan para que comprobantes,
+            // pagos y consultas históricas mantengan el contexto que tenían al eliminarlo.
+            // Todos los módulos operativos filtran eliminado = 0.
+            $delete = $db->prepare(
+                'UPDATE alumnos
+                 SET activo = 0,
+                     eliminado = 1,
+                     eliminado_en = NOW(),
+                     motivo = ?,
+                     actualizado_en = NOW()
+                 WHERE id_alumno = ?'
+            );
+            $delete->execute(['ELIMINADO: ' . $reason, $id]);
+
+            $after = self::alumnoSimple($db, $id, true);
+            audit_change(
+                $db,
+                $auth,
+                'ALUMNOS',
+                'DELETE_LOGICO',
+                'alumnos',
+                $id,
+                'Eliminación lógica con respaldo en alumnos_eliminados #' . $archiveId . '. Historial financiero preservado.',
+                $before,
+                $after
+            );
+
+            return [
+                'id_alumno' => $id,
+                'id_eliminado' => $archiveId,
+                'estado_anterior' => $previousStatus,
+                'pagos_preservados' => (int)($paymentHistory['cantidad'] ?? 0),
+                'total_pagos_preservado' => (float)($paymentHistory['total'] ?? 0),
+            ];
+        });
+    }
+
+    private static function egresoActual(PDO $db, int $idAlumno, bool $lock = false): ?array
+    {
+        $statement = $db->prepare('SELECT * FROM alumnos_egresados WHERE id_alumno_original = ? LIMIT 1' . ($lock ? ' FOR UPDATE' : ''));
+        $statement->execute([$idAlumno]);
+        $row = $statement->fetch();
+        return $row ?: null;
     }
 
     private static function alumnoSimple(PDO $db, int $id, bool $lock = false): ?array
@@ -939,6 +982,13 @@ trait AlumnosGestion
         $statement->execute([$id]);
         $row = $statement->fetch();
         return $row ?: null;
+    }
+
+    private static function validarCicloLectivoPadron(mixed $value): int
+    {
+        $year = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 2020, 'max_range' => 2100]]);
+        if ($year === false) api_error('El ciclo lectivo del padrón no es válido.', 'VALIDATION_ERROR', 422);
+        return (int)$year;
     }
 
     private static function optionalId(mixed $value, string $label): ?int

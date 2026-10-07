@@ -49,7 +49,7 @@ final class AlumnosExcel
         if (($delimiters[$delimiter] ?? 0) <= 0) $delimiter = ';';
 
         $rows = [];
-        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+        while (($row = fgetcsv($handle, 0, $delimiter, '"', '\\')) !== false) {
             $rows[] = array_map(static fn($value) => trim((string)$value), $row);
         }
         fclose($handle);
@@ -163,7 +163,17 @@ final class AlumnosExcel
     private static function contenido(PharData $zip, string $path): ?string
     {
         try {
-            return isset($zip[$path]) ? $zip[$path]->getContent() : null;
+            if (!isset($zip[$path])) {
+                return null;
+            }
+
+            $archivo = $zip[$path];
+
+            if (!$archivo instanceof PharFileInfo) {
+                return null;
+            }
+
+            return $archivo->getContent();
         } catch (Throwable) {
             return null;
         }

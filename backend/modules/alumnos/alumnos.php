@@ -74,7 +74,7 @@ final class Alumnos
         $id = positive_id($body['id'] ?? $body['id_alumno'] ?? null, 'alumno');
         $type = strtoupper(trim((string)($body['tipo'] ?? '')));
         $result = self::reclasificarSalidaDatos($auth, $id, $type);
-        api_success($result, $type === 'EGRESO' ? 'Alumno movido a Egresados correctamente.' : 'Alumno movido a Bajas correctamente.');
+        api_success($result, $type === 'EGRESO' ? 'Alumno reclasificado como egresado correctamente.' : 'Alumno reclasificado como baja correctamente.');
     }
 
     public static function eliminarDefinitivo(): never
@@ -96,7 +96,8 @@ final class Alumnos
             api_error('Seleccioná un archivo .xlsx o .csv.', 'ARCHIVO_REQUERIDO', 422);
         }
         $rows = AlumnosExcel::leerArchivoSubido($_FILES['archivo']);
-        api_success(self::previsualizarPadronDatos($auth, $rows), 'Vista previa generada correctamente.');
+        $cicloLectivo = self::validarCicloLectivoPadron($_POST['ciclo_lectivo'] ?? date('Y'));
+        api_success(self::previsualizarPadronDatos($auth, $rows, $cicloLectivo), 'Vista previa generada correctamente.');
     }
 
     public static function importarExcel(): never
@@ -111,7 +112,8 @@ final class Alumnos
         }
         $rows = AlumnosExcel::leerArchivoSubido($_FILES['archivo']);
         $firma = trim((string)($_POST['firma_preview'] ?? ''));
-        $result = self::importarPadronDatos($auth, $rows, $firma);
+        $cicloLectivo = self::validarCicloLectivoPadron($_POST['ciclo_lectivo'] ?? date('Y'));
+        $result = self::importarPadronDatos($auth, $rows, $firma, $cicloLectivo);
         api_success($result, 'Padrón sincronizado correctamente.');
     }
 

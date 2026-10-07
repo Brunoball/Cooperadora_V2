@@ -56,7 +56,7 @@ abstract class CuotasRegistros extends CuotasConsultas
         if (!$applyFamily || $student['id_familia'] === null) return array_values($targets);
 
         $familyId = (int)$student['id_familia'];
-        $statement = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_familia = ? AND activo = 1 ORDER BY id_alumno');
+        $statement = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_familia = ? AND activo = 1 AND eliminado = 0 AND ingreso <= CURDATE() ORDER BY id_alumno');
         $statement->execute([$familyId]);
         $activeIds = array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN));
 
@@ -205,7 +205,7 @@ abstract class CuotasRegistros extends CuotasConsultas
             $lockPlaceholders = implode(',', array_fill(0, count($lockedTargets), '?'));
             $lock = $db->prepare(
                 "SELECT id_alumno FROM alumnos
-                 WHERE id_alumno IN ({$lockPlaceholders})
+                 WHERE eliminado = 0 AND id_alumno IN ({$lockPlaceholders})
                  ORDER BY id_alumno
                  FOR UPDATE"
             );
@@ -477,7 +477,7 @@ abstract class CuotasRegistros extends CuotasConsultas
         ): array {
             // Mismo lock que usa registrarPagosDatos(): cualquier alta/baja del
             // mismo alumno queda serializada y no trabaja con un estado viejo.
-            $lock = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_alumno = ? FOR UPDATE');
+            $lock = $db->prepare('SELECT id_alumno FROM alumnos WHERE id_alumno = ? AND eliminado = 0 FOR UPDATE');
             $lock->execute([$studentId]);
             if ((int)$lock->fetchColumn() !== $studentId) {
                 api_error('El alumno seleccionado ya no existe.', 'ALUMNO_NO_ENCONTRADO', 404);

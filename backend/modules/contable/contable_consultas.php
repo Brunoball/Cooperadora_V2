@@ -29,6 +29,26 @@ trait ContableConsultas
             ];
         }
 
+        // Las matrículas de ingresantes ya cobradas son ingreso real desde el día
+        // del cobro. Mientras todavía no existe id_alumno se leen directamente de
+        // ingresantes. Cuando pasan a Alumnos se crea pagos.id_mes=14 y esta fila
+        // deja de entrar aquí gracias a id_alumno_confirmado, evitando duplicados.
+        $statement = $db->prepare(
+            'SELECT MONTH(COALESCE(fecha_pago_matricula, fecha_inscripcion)) AS mes,
+                    SUM(monto_matricula) AS total
+             FROM ingresantes
+             WHERE matricula_pagada = 1
+               AND id_alumno_confirmado IS NULL
+               AND YEAR(COALESCE(fecha_pago_matricula, fecha_inscripcion)) = ?
+             GROUP BY MONTH(COALESCE(fecha_pago_matricula, fecha_inscripcion))'
+        );
+        $statement->execute([$year]);
+        foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $m = (int)$row['mes'];
+            if ($m < 1 || $m > 12) continue;
+            $payments[$m]['matriculas'] += self::aCentavos($row['total'] ?? 0);
+        }
+
         $manual = array_fill(1, 12, 0);
         $statement = $db->prepare(
             'SELECT MONTH(fecha) AS mes, SUM(importe) AS total
@@ -122,6 +142,20 @@ trait ContableConsultas
         foreach ($payment->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $incomeCategories[(string)$row['nombre']] = (float)$row['total'];
         }
+
+        $ingresantesMatricula = $db->prepare(
+            'SELECT COALESCE(SUM(monto_matricula), 0) AS total
+             FROM ingresantes
+             WHERE matricula_pagada = 1
+               AND id_alumno_confirmado IS NULL
+               AND COALESCE(fecha_pago_matricula, fecha_inscripcion) BETWEEN ? AND ?'
+        );
+        $ingresantesMatricula->execute([$from, $to]);
+        $totalIngresantesMatricula = (float)$ingresantesMatricula->fetchColumn();
+        if ($totalIngresantesMatricula > 0) {
+            $incomeCategories['MATRÍCULA'] = ($incomeCategories['MATRÍCULA'] ?? 0) + $totalIngresantesMatricula;
+        }
+
         $manual = $db->prepare(
             'SELECT COALESCE(c.nombre_categoria, \'OTROS INGRESOS\') AS nombre, SUM(i.importe) AS total
              FROM ingresos i
@@ -159,9 +193,17 @@ trait ContableConsultas
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(i.importe) AS total
                 FROM ingresos i LEFT JOIN medio_pago mp ON mp.id_medio_pago = i.id_medio_pago
                 WHERE i.fecha BETWEEN ? AND ? GROUP BY 1
+                UNION ALL
+                SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(ing.monto_matricula) AS total
+                FROM ingresantes ing
+                LEFT JOIN medio_pago mp ON mp.id_medio_pago = ing.id_medio_pago
+                WHERE ing.matricula_pagada = 1
+                  AND ing.id_alumno_confirmado IS NULL
+                  AND COALESCE(ing.fecha_pago_matricula, ing.fecha_inscripcion) BETWEEN ? AND ?
+                GROUP BY 1
              ) x GROUP BY 1 ORDER BY total DESC'
         );
-        $means->execute([$from, $to, $from, $to]);
+        $means->execute([$from, $to, $from, $to, $from, $to]);
 
         $categoryRows = [];
         foreach ($incomeCategories as $name => $total) $categoryRows[] = ['nombre' => $name, 'total' => round($total, 2)];

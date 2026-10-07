@@ -1,172 +1,84 @@
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const { request } = require('@playwright/test');
-const {
-  AUTH_FILE,
-  apiCall,
-  apiResult,
-  closeApiSession,
-  createApiSession,
-} = require('./helpers/api.helper');
-const { loadTestEnv } = require('./helpers/env.helper');
-
-const SETUP_UA = 'PW-RH-E2E-SETUP/2.0';
-const RUNNER_UA = 'PW-RH-E2E-RUNNER/2.0';
-const BASELINE_FILE = path.join(__dirname, '.auth', 'baseline.json');
-
-function skippedCleanup(body) {
-  return body?.datos?.omitidos_por_seguridad || body?.omitidos_por_seguridad || {};
-}
+const fs = require("fs");
+const path = require("path");
+const { request } = require("@playwright/test");
+const { loadTestEnv } = require("./helpers/env.helper");
+const { ok, login, coverageFile } = require("./helpers/api.helper");
 
 module.exports = async function globalSetup() {
-  loadTestEnv(path.resolve(__dirname, '..'));
-  const realUsername = process.env.PW_USER;
-  const realPassword = process.env.PW_PASSWORD;
-  if (!realUsername || !realPassword) {
-    throw new Error(
-      `Faltan credenciales para ${process.env.PW_ENVIRONMENT || 'el entorno seleccionado'} en .env.test.`,
-    );
-  }
+  const env = loadTestEnv();
+  fs.mkdirSync(path.dirname(env.authFile), { recursive: true });
+  try { fs.unlinkSync(coverageFile()); } catch {}
 
-  fs.rmSync(AUTH_FILE, { force: true });
-  fs.rmSync(BASELINE_FILE, { force: true });
-
-  const api = await request.newContext({
-    ignoreHTTPSErrors: false,
-    extraHTTPHeaders: { 'User-Agent': SETUP_UA },
-  });
-  let realSession = null;
-
+  const api = await request.newContext({ ignoreHTTPSErrors: false });
   try {
-    const health = await apiResult(api, 'health', { session: null });
-    if (!health.ok || health.body?.servicio !== 'rh-negativo-api') {
-      throw new Error(
-        `La API configurada no se identificó como RH Negativo (${process.env.PW_API_URL}).`,
-      );
+    const bootstrap = await login(api, env.username, env.password, "PW-COOP-E2E-BOOTSTRAP");
+    const bootstrapToken = bootstrap.token;
+
+    // Hostinger queda en lectura/smoke salvo habilitación explícita.
+    if (!env.isLocal && !env.allowRemoteWrites) {
+      const current = await ok(api, "auth_usuario_actual", { token: bootstrapToken });
+      fs.writeFileSync(env.authFile, JSON.stringify({
+        createdAt: new Date().toISOString(),
+        target: env.target,
+        readOnly: true,
+        bootstrapToken,
+        session: {
+          token: bootstrapToken,
+          expira_en: bootstrap.expira_en,
+          usuario: current.usuario || bootstrap.usuario,
+          organizacion: bootstrap.organizacion,
+        },
+      }, null, 2), "utf8");
+      return;
     }
 
-    realSession = await createApiSession(api, {
-      username: realUsername,
-      password: realPassword,
-      headers: { 'User-Agent': SETUP_UA },
+    // Borra sólo el namespace E2E de ejecuciones locales interrumpidas.
+    await ok(api, "e2e_cleanup", {
+      token: bootstrapToken,
+      method: "POST",
+      data: { confirmacion: "LIMPIAR_PLAYWRIGHT" },
     });
-    if (realSession.usuario?.rol !== 'admin') {
-      throw new Error('El usuario configurado para preparar E2E debe ser administrador.');
-    }
 
-    // Probe obligatorio: si el router no está ejecutando el guard fail-closed,
-    // el handler devolverá 500 y la corrida se detiene antes de tocar datos.
-    const probe = await apiResult(api, 'e2e_guard_probe', {
-      method: 'POST',
-      data: {},
-      session: realSession,
-      headers: { 'User-Agent': SETUP_UA },
-    });
-    if (probe.status !== 409 || probe.body?.codigo !== 'E2E_SCOPE_BLOCKED') {
-      const extra = probe.status === 404
-        ? ' En Hostinger faltan los archivos/rutas de testing_safety o no se desplegaron.'
-        : '';
-      throw new Error(
-        `El guard E2E no está activo: HTTP ${probe.status}, código=${probe.body?.codigo || 'sin código'}.${extra}`,
-      );
-    }
+    const stamp = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const runnerUsername = `pw_e2e_${stamp}`.slice(0, 60);
+    const runnerPassword = `CoopE2E!${stamp}Aa1`;
 
-    const staleCleanup = await apiResult(api, 'e2e_cleanup', {
-      method: 'POST',
-      data: { confirmacion: 'LIMPIAR_PLAYWRIGHT' },
-      session: realSession,
-      headers: { 'User-Agent': SETUP_UA },
-    });
-    if (!staleCleanup.ok) {
-      throw new Error(
-        `No se pudo ejecutar la limpieza E2E preventiva: ${staleCleanup.body?.mensaje || staleCleanup.status}`,
-      );
-    }
-    if (Object.keys(skippedCleanup(staleCleanup.body)).length) {
-      throw new Error(
-        `La limpieza preventiva omitió elementos por seguridad: ${JSON.stringify(skippedCleanup(staleCleanup.body))}`,
-      );
-    }
-
-    const residue = await apiCall(api, 'e2e_residuos', {
-      session: realSession,
-      headers: { 'User-Agent': SETUP_UA },
-    });
-    if (Number(residue.datos?.total || 0) !== 0) {
-      throw new Error(`Quedaron residuos E2E antes de empezar: ${JSON.stringify(residue.datos?.conteos || {})}`);
-    }
-
-    // Baseline de datos NO-E2E. La huella ignora únicamente el namespace de
-    // Playwright y el heartbeat ultimo_uso de sesiones.
-    const fingerprint = await apiCall(api, 'e2e_integridad', {
-      session: realSession,
-      headers: { 'User-Agent': SETUP_UA },
-    });
-    fs.mkdirSync(path.dirname(BASELINE_FILE), { recursive: true });
-    fs.writeFileSync(BASELINE_FILE, JSON.stringify(fingerprint.datos, null, 2), 'utf8');
-
-    const suffix = `${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`.toLowerCase();
-    const runnerUsername = `pw_e2e_runner_${suffix}`;
-    const runnerPassword = `PwE2E!${crypto.randomBytes(8).toString('hex')}A9`;
-
-    await apiCall(api, 'usuarios_guardar', {
-      method: 'POST',
+    await ok(api, "usuarios_guardar", {
+      token: bootstrapToken,
+      method: "POST",
       data: {
+        nombre_completo: `PW E2E Runner ${stamp}`.slice(0, 120),
         usuario: runnerUsername,
-        email: `${runnerUsername}@example.test`,
-        rol: 'admin',
+        rol: "admin",
         contrasena: runnerPassword,
         confirmar_contrasena: runnerPassword,
       },
-      session: realSession,
-      headers: { 'User-Agent': SETUP_UA },
     });
 
-    const runnerSession = await createApiSession(api, {
-      username: runnerUsername,
-      password: runnerPassword,
-      headers: { 'User-Agent': RUNNER_UA },
-    });
-    if (runnerSession.usuario?.rol !== 'admin') {
-      throw new Error('El runner E2E temporal no quedó con rol administrador.');
-    }
+    const runner = await login(api, runnerUsername, runnerPassword, "PW-COOP-E2E-RUNNER");
+    const current = await ok(api, "auth_usuario_actual", { token: runner.token });
 
-    fs.writeFileSync(
-      AUTH_FILE,
-      JSON.stringify({
-        ...runnerSession,
-        _testing: { username: runnerUsername, password: runnerPassword },
-      }, null, 2),
-      'utf8',
-    );
+    // La huella se calcula con la sesión bootstrap. El backend excluye de la
+    // huella esa PK exacta y todo el namespace PW E2E, por lo que representa
+    // únicamente datos reales.
+    const integrity = await ok(api, "e2e_integridad", { token: bootstrapToken });
 
-    await closeApiSession(api, realSession);
-    realSession = null;
-    console.log(
-      `[Playwright safety] Entorno=${process.env.PW_ENVIRONMENT}; API=${process.env.PW_API_URL}; ` +
-        'cleanup inicial OK; baseline de datos reales guardado.',
-    );
-  } catch (error) {
-    if (realSession) {
-      try {
-        await apiResult(api, 'e2e_cleanup', {
-          method: 'POST',
-          data: { confirmacion: 'LIMPIAR_PLAYWRIGHT' },
-          session: realSession,
-          headers: { 'User-Agent': SETUP_UA },
-        });
-      } catch (_cleanupError) {}
-    }
-    fs.rmSync(AUTH_FILE, { force: true });
-    fs.rmSync(BASELINE_FILE, { force: true });
-    throw error;
+    fs.writeFileSync(env.authFile, JSON.stringify({
+      createdAt: new Date().toISOString(),
+      target: env.target,
+      readOnly: false,
+      bootstrapToken,
+      baselineHash: integrity.datos?.sha256 || null,
+      baselineTables: integrity.datos?.tablas || {},
+      runner: { usuario: runnerUsername, contrasena: runnerPassword },
+      session: {
+        token: runner.token,
+        expira_en: runner.expira_en,
+        usuario: current.usuario || runner.usuario,
+        organizacion: runner.organizacion,
+      },
+    }, null, 2), "utf8");
   } finally {
-    if (realSession) {
-      try { await closeApiSession(api, realSession); } catch (_error) {}
-    }
     await api.dispose();
   }
 };
-
-module.exports.BASELINE_FILE = BASELINE_FILE;

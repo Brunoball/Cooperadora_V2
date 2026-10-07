@@ -11,16 +11,18 @@ export const alumnosApi = {
   reactivar: (payload) =>
     apiPost("alumnos_reactivar", typeof payload === "object" ? payload : { id: payload }),
   reclasificar: (payload) => apiPost("alumnos_reclasificar", payload),
-  previsualizarImportacion: (file) => {
+  previsualizarImportacion: (file, cicloLectivo) => {
     const formData = new FormData();
     formData.append("archivo", file);
+    formData.append("ciclo_lectivo", cicloLectivo || "");
     return apiFormPost("alumnos_importar_preview", formData);
   },
-  importarExcel: (file, firmaPreview) => {
+  importarExcel: (file, firmaPreview, cicloLectivo) => {
     const formData = new FormData();
     formData.append("archivo", file);
     formData.append("confirmar_sincronizacion", "1");
     formData.append("firma_preview", firmaPreview || "");
+    formData.append("ciclo_lectivo", cicloLectivo || "");
     return apiFormPost("alumnos_importar_excel", formData);
   },
   exportarExcel: () => apiDownload("alumnos_exportar_excel"),
@@ -34,4 +36,11 @@ export const familiasApi = {
     apiPost("familias_eliminar", typeof payload === "object" ? payload : { id: payload }),
   eliminarDefinitivo: (payload) => apiPost("familias_eliminar_definitivo", payload),
   reactivar: (id) => apiPost("familias_reactivar", { id }),
+};
+
+export const ingresantesApi = {
+  listar: (params) => apiGet("ingresantes_listar", params),
+  guardar: (payload) => apiPost("ingresantes_guardar", payload),
+  cambiarEstado: (payload) => apiPost("ingresantes_estado", payload),
+  pasarAlumnos: (payload) => apiPost("ingresantes_pasar_alumnos", payload),
 };

@@ -39,9 +39,9 @@ final class Dashboard
         $year = (int)$today->format('Y');
         $month = (int)$today->format('n');
 
-        $students = self::studentSummary($db, $start, $end);
+        $students = self::studentSummary($db, $start, $end, $today);
         $families = self::familySummary($db);
-        $coverage = self::currentCoverage($db, $year, $month, $end);
+        $coverage = self::currentCoverage($db, $year, $month, $today);
         $accounting = self::accountingSummary($db, $start, $end);
 
         return [
@@ -86,7 +86,7 @@ final class Dashboard
         ];
     }
 
-    private static function studentSummary(PDO $db, DateTimeImmutable $start, DateTimeImmutable $end): array
+    private static function studentSummary(PDO $db, DateTimeImmutable $start, DateTimeImmutable $end, DateTimeImmutable $today): array
     {
         $row = self::fetchOne(
             $db,
@@ -99,17 +99,23 @@ final class Dashboard
                 SUM(a.activo = 1 AND a.id_categoria IS NOT NULL AND a.id_cat_monto IS NOT NULL) AS con_categoria,
                 SUM(a.activo = 1 AND a.telefono IS NOT NULL AND TRIM(a.telefono) <> \'\') AS con_telefono
              FROM alumnos a
-             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno'
+             LEFT JOIN alumnos_egresados ae ON ae.id_alumno_original = a.id_alumno
+             WHERE a.eliminado = 0
+               AND a.ingreso <= ?'
+            , [$today->format('Y-m-d')]
         );
 
         $newStudents = self::scalarInt(
             $db,
-            'SELECT COUNT(*) FROM alumnos WHERE activo = 1 AND ingreso >= ? AND ingreso < ?',
-            [$start->format('Y-m-d'), $end->format('Y-m-d')]
+            'SELECT COUNT(*) FROM alumnos WHERE activo = 1 AND eliminado = 0 AND ingreso >= ? AND ingreso < ? AND ingreso <= ?',
+            [$start->format('Y-m-d'), $end->format('Y-m-d'), $today->format('Y-m-d')]
         );
         $graduates = self::scalarInt(
             $db,
-            'SELECT COUNT(*) FROM alumnos_egresados WHERE fecha_egreso >= ? AND fecha_egreso < ?',
+            'SELECT COUNT(*)
+             FROM alumnos_egresados ae
+             INNER JOIN alumnos a ON a.id_alumno = ae.id_alumno_original
+             WHERE a.eliminado = 0 AND ae.fecha_egreso >= ? AND ae.fecha_egreso < ?',
             [$start->format('Y-m-d'), $end->format('Y-m-d')]
         );
 
@@ -147,7 +153,7 @@ final class Dashboard
      * 1era Mitad (marzo-julio) y 2da Mitad (agosto-diciembre). Un pago de esas
      * modalidades cubre el mes correspondiente sin duplicar al alumno.
      */
-    private static function currentCoverage(PDO $db, int $year, int $month, DateTimeImmutable $end): array
+    private static function currentCoverage(PDO $db, int $year, int $month, DateTimeImmutable $today): array
     {
         if (!self::isBillableMonth($month)) {
             return ['esperadas' => 0, 'pagadas' => 0, 'condonadas' => 0, 'cubiertas' => 0, 'pendientes' => 0];
@@ -155,7 +161,7 @@ final class Dashboard
 
         $periodIds = self::coveragePeriodIds($month);
         $placeholders = implode(',', array_fill(0, count($periodIds), '?'));
-        $params = array_merge([$year], $periodIds, [$end->modify('-1 day')->format('Y-m-d')]);
+        $params = array_merge([$year], $periodIds, [$today->format('Y-m-d')]);
 
         $rows = self::fetchAll(
             $db,
@@ -169,6 +175,7 @@ final class Dashboard
               AND p.anio_aplicado = ?
               AND p.id_mes IN ({$placeholders})
              WHERE a.activo = 1
+               AND a.eliminado = 0
                AND a.ingreso <= ?
              GROUP BY a.id_alumno",
             $params
@@ -222,6 +229,16 @@ final class Dashboard
              WHERE p.fecha_pago >= ? AND p.fecha_pago < ?",
             $range
         );
+        $ingresanteRow = self::fetchOne(
+            $db,
+            "SELECT COALESCE(SUM(monto_matricula), 0) AS total, COUNT(*) AS cobros
+             FROM ingresantes
+             WHERE matricula_pagada = 1
+               AND id_alumno_confirmado IS NULL
+               AND COALESCE(fecha_pago_matricula, fecha_inscripcion) >= ?
+               AND COALESCE(fecha_pago_matricula, fecha_inscripcion) < ?",
+            $range
+        );
         $incomeRow = self::fetchOne(
             $db,
             'SELECT COALESCE(SUM(importe), 0) AS total, COUNT(*) AS movimientos FROM ingresos WHERE fecha >= ? AND fecha < ?',
@@ -233,7 +250,8 @@ final class Dashboard
             $range
         );
 
-        $feeIncome = (float)($paymentRow['total'] ?? 0);
+        $ingresanteIncome = (float)($ingresanteRow['total'] ?? 0);
+        $feeIncome = (float)($paymentRow['total'] ?? 0) + $ingresanteIncome;
         $otherIncome = (float)($incomeRow['total'] ?? 0);
         $expenses = (float)($expenseRow['total'] ?? 0);
         $income = $feeIncome + $otherIncome;
@@ -244,7 +262,7 @@ final class Dashboard
             'ingresos_mes' => $income,
             'egresos_mes' => $expenses,
             'saldo_mes' => $income - $expenses,
-            'cobros_registrados_mes' => (int)($paymentRow['cobros'] ?? 0),
+            'cobros_registrados_mes' => (int)($paymentRow['cobros'] ?? 0) + (int)($ingresanteRow['cobros'] ?? 0),
             'condonaciones_registradas_mes' => (int)($paymentRow['condonaciones'] ?? 0),
             'movimientos_ingresos_mes' => (int)($incomeRow['movimientos'] ?? 0),
             'movimientos_egresos_mes' => (int)($expenseRow['movimientos'] ?? 0),

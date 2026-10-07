@@ -38,9 +38,10 @@ trait ContableSoporte
         return (int)$month;
     }
 
-    protected static function filtroPeriodo(mixed $value): int
+    protected static function filtroPeriodo(mixed $value, bool $required = true): ?int
     {
         $text = trim((string)$value);
+        if ($text === '' && !$required) return null;
         if ($text === '') return (int)date('n');
         $period = filter_var($text, FILTER_VALIDATE_INT, [
             'options' => ['min_range' => 1, 'max_range' => 16],
@@ -437,9 +438,10 @@ trait ContableSoporte
         $optionGroups = self::opcionesConfiguracionDatos($db)['opciones'];
         $years = $db->query(
             "SELECT anio FROM (
-                SELECT DISTINCT anio_aplicado AS anio FROM pagos
+                SELECT DISTINCT YEAR(fecha_pago) AS anio FROM pagos WHERE estado = 'pagado'
                 UNION SELECT DISTINCT YEAR(fecha) FROM ingresos
                 UNION SELECT DISTINCT YEAR(fecha) FROM egresos
+                UNION SELECT YEAR(COALESCE(fecha_pago_matricula, fecha_inscripcion)) FROM ingresantes WHERE matricula_pagada = 1
                 UNION SELECT YEAR(CURDATE())
              ) y WHERE anio BETWEEN 2000 AND 2100 ORDER BY anio DESC"
         )->fetchAll(PDO::FETCH_COLUMN);

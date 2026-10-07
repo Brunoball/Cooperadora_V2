@@ -80,6 +80,10 @@ function localToday() {
   return local.toISOString().slice(0, 10);
 }
 
+function suggestedAcademicCycle() {
+  return new Date().getFullYear();
+}
+
 function formatDate(value) {
   if (!value) return "—";
   const [year, month, day] = String(value).slice(0, 10).split("-");
@@ -466,6 +470,7 @@ export default function Alumnos() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importPreview, setImportPreview] = useState(null);
+  const [importCycle, setImportCycle] = useState(String(suggestedAcademicCycle()));
   const [exportOpen, setExportOpen] = useState(false);
   const [preparingExport, setPreparingExport] = useState(false);
   const [exportCurrentSections, setExportCurrentSections] = useState([]);
@@ -671,6 +676,7 @@ export default function Alumnos() {
   const openImportModal = () => {
     setImportFile(null);
     setImportPreview(null);
+    setImportCycle(String(suggestedAcademicCycle()));
     setImportModalOpen(true);
   };
 
@@ -684,18 +690,21 @@ export default function Alumnos() {
     setImporting(true);
     try {
       if (!importPreview) {
-        const preview = await alumnosApi.previsualizarImportacion(importFile);
+        const preview = await alumnosApi.previsualizarImportacion(importFile, importCycle);
         setImportPreview(preview);
         return;
       }
 
-      const response = await alumnosApi.importarExcel(importFile, importPreview.firma);
+      const response = await alumnosApi.importarExcel(importFile, importPreview.firma, importCycle);
       const summary = [
         `${response.nuevos || 0} nuevos`,
         `${response.actualizados || 0} actualizados`,
         `${response.reactivados || 0} reactivados`,
         `${response.bajas || 0} bajas`,
         `${response.egresados || 0} egresados`,
+        `${response.ingresantes_confirmados || 0} ingresantes vinculados`,
+        `${response.matriculas_migradas || 0} matrículas migradas`,
+        `${response.matriculas_existentes || 0} matrículas ya existentes`,
       ].join(" · ");
       setImportModalOpen(false);
       setImportFile(null);
@@ -986,7 +995,7 @@ export default function Alumnos() {
                       <button
                         className="mov-iconBtn"
                         type="button"
-                        title={view === "bajas" ? "Mover a Egresados" : "Mover a Bajas"}
+                        title={view === "bajas" ? "Reclasificar como Egresado" : "Reclasificar como Baja"}
                         disabled={savingId === item.id_alumno}
                         onClick={() => reclasificarAlumno(item)}
                       >
@@ -1144,9 +1153,9 @@ export default function Alumnos() {
                 {detailModal.data.historial.length ? detailModal.data.historial.map((entry) => (
                   <InfoRow
                     key={entry.id_auditoria}
-                    title={entry.accion}
-                    detail={entry.usuario || "SISTEMA"}
-                    meta={formatDateTime(entry.creado_en)}
+                    title={entry.etiqueta || "Cambio en el alumno"}
+                    detail={entry.detalle || "Se actualizó información del alumno."}
+                    meta={`${entry.usuario || "SISTEMA"} · ${formatDateTime(entry.creado_en)}`}
                   />
                 )) : <InfoEmpty>Sin cambios auditados para este alumno.</InfoEmpty>}
               </InfoSection>
@@ -1174,8 +1183,8 @@ export default function Alumnos() {
         operacion="eliminar"
         row={deleteModal}
         title="Eliminar alumno"
-        message="El alumno se eliminará del padrón y se guardará una copia completa en alumnos_eliminados para conservar la trazabilidad."
-        warning="Si el alumno tiene pagos registrados, la eliminación será bloqueada para no romper su historial financiero. En ese caso debe permanecer como Baja o Egresado."
+        message="El alumno dejará de aparecer en el padrón operativo y se guardará una copia completa en alumnos_eliminados para conservar la trazabilidad."
+        warning="Los pagos, ventas y demás movimientos históricos NO se borran. El alumno conserva internamente su mismo ID para que todo el historial financiero siga relacionado correctamente."
         details={[
           { label: "Alumno", value: deleteModal?.nombre_completo || "—" },
           { label: "Documento", value: [deleteModal?.tipo_documento_sigla, deleteModal?.num_documento].filter(Boolean).join(" ") || "—" },
@@ -1225,9 +1234,26 @@ export default function Alumnos() {
             <li><b>Activo que no aparece:</b> pasa a Baja; si estaba en 7°, pasa automáticamente a Egresados.</li>
             <li><b>Baja y Egreso son distintos:</b> una baja por cambio de escuela no genera un egreso.</li>
             <li><b>No se borran pagos ni historial:</b> el alumno permanece en la base y conserva toda su trazabilidad.</li>
+            <li><b>Ingresantes:</b> si un DNI de Ingresantes aparece en el padrón del ciclo actual, se vincula al mismo alumno y la matrícula pagada pasa a Pagos sin duplicarse. Un ciclo futuro se puede previsualizar, pero no activar antes de tiempo.</li>
             <li><b>Columnas obligatorias:</b> APELLIDO Y NOMBRE (o APELLIDO), DOCUMENTO, DOMICILIO, LOCALIDAD, AÑO y DIVISIÓN.</li>
             <li><b>Columnas opcionales:</b> NOMBRE, TIPO DOCUMENTO, TELÉFONO y CP.</li>
           </ul>
+
+          <label className="alumnos-importCycle">
+            <span>Ciclo lectivo del padrón</span>
+            <input
+              type="number"
+              min="2020"
+              max="2100"
+              value={importCycle}
+              disabled={importing}
+              onChange={(event) => {
+                setImportCycle(event.target.value);
+                setImportPreview(null);
+              }}
+            />
+            <small>Se usa para vincular ingresantes y llevar la matrícula al ciclo correcto.</small>
+          </label>
 
           <label className="alumnos-importFile">
             <span>Archivo del padrón</span>
@@ -1257,6 +1283,8 @@ export default function Alumnos() {
                 <div><strong>{importPreview.resumen?.reactivados || 0}</strong><span>reactivados</span></div>
                 <div className="is-warning"><strong>{importPreview.resumen?.bajas || 0}</strong><span>bajas</span></div>
                 <div className="is-warning"><strong>{importPreview.resumen?.egresados || 0}</strong><span>egresados</span></div>
+                <div><strong>{importPreview.resumen?.ingresantes_a_confirmar || 0}</strong><span>ingresantes</span></div>
+                <div><strong>{importPreview.resumen?.matriculas_a_migrar || 0}</strong><span>matrículas</span></div>
               </div>
               {(importPreview.advertencias || []).length ? (
                 <div className="alumnos-importPreview__warnings">

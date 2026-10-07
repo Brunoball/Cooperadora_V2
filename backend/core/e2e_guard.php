@@ -117,6 +117,22 @@ function e2e_target_state(PDO $db, string $kind, int $id): ?bool
             'tipos_documentos', 'id_tipo_documento',
             "UPPER(descripcion) LIKE 'PW E2E DOC %' OR UPPER(descripcion) LIKE 'PW EEE DOC %' OR UPPER(sigla) LIKE 'PWE2E%'",
         ],
+        'ventas_producto' => [
+            'ventas_productos', 'id_producto',
+            "UPPER(nombre) LIKE 'PW E2E VTA PROD %'",
+        ],
+        'ventas_campania' => [
+            'ventas_campanias', 'id_campania',
+            "UPPER(nombre) LIKE 'PW E2E VTA CAMP %'",
+        ],
+        'ventas_persona' => [
+            'ventas_personas', 'id_persona',
+            "UPPER(nombre_apellido) LIKE 'PW E2E VTA PERSONA %'",
+        ],
+        'ventas_orden' => [
+            'ventas_ordenes', 'id_orden',
+            "UPPER(COALESCE(observacion,'')) LIKE 'PW E2E VTA ORDEN %'",
+        ],
         // Contabilidad Cooperadora: un movimiento E2E debe quedar enlazado
         // exclusivamente a las tres opciones contables del namespace de la suite.
         // Así un movimiento real que accidentalmente use una sola opción de prueba
@@ -254,6 +270,140 @@ function e2e_assert_contable_option(PDO $db, string $action, mixed $rawType, mix
     e2e_assert_target($db, $action, $kind, $rawId);
 }
 
+
+function e2e_sales_creation_marker(string $value, string $prefix): bool
+{
+    return e2e_marker($value, [$prefix]);
+}
+
+function e2e_assert_sales_campaign_activation_safe(PDO $db, string $action, ?int $excludeId = null): void
+{
+    $sql = "SELECT id_campania, nombre
+              FROM ventas_campanias
+             WHERE activo = 1
+               AND UPPER(nombre) NOT LIKE 'PW E2E VTA CAMP %'";
+    $params = [];
+    if ($excludeId !== null && $excludeId > 0) {
+        $sql .= ' AND id_campania <> ?';
+        $params[] = $excludeId;
+    }
+    $sql .= ' LIMIT 1';
+
+    $statement = $db->prepare($sql);
+    $statement->execute($params);
+    $real = $statement->fetch(PDO::FETCH_ASSOC);
+    if ($real) {
+        e2e_scope_error(
+            $action,
+            'Activar una campaña E2E desactivaría una campaña real activa (' . (int)$real['id_campania'] . ').'
+        );
+    }
+}
+
+function e2e_assert_sales_product_side_effect_safe(PDO $db, string $action, int $productId): void
+{
+    if ($productId <= 0) return;
+    $statement = $db->prepare(
+        "SELECT id_campania, nombre
+           FROM ventas_campanias
+          WHERE id_producto_principal = ?
+            AND UPPER(nombre) NOT LIKE 'PW E2E VTA CAMP %'
+          LIMIT 1"
+    );
+    $statement->execute([$productId]);
+    $real = $statement->fetch(PDO::FETCH_ASSOC);
+    if ($real) {
+        e2e_scope_error(
+            $action,
+            'El producto E2E quedó referenciado por una campaña real y no puede cambiarse de estado/eliminarse desde Playwright.'
+        );
+    }
+}
+
+function e2e_assert_sales_person_payload(PDO $db, string $action, array $body): void
+{
+    $existingId = $body['id_venta_persona'] ?? $body['id_persona'] ?? null;
+    if ($existingId !== null && trim((string)$existingId) !== '') {
+        e2e_assert_target($db, $action, 'ventas_persona', $existingId);
+        return;
+    }
+
+    $name = trim((string)($body['nombre_apellido'] ?? $body['persona_nombre'] ?? ''));
+    $dni = preg_replace('/\D+/', '', (string)($body['dni'] ?? '')) ?: '';
+
+    // Venta totalmente "en puerta": no crea persona y es válida si los items
+    // pertenecen al namespace E2E.
+    if ($name === '' && $dni === '') return;
+
+    if (!e2e_sales_creation_marker($name, 'PW E2E VTA PERSONA ')) {
+        e2e_scope_error($action, 'Una persona de Ventas creada por Playwright debe usar prefijo PW E2E VTA PERSONA.');
+    }
+
+    if ($dni === '') {
+        e2e_scope_error($action, 'Una persona E2E de Ventas debe usar un DNI de prueba.');
+    }
+
+    $student = $db->prepare(
+        "SELECT id_alumno, apellido
+           FROM alumnos
+          WHERE num_documento = ?
+          LIMIT 1"
+    );
+    $student->execute([$dni]);
+    $studentRow = $student->fetch(PDO::FETCH_ASSOC);
+    if ($studentRow && !e2e_marker((string)$studentRow['apellido'], ['PW E2E ALUMNO ', 'PW EEE ALUMNO '])) {
+        e2e_scope_error($action, 'El DNI E2E coincide con un alumno real.');
+    }
+
+    $person = $db->prepare(
+        "SELECT id_persona, nombre_apellido
+           FROM ventas_personas
+          WHERE dni = ?
+          LIMIT 1"
+    );
+    $person->execute([$dni]);
+    $personRow = $person->fetch(PDO::FETCH_ASSOC);
+    if ($personRow && !e2e_sales_creation_marker((string)$personRow['nombre_apellido'], 'PW E2E VTA PERSONA ')) {
+        e2e_scope_error($action, 'El DNI E2E coincide con una persona real de Ventas.');
+    }
+}
+
+function e2e_assert_sales_items(PDO $db, string $action, array $body): void
+{
+    $items = $body['items'] ?? null;
+    if (!is_array($items) || $items === []) return; // el handler validará el payload.
+    foreach ($items as $item) {
+        if (!is_array($item)) continue;
+        $rawId = $item['id_producto'] ?? null;
+        if ($rawId === null || trim((string)$rawId) === '') {
+            e2e_scope_error($action, 'Los items de una venta E2E deben usar productos E2E persistidos.');
+        }
+        e2e_assert_target($db, $action, 'ventas_producto', $rawId);
+    }
+}
+
+function e2e_assert_sales_order_payload(PDO $db, string $action, array $body): void
+{
+    $rawOrder = $body['id_orden'] ?? $body['id'] ?? null;
+    if ($rawOrder !== null && trim((string)$rawOrder) !== '') {
+        e2e_assert_target($db, $action, 'ventas_orden', $rawOrder);
+    } else {
+        $observation = trim((string)($body['observacion'] ?? ''));
+        if ($observation !== '' && !e2e_sales_creation_marker($observation, 'PW E2E VTA ORDEN ')) {
+            e2e_scope_error($action, 'Una orden creada por Playwright debe usar observación PW E2E VTA ORDEN.');
+        }
+        if ($observation === '') {
+            e2e_scope_error($action, 'Una orden E2E debe llevar observación PW E2E VTA ORDEN.');
+        }
+    }
+
+    if (array_key_exists('id_campania', $body)) {
+        e2e_assert_target($db, $action, 'ventas_campania', $body['id_campania']);
+    }
+    e2e_assert_sales_items($db, $action, $body);
+    e2e_assert_sales_person_payload($db, $action, $body);
+}
+
 function e2e_scope_guard(string $action, array $auth): void
 {
     if (!e2e_request_active($auth)) return;
@@ -329,10 +479,10 @@ function e2e_scope_guard(string $action, array $auth): void
             return;
 
         case 'alumnos_importar_excel':
-            // La sincronización del padrón puede dar de baja/egresar alumnos ausentes.
-            // Nunca se ejecuta contra un ambiente compartido/producción desde E2E.
-            if (e2e_is_local_environment()) return;
-            e2e_scope_error($action, 'La sincronización completa del padrón sólo está permitida para Playwright en ambiente local.');
+            // La sincronización completa puede dar de baja/egresar alumnos reales ausentes.
+            // Playwright sólo cubre la acción verificando esta barrera: nunca la ejecuta,
+            // ni siquiera en local, porque la base local puede ser una copia con datos reales.
+            e2e_scope_error($action, 'La sincronización completa del padrón está bloqueada para Playwright para proteger datos reales.');
 
         case 'familias_guardar':
             if (!empty($body['id_familia'])) {
@@ -402,9 +552,9 @@ function e2e_scope_guard(string $action, array $auth): void
             return;
 
         case 'cuotas_actualizar_matricula':
-            // Es un valor global compartido, no tiene namespace E2E.
-            if (e2e_is_local_environment()) return;
-            e2e_scope_error($action, 'El monto global de matrícula sólo puede modificarse desde Playwright en ambiente local.');
+            // Es un valor global compartido y no tiene namespace E2E. Aunque el target
+            // sea local, puede ser una copia de datos reales: Playwright nunca lo modifica.
+            e2e_scope_error($action, 'El monto global de matrícula está bloqueado para Playwright para proteger datos reales.');
 
         // CONTABILIDAD: usa el esquema real de Cooperadora (ingresos/egresos y
         // catálogos compartidos), siempre restringido al namespace de Playwright.
@@ -451,21 +601,68 @@ function e2e_scope_guard(string $action, array $auth): void
             e2e_assert_target($db, $action, 'contable_egreso', $body['id_egreso'] ?? null);
             return;
 
-        // VENTAS: hasta que exista una suite E2E propia con namespace de campañas,
-        // productos y órdenes, las escrituras Playwright sólo se habilitan en local.
-        // En Hostinger/producción quedan fail-closed para evitar tocar ventas reales.
-        case 'ventas_campania_guardar':
-        case 'ventas_campania_estado':
-        case 'ventas_campania_eliminar':
+        // VENTAS: namespace propio. Los tests sólo pueden crear/modificar
+        // campañas, productos, personas y órdenes marcadas explícitamente.
         case 'ventas_producto_guardar':
+            if (!empty($body['id_producto'])) {
+                e2e_assert_target($db, $action, 'ventas_producto', $body['id_producto']);
+                return;
+            }
+            $productName = trim((string)($body['nombre'] ?? ''));
+            if ($productName === '' || e2e_sales_creation_marker($productName, 'PW E2E VTA PROD ')) return;
+            e2e_scope_error($action, 'Un producto de Ventas E2E debe usar prefijo PW E2E VTA PROD.');
+
         case 'ventas_producto_estado':
         case 'ventas_producto_eliminar':
+            $productId = (int)($body['id_producto'] ?? $body['id'] ?? 0);
+            e2e_assert_target($db, $action, 'ventas_producto', $productId);
+            if ($productId > 0) e2e_assert_sales_product_side_effect_safe($db, $action, $productId);
+            return;
+
+        case 'ventas_campania_guardar':
+            $campaignId = isset($body['id_campania']) && preg_match('/^\d+$/', (string)$body['id_campania'])
+                ? (int)$body['id_campania']
+                : null;
+            if ($campaignId !== null && $campaignId > 0) {
+                e2e_assert_target($db, $action, 'ventas_campania', $campaignId);
+            } else {
+                $campaignName = trim((string)($body['nombre'] ?? ''));
+                if ($campaignName !== '' && !e2e_sales_creation_marker($campaignName, 'PW E2E VTA CAMP ')) {
+                    e2e_scope_error($action, 'Una campaña de Ventas E2E debe usar prefijo PW E2E VTA CAMP.');
+                }
+            }
+            if (!empty($body['id_producto_principal'])) {
+                e2e_assert_target($db, $action, 'ventas_producto', $body['id_producto_principal']);
+            }
+            if (!empty($body['activo'])) {
+                e2e_assert_sales_campaign_activation_safe($db, $action, $campaignId);
+            }
+            return;
+
+        case 'ventas_campania_estado':
+            $campaignId = (int)($body['id_campania'] ?? $body['id'] ?? 0);
+            e2e_assert_target($db, $action, 'ventas_campania', $campaignId);
+            if (!empty($body['activo'])) {
+                e2e_assert_sales_campaign_activation_safe($db, $action, $campaignId > 0 ? $campaignId : null);
+            }
+            return;
+
+        case 'ventas_campania_eliminar':
+            e2e_assert_target($db, $action, 'ventas_campania', $body['id_campania'] ?? $body['id'] ?? null);
+            return;
+
         case 'ventas_persona_guardar':
+            e2e_assert_sales_person_payload($db, $action, $body);
+            return;
+
         case 'ventas_orden_guardar':
+            e2e_assert_sales_order_payload($db, $action, $body);
+            return;
+
         case 'ventas_orden_retiro':
         case 'ventas_orden_eliminar':
-            if (e2e_is_local_environment()) return;
-            e2e_scope_error($action, 'Las escrituras de Ventas sólo están habilitadas para Playwright en ambiente local.');
+            e2e_assert_target($db, $action, 'ventas_orden', $body['id_orden'] ?? $body['id'] ?? null);
+            return;
 
         default:
             e2e_scope_error(

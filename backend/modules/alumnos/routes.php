@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/alumnos.php';
 require_once __DIR__ . '/familias.php';
+require_once __DIR__ . '/ingresantes.php';
 
 function register_alumnos_routes(Router $router): void
 {
@@ -18,6 +19,11 @@ function register_alumnos_routes(Router $router): void
     $router->register('alumnos_importar_preview', 'POST', [Alumnos::class, 'previsualizarImportacion'], true);
     $router->register('alumnos_importar_excel', 'POST', [Alumnos::class, 'importarExcel'], true);
     $router->register('alumnos_exportar_excel', 'GET', [Alumnos::class, 'exportarExcel'], true);
+
+    $router->register('ingresantes_listar', 'GET', [Ingresantes::class, 'listar'], true);
+    $router->register('ingresantes_guardar', 'POST', [Ingresantes::class, 'guardar'], true);
+    $router->register('ingresantes_estado', 'POST', [Ingresantes::class, 'cambiarEstado'], true);
+    $router->register('ingresantes_pasar_alumnos', 'POST', [Ingresantes::class, 'pasarPendientesAlumnos'], true);
 
     $router->register('familias_listar', 'GET', [Familias::class, 'listar'], true);
     $router->register('familias_obtener', 'GET', [Familias::class, 'obtener'], true);
