@@ -763,7 +763,7 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
     <ModulePage
       className="ventas-page ventas-page--products"
       title="Productos de ventas"
-      filters={[{ key: "buscar", type: "search", label: "Buscar", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]}
+      filters={[{ key: "buscar", type: "search", label: "Buscar", placeholder: "Nombre del producto...", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]}
       canCreate={writable}
       primaryActionLabel="Nuevo producto"
       onPrimaryAction={() => setModal({ open: true, row: null })}
@@ -803,7 +803,7 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
         ) : null}
         {rows.map((row) => (
           <div
-            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--products ventas-activatable-row ${changingStateId === row.id_producto ? "is-changing" : ""}`.trim()}
+            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--products ventas-activatable-row ${yes(row.activo) ? "is-selected" : ""} ${changingStateId === row.id_producto ? "is-changing" : ""}`.trim()}
             role="row"
             key={row.id_producto}
             tabIndex={writable ? 0 : undefined}
@@ -965,7 +965,7 @@ function CampaignsSection({ writable, summary, feedback, showFeedback }) {
         ) : null}
         {rows.map((row) => (
           <div
-            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns ventas-activatable-row ${changingStateId === row.id_campania ? "is-changing" : ""}`.trim()}
+            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns ventas-activatable-row ${yes(row.activo) ? "is-selected" : ""} ${changingStateId === row.id_campania ? "is-changing" : ""}`.trim()}
             role="row"
             key={row.id_campania}
             tabIndex={writable ? 0 : undefined}
@@ -1094,7 +1094,7 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
   };
 
   const filters = [
-    { key: "buscar", type: "search", label: "Buscar venta", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
+    { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI o referencia...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
     { key: "campania", type: "select", label: "Campaña", value: campaign, placeholder: "Todas", options: (catalogs.campanias || []).map((c) => ({ value: c.id_campania, label: c.nombre })), onChange: (v) => { setPage(1); setCampaign(v); } },
     { key: "estado", type: "select", label: "Estado", value: state, includeEmptyOption: true, placeholder: "Todos", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
     { key: "retiro", type: "select", label: "Retiro", value: retreat, placeholder: "Todos", options: [{ value: "pendiente", label: "Pendientes" }, { value: "retirado", label: "Retirados" }], onChange: (v) => { setPage(1); setRetreat(v); } },

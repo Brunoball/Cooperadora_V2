@@ -4,6 +4,8 @@ import {
   faBan,
   faDollarSign,
   faReceipt,
+  faCoins,
+  faWallet,
   faPrint,
   faTrashCan,
   faUserGroup,
@@ -110,6 +112,7 @@ function ReceiptResultModal({ open, result, onClose, onPrint, onPdf }) {
       subtitle={`${receipts.length} comprobante(s) generado(s).`}
       onClose={onClose}
       hideSubmit
+      modalClassName="cuotas-v2-receipt-modal"
       cancelLabel="Cerrar"
       footerStart={
         <div className="cuotas-v2-receipt-actions">
@@ -123,10 +126,42 @@ function ReceiptResultModal({ open, result, onClose, onPrint, onPdf }) {
       }
     >
       <div className="cuotas-v2-receipt-summary">
-        <div><small>Alumnos procesados</small><strong>{result?.alumnos_procesados || 1}</strong></div>
-        <div><small>Total bruto</small><strong>{money(result?.monto_bruto_original)}</strong></div>
-        <div><small>Cooperadora</small><strong>{money(result?.monto_neto_cooperadora)}</strong></div>
-        <div><small>Comisión cobrador</small><strong>{money(result?.monto_comision_cobrador)}</strong></div>
+        <div className="cuotas-v2-receipt-card">
+          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
+            <FontAwesomeIcon icon={faUserGroup} />
+          </span>
+          <span className="cuotas-v2-receipt-card__body">
+            <small>Alumnos procesados</small>
+            <strong>{result?.alumnos_procesados || 1}</strong>
+          </span>
+        </div>
+        <div className="cuotas-v2-receipt-card is-gross">
+          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
+            <FontAwesomeIcon icon={faCoins} />
+          </span>
+          <span className="cuotas-v2-receipt-card__body">
+            <small>Total bruto</small>
+            <strong>{money(result?.monto_bruto_original)}</strong>
+          </span>
+        </div>
+        <div className="cuotas-v2-receipt-card is-success">
+          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
+            <FontAwesomeIcon icon={faWallet} />
+          </span>
+          <span className="cuotas-v2-receipt-card__body">
+            <small>Cooperadora</small>
+            <strong>{money(result?.monto_neto_cooperadora)}</strong>
+          </span>
+        </div>
+        <div className="cuotas-v2-receipt-card is-warning">
+          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
+            <FontAwesomeIcon icon={faDollarSign} />
+          </span>
+          <span className="cuotas-v2-receipt-card__body">
+            <small>Comisión cobrador</small>
+            <strong>{money(result?.monto_comision_cobrador)}</strong>
+          </span>
+        </div>
       </div>
     </CrudModal>
   );
@@ -568,7 +603,6 @@ export default function Cuotas() {
             className="cuotas-export-action"
           />
         }
-        notice={collectorMode ? "Modo cobrador activo: la impresión genera el talonario completo de marzo a diciembre para cada cobrador." : null}
       >
         {error ? <div className="module-notice is-error">{error}</div> : null}
         <GlobalDivTable

@@ -74,6 +74,12 @@ function formFromItem(item) {
 
 const EMPTY_PAGINATION = { pagina: 1, total: 0, total_paginas: 0, desde: 0, hasta: 0 };
 
+function isInteractiveRowTarget(target) {
+  return target instanceof Element && Boolean(
+    target.closest("button, a, input, label, select, textarea, [data-no-row-toggle]"),
+  );
+}
+
 export default function Ingresantes() {
   const writable = canWrite();
   const [items, setItems] = useState([]);
@@ -94,6 +100,8 @@ export default function Ingresantes() {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [paymentLocked, setPaymentLocked] = useState(false);
+  const [stateModal, setStateModal] = useState(null);
+  const [changingState, setChangingState] = useState(false);
   const [form, setForm] = useState(emptyForm());
 
   const filters = useMemo(() => ({
@@ -168,17 +176,41 @@ export default function Ingresantes() {
     }
   };
 
-  const changeState = async (item, target) => {
+  const requestStateChange = (item, target) => {
+    if (!item || item.id_alumno_confirmado) return;
+    setStateModal({ item, target });
+  };
+
+  const confirmStateChange = async () => {
+    if (!stateModal?.item || !stateModal?.target) {
+      return { ok: false, mensaje: "No se pudo determinar el cambio de estado." };
+    }
+
+    setChangingState(true);
     try {
-      const response = await ingresantesApi.cambiarEstado({ id: item.id_ingresante, estado: target });
-      setFeedback({
-        type: "success",
-        message: response?.mensaje || (target === "CANCELADO" ? "Ingresante cancelado." : "Ingresante vuelto a pendiente."),
+      const response = await ingresantesApi.cambiarEstado({
+        id: stateModal.item.id_ingresante,
+        estado: stateModal.target,
       });
-      setSelectedIds((current) => current.filter((id) => id !== Number(item.id_ingresante)));
+      setSelectedIds((current) =>
+        current.filter((id) => id !== Number(stateModal.item.id_ingresante)),
+      );
       await cargar({ silent: true });
+      return {
+        ok: true,
+        mensaje:
+          response?.mensaje ||
+          (stateModal.target === "CANCELADO"
+            ? "Ingreso cancelado correctamente."
+            : "Ingresante vuelto a pendiente correctamente."),
+      };
     } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message || "No se pudo actualizar el ingresante." });
+      return {
+        ok: false,
+        mensaje: requestError.message || "No se pudo actualizar el ingresante.",
+      };
+    } finally {
+      setChangingState(false);
     }
   };
 
@@ -222,9 +254,9 @@ export default function Ingresantes() {
         { value: "INGRESADO", label: "Ingresados", count: resumen.ingresados ?? 0 },
       ],
     },
-    { key: "buscar", type: "search", label: "Buscar", value: search, onChange: changeFilter(setSearch), placeholder: "Apellido, nombre o DNI..." },
-    { key: "ciclo", type: "select", label: "Ciclo", value: cycle, onChange: changeFilter(setCycle), includeEmptyOption: false, options: (catalogos.ciclos || [suggestedCycle()]).map((value) => ({ value, label: String(value) })) },
-    { key: "anio", type: "select", label: "Ingresa a", value: year, onChange: changeFilter(setYear), placeholder: "1° y 2°", options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })) },
+    { key: "buscar", type: "search", label: "Buscar", value: search, onChange: changeFilter(setSearch), placeholder: "Apellido, nombre o DNI...", className: "ingresantes-searchFilter" },
+    { key: "ciclo", type: "select", label: "Ciclo", value: cycle, onChange: changeFilter(setCycle), includeEmptyOption: false, className: "ingresantes-cycleFilter", options: (catalogos.ciclos || [suggestedCycle()]).map((value) => ({ value, label: String(value) })) },
+    { key: "anio", type: "select", label: "Ingresa a", value: year, onChange: changeFilter(setYear), placeholder: "Todos", className: "ingresantes-yearFilter", options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })) },
   ];
 
   return (
@@ -235,6 +267,7 @@ export default function Ingresantes() {
         filters={pageFilters}
         tabsInTitle
         headFiltersInActions
+        headFiltersClassName="ingresantes-headFilters"
         primaryActionLabel="Nuevo ingresante"
         onPrimaryAction={writable ? openCreate : undefined}
         canCreate={writable}
@@ -248,7 +281,6 @@ export default function Ingresantes() {
           onClick: () => setBulkModalOpen(true),
           title: !cycleCanActivate ? `El ciclo ${cycle} todavía no comenzó; deben seguir como Ingresantes.` : selectedCount > 0 ? `Pasar ${selectedCount} ingresante(s) seleccionado(s) a Alumnos` : "Seleccioná uno o más ingresantes pendientes",
         }] : []}
-        notice={`Matrículas pagadas: ${resumen.matriculas_pagadas || 0} · ${formatMoney(resumen.total_matriculas || 0)} · Todo cobro se refleja en Contable en la fecha en que ingresó el dinero.`}
       >
         <GlobalDivTable
           className="ingresantes-table"
@@ -261,41 +293,65 @@ export default function Ingresantes() {
         >
           {!loading && error ? <div className="module-empty"><strong>{error}</strong></div> : null}
           {!loading && !error && !items.length ? <div className="module-empty"><strong>Sin ingresantes para mostrar</strong><span>Cambiá los filtros o cargá una nueva inscripción.</span></div> : null}
-          {!loading && !error ? items.map((item) => (
-            <div className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ingresantes-grid" key={item.id_ingresante}>
-              <div className="mov-gridCell entity-main-cell">
-                <div className="ingresantes-nameRow">
-                  {writable && item.estado === "PENDIENTE" && !item.id_alumno_confirmado ? (
-                    <input
-                      className="ingresantes-rowCheck"
-                      type="checkbox"
-                      aria-label={`Seleccionar ${item.nombre_completo}`}
-                      checked={selectedIds.includes(Number(item.id_ingresante))}
-                      onChange={() => toggleSelected(item)}
-                    />
-                  ) : null}
-                  <div>
-                    <strong>{item.nombre_completo}</strong>
-                    <small>{item.id_alumno_confirmado ? `Ingresado · Alumno #${item.id_alumno_confirmado}${item.alumno_confirmado_eliminado ? " · Alumno eliminado" : ""}` : item.estado === "CANCELADO" ? "Cancelado" : `Pendiente · Ciclo ${item.ciclo_lectivo}`}</small>
+          {!loading && !error ? items.map((item) => {
+            const selectable = writable && item.estado === "PENDIENTE" && !item.id_alumno_confirmado;
+            const selected = selectedIds.includes(Number(item.id_ingresante));
+            return (
+              <div
+                className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ingresantes-grid ${selectable ? "is-selectable" : ""} ${selected ? "is-selected" : ""}`.trim()}
+                key={item.id_ingresante}
+                role="row"
+                tabIndex={selectable ? 0 : undefined}
+                aria-selected={selectable ? selected : undefined}
+                onClick={(event) => {
+                  if (selectable && !isInteractiveRowTarget(event.target)) toggleSelected(item);
+                }}
+                onKeyDown={(event) => {
+                  if (!selectable || isInteractiveRowTarget(event.target)) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleSelected(item);
+                  }
+                }}
+              >
+                <div className="mov-gridCell entity-main-cell">
+                  <div className="ingresantes-nameRow">
+                    <div>
+                      <strong>{item.nombre_completo}</strong>
+                      <small>{item.id_alumno_confirmado ? `Ingresado · Alumno #${item.id_alumno_confirmado}${item.alumno_confirmado_eliminado ? " · Alumno eliminado" : ""}` : item.estado === "CANCELADO" ? "Cancelado" : `Pendiente · Ciclo ${item.ciclo_lectivo}`}</small>
+                    </div>
                   </div>
                 </div>
+                <div className="mov-gridCell is-center"><strong>{item.num_documento}</strong></div>
+                <div className="mov-gridCell is-center"><strong>{item.nombre_anio || `${item.id_anio_destino}°`}</strong></div>
+                <div className="mov-gridCell is-center">
+                  <span className={`socios-statusChip ${item.matricula_pagada ? "is-active" : "is-inactive"}`}>
+                    {item.matricula_pagada ? `PAGADA · ${formatMoney(item.monto_matricula)}` : "NO PAGADA"}
+                  </span>
+                </div>
+                <div className="mov-gridCell is-center">{formatDate(item.fecha_inscripcion)}</div>
+                <div className="mov-gridCell mov-actionsInline is-center">
+                  {selectable ? (
+                    <label
+                      className="ingresantes-check ingresantes-check--action"
+                      title={selected ? "Quitar de la selección" : "Seleccionar ingresante"}
+                    >
+                      <input
+                        type="checkbox"
+                        aria-label={`Seleccionar ${item.nombre_completo}`}
+                        checked={selected}
+                        onChange={() => toggleSelected(item)}
+                      />
+                    </label>
+                  ) : null}
+                  {writable && !item.id_alumno_confirmado ? <button className="mov-iconBtn" type="button" title="Editar" onClick={() => openEdit(item)}><FontAwesomeIcon icon={faPen} /></button> : null}
+                  {writable && !item.id_alumno_confirmado && item.estado === "PENDIENTE" ? <button className="mov-iconBtn" type="button" title="Cancelar ingreso" onClick={() => requestStateChange(item, "CANCELADO")}><FontAwesomeIcon icon={faBan} /></button> : null}
+                  {writable && !item.id_alumno_confirmado && item.estado === "CANCELADO" ? <button className="mov-iconBtn" type="button" title="Volver a pendiente" onClick={() => requestStateChange(item, "PENDIENTE")}><FontAwesomeIcon icon={faRotateLeft} /></button> : null}
+                  {item.id_alumno_confirmado ? <FontAwesomeIcon icon={faCheck} title="Ya fue pasado a Alumnos" /> : null}
+                </div>
               </div>
-              <div className="mov-gridCell is-center"><strong>{item.num_documento}</strong></div>
-              <div className="mov-gridCell is-center"><strong>{item.nombre_anio || `${item.id_anio_destino}°`}</strong></div>
-              <div className="mov-gridCell is-center">
-                <span className={`socios-statusChip ${item.matricula_pagada ? "is-active" : "is-inactive"}`}>
-                  {item.matricula_pagada ? `PAGADA · ${formatMoney(item.monto_matricula)}` : "NO PAGADA"}
-                </span>
-              </div>
-              <div className="mov-gridCell is-center">{formatDate(item.fecha_inscripcion)}</div>
-              <div className="mov-gridCell mov-actionsInline is-center">
-                {writable && !item.id_alumno_confirmado ? <button className="mov-iconBtn" type="button" title="Editar" onClick={() => openEdit(item)}><FontAwesomeIcon icon={faPen} /></button> : null}
-                {writable && !item.id_alumno_confirmado && item.estado === "PENDIENTE" ? <button className="mov-iconBtn" type="button" title="Cancelar ingreso" onClick={() => changeState(item, "CANCELADO")}><FontAwesomeIcon icon={faBan} /></button> : null}
-                {writable && !item.id_alumno_confirmado && item.estado === "CANCELADO" ? <button className="mov-iconBtn" type="button" title="Volver a pendiente" onClick={() => changeState(item, "PENDIENTE")}><FontAwesomeIcon icon={faRotateLeft} /></button> : null}
-                {item.id_alumno_confirmado ? <FontAwesomeIcon icon={faCheck} title="Ya fue pasado a Alumnos" /> : null}
-              </div>
-            </div>
-          )) : null}
+            );
+          }) : null}
         </GlobalDivTable>
 
         <GlobalPagination
@@ -314,26 +370,144 @@ export default function Ingresantes() {
       <CrudModal
         open={modalOpen}
         title={form.id_ingresante ? "Editar ingresante" : "Nuevo ingresante"}
-        subtitle="Datos mínimos para registrar la inscripción."
+        subtitle="Completá los datos del ingresante y, si corresponde, registrá la matrícula."
         onClose={() => !saving && setModalOpen(false)}
         onSubmit={save}
         saving={saving}
         submitLabel={form.id_ingresante ? "Guardar cambios" : "Guardar ingresante"}
+        wide
         modalClassName="ingresantes-modal"
       >
         <div className="ingresantes-formGrid">
-          <FloatingField label="Apellido *" active={Boolean(form.apellido)}><input value={form.apellido} maxLength={100} required placeholder=" " onChange={(e) => setForm((c) => ({ ...c, apellido: e.target.value.toUpperCase() }))} /></FloatingField>
-          <FloatingField label="Nombre *" active={Boolean(form.nombre)}><input value={form.nombre} maxLength={100} required placeholder=" " onChange={(e) => setForm((c) => ({ ...c, nombre: e.target.value.toUpperCase() }))} /></FloatingField>
-          <FloatingField label="DNI *" active={Boolean(form.num_documento)}><input value={form.num_documento} maxLength={10} inputMode="numeric" required placeholder=" " disabled={paymentLocked} onChange={(e) => setForm((c) => ({ ...c, num_documento: e.target.value.replace(/\D+/g, "") }))} /></FloatingField>
-          <FloatingField label="Ingresa a *" active={Boolean(form.id_anio_destino)}><select value={form.id_anio_destino} required onChange={(e) => setForm((c) => ({ ...c, id_anio_destino: e.target.value }))}>{(catalogos.anios || []).map((item) => <option key={item.id_anio} value={item.id_anio}>{item.nombre_anio}</option>)}</select></FloatingField>
-          <FloatingField label="Ciclo lectivo *" active={Boolean(form.ciclo_lectivo)}><input type="number" min="2020" max="2100" value={form.ciclo_lectivo} required disabled={paymentLocked} onChange={(e) => setForm((c) => ({ ...c, ciclo_lectivo: e.target.value }))} /></FloatingField>
-          <FloatingField label="Fecha de inscripción *" active={Boolean(form.fecha_inscripcion)}><input type="date" max={localToday()} value={form.fecha_inscripcion} required onChange={(e) => setForm((c) => ({ ...c, fecha_inscripcion: e.target.value }))} /></FloatingField>
-          <label className="ingresantes-check"><input type="checkbox" checked={Boolean(form.matricula_pagada)} disabled={paymentLocked} onChange={(e) => setForm((c) => ({ ...c, matricula_pagada: e.target.checked }))} /><span>Matrícula pagada</span></label>
-          {form.matricula_pagada ? <FloatingField label="Monto matrícula *" active={Boolean(form.monto_matricula)}><input type="number" min="0.01" step="0.01" value={form.monto_matricula} required disabled={paymentLocked} onChange={(e) => setForm((c) => ({ ...c, monto_matricula: e.target.value }))} /></FloatingField> : null}
-          {form.matricula_pagada ? <FloatingField label="Medio de pago" active={Boolean(form.id_medio_pago)}><select value={form.id_medio_pago} disabled={paymentLocked} onChange={(e) => setForm((c) => ({ ...c, id_medio_pago: e.target.value }))}><option value="">Sin especificar</option>{(catalogos.medios_pago || []).map((item) => <option key={item.id_medio_pago} value={item.id_medio_pago}>{item.medio_pago}</option>)}</select></FloatingField> : null}
-          {form.matricula_pagada ? <FloatingField label="Fecha de pago *" active={Boolean(form.fecha_pago_matricula)}><input type="date" max={localToday()} value={form.fecha_pago_matricula} required disabled={paymentLocked} onChange={(e) => setForm((c) => ({ ...c, fecha_pago_matricula: e.target.value }))} /></FloatingField> : null}
-          {paymentLocked ? <div className="ingresantes-lockNote">La matrícula ya fue cobrada y forma parte de Contable. DNI, ciclo, estado del cobro, monto, fecha y medio de pago quedan bloqueados para no alterar el historial.</div> : null}
-          <FloatingField label="Observaciones" active={Boolean(form.observaciones)} textarea wide><textarea rows={3} maxLength={5000} value={form.observaciones} placeholder=" " onChange={(e) => setForm((c) => ({ ...c, observaciones: e.target.value.toUpperCase() }))} /></FloatingField>
+          <FloatingField label="Apellido *" active={Boolean(form.apellido)} className="ingresantes-field--span-6">
+            <input
+              value={form.apellido}
+              maxLength={100}
+              required
+              placeholder="Ej. PÉREZ"
+              onChange={(e) => setForm((c) => ({ ...c, apellido: e.target.value.toUpperCase() }))}
+            />
+          </FloatingField>
+
+          <FloatingField label="Nombre *" active={Boolean(form.nombre)} className="ingresantes-field--span-6">
+            <input
+              value={form.nombre}
+              maxLength={100}
+              required
+              placeholder="Ej. JUAN"
+              onChange={(e) => setForm((c) => ({ ...c, nombre: e.target.value.toUpperCase() }))}
+            />
+          </FloatingField>
+
+          <FloatingField label="DNI *" active={Boolean(form.num_documento)} className="ingresantes-field--span-4">
+            <input
+              value={form.num_documento}
+              maxLength={10}
+              inputMode="numeric"
+              required
+              placeholder="Ej. 45123456"
+              disabled={paymentLocked}
+              onChange={(e) => setForm((c) => ({ ...c, num_documento: e.target.value.replace(/\D+/g, "") }))}
+            />
+          </FloatingField>
+
+          <FloatingField label="Ingresa a *" active={Boolean(form.id_anio_destino)} className="ingresantes-field--span-4">
+            <select
+              value={form.id_anio_destino}
+              required
+              onChange={(e) => setForm((c) => ({ ...c, id_anio_destino: e.target.value }))}
+            >
+              {(catalogos.anios || []).map((item) => <option key={item.id_anio} value={item.id_anio}>{item.nombre_anio}</option>)}
+            </select>
+          </FloatingField>
+
+          <FloatingField label="Ciclo lectivo *" active={Boolean(form.ciclo_lectivo)} className="ingresantes-field--span-4">
+            <input
+              type="number"
+              min="2020"
+              max="2100"
+              value={form.ciclo_lectivo}
+              required
+              placeholder="Ej. 2027"
+              disabled={paymentLocked}
+              onChange={(e) => setForm((c) => ({ ...c, ciclo_lectivo: e.target.value }))}
+            />
+          </FloatingField>
+
+          <FloatingField label="Fecha de inscripción *" active={Boolean(form.fecha_inscripcion)} className="ingresantes-field--span-6">
+            <input
+              type="date"
+              max={localToday()}
+              value={form.fecha_inscripcion}
+              required
+              onChange={(e) => setForm((c) => ({ ...c, fecha_inscripcion: e.target.value }))}
+            />
+          </FloatingField>
+
+          <label className={`entity-check-option ingresantes-check ingresantes-check--field ingresantes-field--span-6 ${form.matricula_pagada ? "is-selected" : ""}`}>
+            <input
+              type="checkbox"
+              checked={Boolean(form.matricula_pagada)}
+              disabled={paymentLocked}
+              onChange={(e) => setForm((c) => ({ ...c, matricula_pagada: e.target.checked }))}
+            />
+            <span>Matrícula pagada</span>
+          </label>
+
+          {form.matricula_pagada ? (
+            <>
+              <FloatingField label="Monto matrícula *" active={Boolean(form.monto_matricula)} className="ingresantes-field--span-4">
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.monto_matricula}
+                  required
+                  placeholder="Ej. 15000"
+                  disabled={paymentLocked}
+                  onChange={(e) => setForm((c) => ({ ...c, monto_matricula: e.target.value }))}
+                />
+              </FloatingField>
+
+              <FloatingField label="Medio de pago" active={Boolean(form.id_medio_pago)} className="ingresantes-field--span-4">
+                <select
+                  value={form.id_medio_pago}
+                  disabled={paymentLocked}
+                  onChange={(e) => setForm((c) => ({ ...c, id_medio_pago: e.target.value }))}
+                >
+                  <option value="">Sin especificar</option>
+                  {(catalogos.medios_pago || []).map((item) => <option key={item.id_medio_pago} value={item.id_medio_pago}>{item.medio_pago}</option>)}
+                </select>
+              </FloatingField>
+
+              <FloatingField label="Fecha de pago *" active={Boolean(form.fecha_pago_matricula)} className="ingresantes-field--span-4">
+                <input
+                  type="date"
+                  max={localToday()}
+                  value={form.fecha_pago_matricula}
+                  required
+                  disabled={paymentLocked}
+                  onChange={(e) => setForm((c) => ({ ...c, fecha_pago_matricula: e.target.value }))}
+                />
+              </FloatingField>
+            </>
+          ) : null}
+
+          {paymentLocked ? (
+            <div className="ingresantes-lockNote ingresantes-field--span-12">
+              La matrícula ya fue cobrada y forma parte de Contable. DNI, ciclo y datos del cobro quedan bloqueados para conservar el historial.
+            </div>
+          ) : null}
+
+          <FloatingField label="Observaciones" active={Boolean(form.observaciones)} textarea wide className="ingresantes-field--span-12">
+            <textarea
+              rows={3}
+              maxLength={5000}
+              value={form.observaciones}
+              placeholder="Ej. INFORMACIÓN ADICIONAL DE LA INSCRIPCIÓN"
+              onChange={(e) => setForm((c) => ({ ...c, observaciones: e.target.value.toUpperCase() }))}
+            />
+          </FloatingField>
         </div>
       </CrudModal>
 
@@ -353,6 +527,37 @@ export default function Ingresantes() {
           { label: "Seleccionados", value: selectedCount },
         ]}
         onConfirm={passToStudents}
+      />
+
+      <ModalEliminarGlobal
+        open={Boolean(stateModal)}
+        operacion={stateModal?.target === "CANCELADO" ? "baja" : "alta"}
+        row={stateModal?.item || null}
+        loading={changingState}
+        onClose={() => !changingState && setStateModal(null)}
+        title={stateModal?.target === "CANCELADO" ? "Cancelar ingreso" : "Volver a pendiente"}
+        message={
+          stateModal?.target === "CANCELADO"
+            ? "El ingresante dejará de figurar entre los pendientes y pasará a Cancelados."
+            : "El ingresante volverá a figurar entre los pendientes para poder continuar su proceso de ingreso."
+        }
+        warning={
+          stateModal?.target === "CANCELADO"
+            ? "Esta acción no elimina el registro. Podés volverlo a Pendiente más adelante."
+            : "El registro recuperará el estado Pendiente y volverá a estar disponible para selección."
+        }
+        confirmLabel={stateModal?.target === "CANCELADO" ? "Cancelar ingreso" : "Volver a pendiente"}
+        successMessage={stateModal?.target === "CANCELADO" ? "Ingreso cancelado correctamente." : "Ingresante vuelto a pendiente correctamente."}
+        errorMessage="No se pudo actualizar el estado del ingresante."
+        tone={stateModal?.target === "CANCELADO" ? "warning" : "success"}
+        icon={stateModal?.target === "CANCELADO" ? faBan : faRotateLeft}
+        details={[
+          { label: "Ingresante", value: stateModal?.item?.nombre_completo || "—" },
+          { label: "DNI", value: stateModal?.item?.num_documento || "—" },
+          { label: "Ciclo", value: stateModal?.item?.ciclo_lectivo || "—" },
+          { label: "Estado", value: stateModal?.target === "CANCELADO" ? "CANCELADO" : "PENDIENTE" },
+        ]}
+        onConfirm={confirmStateChange}
       />
 
       <ModuleFeedback type={feedback?.type} message={feedback?.message} onClose={() => setFeedback(null)} />

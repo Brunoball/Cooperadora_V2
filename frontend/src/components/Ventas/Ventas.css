@@ -226,6 +226,24 @@
   background: color-mix(in srgb, var(--balto-action) 4%, var(--surface-color, #fff));
 }
 
+/* Mismo efecto de selección de Ingresantes:
+   una fila activa queda marcada con fondo azul suave y acento lateral. */
+.ventas-activatable-row.is-selected {
+  background: color-mix(in srgb, var(--primary-500, #3b82f6) 9%, var(--surface-color, #fff));
+  box-shadow: inset 4px 0 0 var(--primary-600, #2563eb);
+}
+
+.ventas-activatable-row.is-selected:hover {
+  background: color-mix(in srgb, var(--primary-500, #3b82f6) 12%, var(--surface-color, #fff));
+}
+
+.ventas-activatable-row.is-selected:focus-visible {
+  background: color-mix(in srgb, var(--primary-500, #3b82f6) 12%, var(--surface-color, #fff));
+  box-shadow:
+    inset 4px 0 0 var(--primary-600, #2563eb),
+    inset 0 0 0 2px color-mix(in srgb, var(--primary-500, #3b82f6) 28%, transparent);
+}
+
 .ventas-activatable-row:focus-visible {
   outline: none;
   background: color-mix(in srgb, var(--balto-action) 5%, var(--surface-color, #fff));

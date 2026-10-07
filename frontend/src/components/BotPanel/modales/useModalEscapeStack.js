@@ -1,49 +1,9 @@
-import { useEffect } from "react";
+import useGlobalModalEscape from "../../Global/Modales/useGlobalModalEscape";
 
 /**
- * Pila compartida de modales abiertos.
- * Escape queda capturado por el modal superior, pero no lo cierra.
- * Los modales solo se cierran mediante controles explícitos (X / Cerrar / Cancelar).
+ * Compatibilidad para los modales del BotPanel.
+ * Usa la pila global para que Escape cierre solo el modal superior.
  */
-const openModalStack = [];
-let escapeListenerAttached = false;
-
-const handleEscape = (event) => {
-  if (event.key !== "Escape" || openModalStack.length === 0) return;
-
-  const topModal = openModalStack[openModalStack.length - 1];
-  if (!topModal) return;
-
-  event.preventDefault();
-  event.stopImmediatePropagation();
-  event.stopPropagation();
-};
-
-const attachEscapeListener = () => {
-  if (escapeListenerAttached) return;
-  document.addEventListener("keydown", handleEscape, true);
-  escapeListenerAttached = true;
-};
-
-const detachEscapeListener = () => {
-  if (!escapeListenerAttached || openModalStack.length > 0) return;
-  document.removeEventListener("keydown", handleEscape, true);
-  escapeListenerAttached = false;
-};
-
-export const useModalEscapeStack = (open) => {
-  useEffect(() => {
-    if (!open) return undefined;
-
-    const modalEntry = { id: Symbol("modal") };
-
-    openModalStack.push(modalEntry);
-    attachEscapeListener();
-
-    return () => {
-      const position = openModalStack.findIndex((entry) => entry.id === modalEntry.id);
-      if (position !== -1) openModalStack.splice(position, 1);
-      detachEscapeListener();
-    };
-  }, [open]);
+export const useModalEscapeStack = (open, onClose) => {
+  useGlobalModalEscape(open, onClose);
 };

@@ -400,7 +400,7 @@ function CatalogsPanel() {
           label: "Buscar",
           value: search,
           onChange: setSearch,
-          placeholder: "",
+          placeholder: "Buscar en la tabla...",
         }]}
         primaryActionLabel={`Nuevo ${meta.label}`}
         onPrimaryAction={writable ? openCreate : undefined}

@@ -21,6 +21,7 @@ import ModalPerfil from "../Perfil/ModalPerfil";
 import logoRh from "../../imagenes/Escudo_ipet50.png";
 import { BOT_PANEL_URL } from "../../config/config";
 import "./principal.css";
+import useGlobalModalEscape from "../Global/Modales/useGlobalModalEscape";
 
 const NAV_ITEMS = [
   {
@@ -151,16 +152,7 @@ const getGroupKeyForPath = (pathname) =>
   )?.key || null;
 
 function LogoutModal({ open, onClose, onConfirm }) {
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  useGlobalModalEscape(open, onClose);
 
   if (!open) return null;
 

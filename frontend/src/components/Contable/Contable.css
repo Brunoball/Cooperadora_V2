@@ -123,19 +123,30 @@
 }
 
 /*
- * Ingresos de alumnos tiene las tarjetas de resumen encima. Por eso usa un
- * viewport propio más bajo, pero nunca un offset tan grande que colapse la
- * tabla en monitores de 700–800px de alto.
+ * INGRESOS DE ALUMNOS · ALTO FIJO DE TABLA
+ * Esta vista tiene tarjetas de resumen encima, por eso no puede reutilizar el
+ * alto de las tablas normales. El alto se fija sobre la tabla completa (header
+ * + cuerpo), no sobre el cuerpo: así la paginación queda siempre en la misma
+ * posición aunque haya 1 registro y el scroll aparece sólo al superar el área
+ * visible disponible.
  */
-.contable-page .ct-student-table {
+.contable-page .ct-student-table.global-divTable {
   flex: 0 0 auto;
+  width: 100%;
+  height: calc(100vh - 380px);
+  max-height: calc(100vh - 380px);
   min-height: 0;
+  overflow: hidden;
 }
 
-.contable-page .ct-student-table .entity-table-wrap,
-.contable-page .ct-student-table .global-divTable__body {
-  height: calc(100vh - 410px) !important;
-  max-height: calc(100vh - 410px) !important;
+.contable-page .ct-student-table.global-divTable > .global-divTable__body,
+.contable-page .ct-student-table.global-divTable > .entity-table-wrap {
+  flex: 1 1 auto;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden !important;
   overflow-y: auto !important;
 }
@@ -1042,4 +1053,17 @@
 .contable-page .ct-student-table .mov-gridCell,
 .contable-page .ct-student-table .mov-gridCell--head {
   min-height: 44px;
+}
+
+/* =========================================================
+   CONTABILIDAD · ALINEACIÓN DEL HEADER
+   El título queda centrado verticalmente respecto de filtros y acciones.
+   ========================================================= */
+.contable-page .module-card__head,
+.contable-page .module-card__headLeft {
+  align-items: center;
+}
+
+.contable-page .module-titleBox {
+  align-self: center;
 }

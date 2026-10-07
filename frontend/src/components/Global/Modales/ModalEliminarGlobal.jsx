@@ -19,6 +19,7 @@ import Toast from "../Toast";
 import useAnimatedModalSize from "./useAnimatedModalSize";
 import { upperLimitedText } from "../Formularios/inputSanitizers";
 import "../Global_css/Global_ModalEliminar.css";
+import useGlobalModalEscape from "./useGlobalModalEscape";
 
 const OPERATION_CONFIG = {
   eliminar: {
@@ -284,6 +285,8 @@ export default function ModalEliminarGlobal({
     showToast,
   ]);
 
+  useGlobalModalEscape(open, close, { canClose: !isLoading });
+
   useEffect(() => {
     if (!open) return undefined;
     const focusTimer = window.setTimeout(() => {
@@ -292,10 +295,7 @@ export default function ModalEliminarGlobal({
       });
     }, 0);
     const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      } else if (
+      if (
         event.key === "Enter" &&
         event.target?.tagName !== "TEXTAREA" &&
         !isLoading &&

@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGear, faXmark } from "@fortawesome/free-solid-svg-icons";
 import logoIpet50 from "../../imagenes/Escudo_ipet50.png";
 import "./ModalPerfil.css";
+import useGlobalModalEscape from "../Global/Modales/useGlobalModalEscape";
 
 function firstValue(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
@@ -50,20 +51,14 @@ export default function ModalPerfil({
 }) {
   const closeButtonRef = useRef(null);
 
+  useGlobalModalEscape(open, onClose);
+
   useEffect(() => {
     if (!open) return undefined;
 
     const timer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
-    const handleKeyDown = (event) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
     return () => {
       window.clearTimeout(timer);
-      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
 

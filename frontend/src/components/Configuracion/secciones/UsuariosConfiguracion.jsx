@@ -304,7 +304,7 @@ export default function UsuariosConfiguracion({ onBack }) {
             label: "Buscar",
             value: search,
             onChange: setSearch,
-            placeholder: "",
+            placeholder: "Usuario, nombre o rol...",
           },
         ]}
         primaryActionLabel="Nuevo usuario"

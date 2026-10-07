@@ -155,7 +155,7 @@ function ModuleFilter({ filter }) {
             type="text"
             value={String(value)}
             onInput={(event) => filter.onChange?.(event.currentTarget.value)}
-            placeholder={filter.placeholder ?? "Buscar..."}
+            placeholder={String(filter.placeholder ?? "").trim() || "Buscar..."}
             aria-label={filter.label}
             autoComplete="off"
           />

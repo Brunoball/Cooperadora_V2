@@ -18,7 +18,7 @@ export default function InfoModal({
   loadingText = "Consultando los datos del registro.",
   modalClassName = "",
   closeOnBackdrop = false,
-  closeOnEscape = false,
+  closeOnEscape = true,
   showCancel = false,
   cancelLabel = "Cancelar",
   children,

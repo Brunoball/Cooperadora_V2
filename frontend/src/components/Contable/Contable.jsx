@@ -994,7 +994,7 @@ export default function ContableModule({ view = "summary" }) {
       key: "buscar",
       label: "Búsqueda",
       type: "search",
-      placeholder: " ",
+      placeholder: "Persona, proveedor o concepto...",
       value: search,
       onChange: setSearch,
     },

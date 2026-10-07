@@ -7,6 +7,7 @@ import useAnimatedModalSize from "./useAnimatedModalSize";
 import "../Global_css/Global_Exportar.css";
 import { getSession } from "../../_shared/auth/session";
 import BASE_URL from "../../../config/config";
+import useGlobalModalEscape from "./useGlobalModalEscape";
 
 const FORMATOS_EXPORTAR = [
   {
@@ -1750,19 +1751,9 @@ const ModalExportarGlobal = ({
     setAlcance(puedeExportarTodos ? (defaultAlcance || ALCANCE_TODOS) : ALCANCE_ACTUAL);
   }, [defaultAlcance, defaultFormato, isOpen, puedeExportarTodos]);
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
-
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [isOpen]);
+  useGlobalModalEscape(isOpen, onClose, {
+    canClose: !loading && !exportando,
+  });
 
   if (!isOpen) return null;
 

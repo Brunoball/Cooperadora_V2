@@ -5,25 +5,10 @@ import { faXmark } from "@fortawesome/free-solid-svg-icons";
 import GlobalLoader from "../GlobalLoader";
 import { openNativePicker } from "../Formularios/nativePicker";
 import useAnimatedModalSize from "./useAnimatedModalSize";
+import useGlobalModalEscape from "./useGlobalModalEscape";
 import "../Global_css/Global_Modals.css";
 
-const openModalStack = [];
 let modalTitleSequence = 0;
-
-function registerOpenModal(modalId) {
-  const existingIndex = openModalStack.indexOf(modalId);
-  if (existingIndex !== -1) openModalStack.splice(existingIndex, 1);
-  openModalStack.push(modalId);
-}
-
-function unregisterOpenModal(modalId) {
-  const index = openModalStack.lastIndexOf(modalId);
-  if (index !== -1) openModalStack.splice(index, 1);
-}
-
-function isTopOpenModal(modalId) {
-  return openModalStack[openModalStack.length - 1] === modalId;
-}
 
 function uppercaseModalTextField(event) {
   const field = event.target;
@@ -62,13 +47,13 @@ export default function CrudModal({
   cancelLabel = "Cancelar",
   footerStart = null,
   modalClassName = "",
+  closeOnEscape = true,
   // Los formularios controlados deben normalizar el texto dentro de su
   // onChange. Mutar el valor del DOM durante input puede dejar el estado React
   // desactualizado y hacer que el contenido vuelva atrás en el próximo render.
   autoUppercaseInputs = false,
 }) {
   const modalRef = useRef(null);
-  const modalIdRef = useRef(Symbol("crud-modal"));
   const titleIdRef = useRef(null);
   if (!titleIdRef.current) {
     modalTitleSequence += 1;
@@ -77,32 +62,19 @@ export default function CrudModal({
   const titleId = titleIdRef.current;
   useAnimatedModalSize(modalRef, open);
 
+  useGlobalModalEscape(open, onClose, {
+    enabled: closeOnEscape,
+    canClose: !saving,
+  });
+
   useEffect(() => {
     if (!open) return undefined;
 
-    const modalId = modalIdRef.current;
     const previous = document.body.style.overflow;
-    registerOpenModal(modalId);
-
-    const onKey = (event) => {
-      if (event.key !== "Escape" || !isTopOpenModal(modalId)) return;
-
-      // El Escape pertenece exclusivamente al modal visible en primer plano.
-      // Aunque esté guardando y no pueda cerrarse, nunca debe llegar al modal de atrás.
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-
-      // Cierre global protegido: Escape no cierra modales.
-      // Solo se permite cerrar mediante acciones explícitas del propio modal.
-    };
-
     document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", onKey, true);
+
     return () => {
-      unregisterOpenModal(modalId);
       document.body.style.overflow = previous;
-      document.removeEventListener("keydown", onKey, true);
     };
   }, [open]);
 
