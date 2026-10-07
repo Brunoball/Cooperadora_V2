@@ -245,6 +245,13 @@ abstract class CuotasConsultas extends CuotasSoporte
             $resolvedState = $status['estado'];
             $payment = $status['pago'];
             $eligibleForPeriod = self::alumnoElegible($student, $periodId, $year);
+            $periodApplies = self::periodoAplicaAlumno($student, $periodId);
+            $hasExactHistoricalPayment = $payment && (int)$payment['id_mes'] === $periodId;
+
+            // Diciembre no es un período exigible para alumnos INTERNOS. Si hubiera
+            // un movimiento directo histórico de diciembre se conserva visible sólo
+            // para trazabilidad, pero nunca se genera una deuda nueva.
+            if (!$periodApplies && !$hasExactHistoricalPayment) continue;
 
             // Nunca generar deuda antes del ingreso. Si existe un pago/condonación
             // legado para ese período se conserva visible para trazabilidad.
@@ -614,6 +621,12 @@ abstract class CuotasConsultas extends CuotasSoporte
             $payments = $paymentsByStudent[(int)$student['id_alumno']] ?? [];
             $status = self::estadoPeriodo($payments, $periodId);
             $resolvedState = $status['estado'];
+            $payment = $status['pago'];
+
+            if (!self::periodoAplicaAlumno($student, $periodId)) {
+                $hasExactHistoricalPayment = $payment && (int)$payment['id_mes'] === $periodId;
+                if (!$hasExactHistoricalPayment) continue;
+            }
 
             if ($resolvedState === 'deudor') {
                 if ((int)$student['activo'] === 1) $totals['DEUDORES']++;
@@ -714,6 +727,14 @@ abstract class CuotasConsultas extends CuotasSoporte
             $periodId = (int)$period['id_mes'];
             $status = self::estadoPeriodo($payments, $periodId);
             $payment = $status['pago'];
+            $exactHistoricalPayment = $exactPayment($payments, $periodId);
+            if (!self::periodoAplicaAlumno($student, $periodId) && !$exactHistoricalPayment) {
+                continue;
+            }
+            if (!self::periodoAplicaAlumno($student, $periodId) && $exactHistoricalPayment) {
+                $status['estado'] = strtolower((string)$exactHistoricalPayment['estado']) === 'condonado' ? 'condonado' : 'pagado';
+                $payment = $exactHistoricalPayment;
+            }
             $eligibleForPeriod = self::alumnoElegible($student, $periodId, $year);
             $canPay = $status['estado'] === 'deudor' && $eligibleForPeriod;
             $periodPaymentLabel = $payment ? (string)$payment['periodo'] : null;
@@ -734,9 +755,9 @@ abstract class CuotasConsultas extends CuotasSoporte
                 $canPay = false;
                 $periodPaymentLabel = '1ERA MITAD + 2DA MITAD';
             } elseif ($periodId === self::MES_ANUAL && !$annualExact) {
-                $remainingMonths = self::MESES_ESCOLARES;
-                if ($halfOneExact && !$halfTwoExact) $remainingMonths = self::MESES_MITAD_2;
-                if (!$halfOneExact && $halfTwoExact) $remainingMonths = self::MESES_MITAD_1;
+                $remainingMonths = self::mesesAplicablesAlumno($student, self::MESES_ESCOLARES);
+                if ($halfOneExact && !$halfTwoExact) $remainingMonths = self::mesesAplicablesAlumno($student, self::MESES_MITAD_2);
+                if (!$halfOneExact && $halfTwoExact) $remainingMonths = self::mesesAplicablesAlumno($student, self::MESES_MITAD_1);
                 $hasMonthlyConflict = false;
                 foreach ($remainingMonths as $monthId) {
                     if (isset($monthlyExact[$monthId])) {
@@ -754,7 +775,10 @@ abstract class CuotasConsultas extends CuotasSoporte
                 $canPay = false;
                 $periodPaymentLabel = (string)$annualExact['periodo'];
             } elseif (in_array($periodId, [self::MES_MITAD_1, self::MES_MITAD_2], true) && !$payment) {
-                $months = $periodId === self::MES_MITAD_1 ? self::MESES_MITAD_1 : self::MESES_MITAD_2;
+                $months = self::mesesAplicablesAlumno(
+                    $student,
+                    $periodId === self::MES_MITAD_1 ? self::MESES_MITAD_1 : self::MESES_MITAD_2
+                );
                 foreach ($months as $monthId) {
                     if (isset($monthlyExact[$monthId])) {
                         $canPay = false;
@@ -767,6 +791,10 @@ abstract class CuotasConsultas extends CuotasSoporte
             if (!$eligibleForPeriod) {
                 $canPay = false;
                 $coverageBlock = 'El alumno todavía no había ingresado a la institución en este período.';
+            }
+            if (!self::periodoAplicaAlumno($student, $periodId)) {
+                $canPay = false;
+                $coverageBlock = 'Los alumnos internos no abonan diciembre.';
             }
 
             $suggested = (float)($amounts['montos_por_periodo'][$periodId] ?? 0);
@@ -798,8 +826,13 @@ abstract class CuotasConsultas extends CuotasSoporte
             $memberPayments = self::pagosAlumnoAnio($db, (int)$member['id_alumno'], $year);
             $member['periodos'] = [];
             foreach ($periodCatalog as $period) {
-                $status = self::estadoPeriodo($memberPayments, (int)$period['id_mes']);
-                $member['periodos'][(int)$period['id_mes']] = strtoupper($status['estado']);
+                $memberPeriodId = (int)$period['id_mes'];
+                if (!self::periodoAplicaAlumno($member, $memberPeriodId)) {
+                    $member['periodos'][$memberPeriodId] = 'NO_APLICA';
+                    continue;
+                }
+                $status = self::estadoPeriodo($memberPayments, $memberPeriodId);
+                $member['periodos'][$memberPeriodId] = strtoupper($status['estado']);
             }
         }
         unset($member);

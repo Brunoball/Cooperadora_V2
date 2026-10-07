@@ -149,6 +149,14 @@ abstract class CuotasRegistros extends CuotasConsultas
         $principalAmounts = self::montosAlumno($db, $student, $year);
 
         foreach ($periods as $periodId) {
+            if (!self::periodoAplicaAlumno($student, $periodId)) {
+                api_error(
+                    'Los alumnos de categoría INTERNO no abonan diciembre.',
+                    'PERIODO_NO_APLICA_CATEGORIA',
+                    422,
+                    ['id_alumno' => $studentId, 'id_mes' => $periodId, 'anio' => $year]
+                );
+            }
             if (!self::alumnoElegible($student, $periodId, $year)) {
                 api_error(
                     'El alumno todavía no había ingresado a la institución en uno de los períodos seleccionados.',
@@ -241,6 +249,15 @@ abstract class CuotasRegistros extends CuotasConsultas
                 ];
 
                 foreach ($periods as $requestedPeriod) {
+                    if (!self::periodoAplicaAlumno($targetStudent, $requestedPeriod)) {
+                        $studentDetail['ya_registrados'][] = $requestedPeriod;
+                        $skipped[] = [
+                            'id_alumno' => $targetId,
+                            'id_mes' => $requestedPeriod,
+                            'motivo' => 'PERIODO_NO_APLICA_CATEGORIA',
+                        ];
+                        continue;
+                    }
                     if (!self::alumnoElegible($targetStudent, $requestedPeriod, $year)) {
                         $studentDetail['ya_registrados'][] = $requestedPeriod;
                         $skipped[] = [

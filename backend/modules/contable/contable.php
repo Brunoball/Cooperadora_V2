@@ -20,7 +20,8 @@ final class Contable
         ensure_contable_schema($auth['db']);
         $year = self::filtroAnio($_GET['anio'] ?? null);
         $month = self::filtroMes($_GET['mes'] ?? date('n'));
-        api_success(['resumen' => self::resumenDatos($auth['db'], $year, $month)]);
+        $mean = self::idOpcional($_GET['medio'] ?? null, 'medio de pago');
+        api_success(['resumen' => self::resumenDatos($auth['db'], $year, $month, $mean)]);
     }
 
     public static function catalogos(): never

@@ -763,7 +763,7 @@ function ProductsSection({ writable, summary, feedback, showFeedback }) {
     <ModulePage
       className="ventas-page ventas-page--products"
       title="Productos de ventas"
-      filters={[{ key: "buscar", type: "search", label: "Buscar", placeholder: "Nombre del producto...", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "Todos", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]}
+      filters={[{ key: "buscar", type: "search", label: "Buscar", placeholder: "Nombre del producto...", value: search, onChange: (v) => { setPage(1); setSearch(v); } }, { key: "activo", type: "select", label: "Estado", value: active, placeholder: "TODOS", options: [{ value: "1", label: "Activos" }, { value: "0", label: "Inactivos" }], onChange: (v) => { setPage(1); setActive(v); } }]}
       canCreate={writable}
       primaryActionLabel="Nuevo producto"
       onPrimaryAction={() => setModal({ open: true, row: null })}
@@ -1095,9 +1095,9 @@ function OrdersSection({ writable, summary, feedback, showFeedback }) {
 
   const filters = [
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI o referencia...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
-    { key: "campania", type: "select", label: "Campaña", value: campaign, placeholder: "Todas", options: (catalogs.campanias || []).map((c) => ({ value: c.id_campania, label: c.nombre })), onChange: (v) => { setPage(1); setCampaign(v); } },
-    { key: "estado", type: "select", label: "Estado", value: state, includeEmptyOption: true, placeholder: "Todos", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
-    { key: "retiro", type: "select", label: "Retiro", value: retreat, placeholder: "Todos", options: [{ value: "pendiente", label: "Pendientes" }, { value: "retirado", label: "Retirados" }], onChange: (v) => { setPage(1); setRetreat(v); } },
+    { key: "campania", type: "select", label: "Campaña", value: campaign, placeholder: "TODAS", options: (catalogs.campanias || []).map((c) => ({ value: c.id_campania, label: c.nombre })), onChange: (v) => { setPage(1); setCampaign(v); } },
+    { key: "estado", type: "select", label: "Estado", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
+    { key: "retiro", type: "select", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "Pendientes" }, { value: "retirado", label: "Retirados" }], onChange: (v) => { setPage(1); setRetreat(v); } },
   ];
 
   const cycleOrigin = () => {
@@ -1427,8 +1427,8 @@ function PlanillasSection({ summary, feedback, showFeedback }) {
             <label className="ventas-field ventas-planillas-field--type"><span>Tipo de planilla</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="cursos">Cursos y alumnos</option><option value="docentes">Docentes</option></select></label>
             {type === "cursos" && (
               <>
-                <label className="ventas-field ventas-planillas-field--year"><span>Año</span><select value={year} onChange={(e) => setYear(e.target.value)}><option value="">Todos</option>{(options.anios || []).map((a) => <option key={a.id_anio} value={a.id_anio}>{a.nombre_anio}</option>)}</select></label>
-                <label className="ventas-field ventas-planillas-field--division"><span>División</span><select value={division} onChange={(e) => setDivision(e.target.value)}><option value="">Todas</option>{(options.divisiones || []).map((d) => <option key={d.id_division} value={d.id_division}>{d.nombre_division}</option>)}</select></label>
+                <label className="ventas-field ventas-planillas-field--year"><span>Año</span><select value={year} onChange={(e) => setYear(e.target.value)}><option value="">TODOS</option>{(options.anios || []).map((a) => <option key={a.id_anio} value={a.id_anio}>{a.nombre_anio}</option>)}</select></label>
+                <label className="ventas-field ventas-planillas-field--division"><span>División</span><select value={division} onChange={(e) => setDivision(e.target.value)}><option value="">TODAS</option>{(options.divisiones || []).map((d) => <option key={d.id_division} value={d.id_division}>{d.nombre_division}</option>)}</select></label>
               </>
             )}
           </div>

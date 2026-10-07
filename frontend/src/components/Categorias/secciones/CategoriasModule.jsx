@@ -499,7 +499,7 @@ export default function CategoriasModule({ section = "categorias" }) {
           type: "select",
           value: siblingCategory,
           onChange: setSiblingCategory,
-          placeholder: "Todas",
+          placeholder: "TODAS",
           className: "categorias-siblingCategory-filter",
           options: categories.map((item) => ({
             value: String(item.id_cat_monto),

@@ -510,7 +510,11 @@ export default function ContableModule({ view = "summary" }) {
     setLoading(true);
     try {
       if (view === "summary") {
-        const response = await contableApi.resumen({ anio: year, mes: month });
+        const response = await contableApi.resumen({
+          anio: year,
+          mes: month,
+          medio: mean,
+        });
         if (requestId.current === currentRequest)
           setSummary(response.resumen || null);
       } else {
@@ -970,7 +974,7 @@ export default function ContableModule({ view = "summary" }) {
     value: feePeriod,
     onChange: setFeePeriod,
     includeEmptyOption: true,
-    placeholder: "Todos",
+    placeholder: "TODOS",
     options: (catalogs.periodos || []).map((item) => ({
       value: String(item.id_periodo),
       label: item.nombre,
@@ -981,7 +985,7 @@ export default function ContableModule({ view = "summary" }) {
     label: "Medio de pago",
     type: "select",
     className: "contable-filter--payment",
-    placeholder: "Todos",
+    placeholder: "TODOS",
     value: mean,
     onChange: setMean,
     options: catalogs.medios_pago.map((item) => ({
@@ -992,9 +996,12 @@ export default function ContableModule({ view = "summary" }) {
   const detailFilters = [
     {
       key: "buscar",
-      label: "Búsqueda",
+      label: "Buscar",
       type: "search",
-      placeholder: "Persona, proveedor o concepto...",
+      placeholder:
+        view === "expense"
+          ? "Proveedor, alumno, comprobante, concepto o medio de pago..."
+          : "Proveedor, categoría, concepto o medio de pago...",
       value: search,
       onChange: setSearch,
     },
@@ -1004,7 +1011,7 @@ export default function ContableModule({ view = "summary" }) {
       label: "Categoría",
       type: "select",
       className: "contable-filter--category",
-      placeholder: "Todas",
+      placeholder: "TODAS",
       value: category,
       onChange: setCategory,
       options: categoryOptions.map((item) => ({
@@ -1029,6 +1036,7 @@ export default function ContableModule({ view = "summary" }) {
             ],
           },
           periodFilters[0],
+          paymentMethodFilter,
           ...(summaryMode === "monthly" ? [periodFilters[1]] : []),
         ]
       : view === "income"
@@ -1048,15 +1056,15 @@ export default function ContableModule({ view = "summary" }) {
               ? [
                   {
                     key: "buscar-ingresos-alumnos",
-                    label: "Alumno",
+                    label: "Buscar",
                     type: "search",
                     className: "contable-filter--student-search",
-                    placeholder: "Nombre, apellido o DNI",
+                    placeholder: "Nombre, apellido o DNI...",
                     value: studentSearch,
                     onChange: setStudentSearch,
                   },
-                  { ...periodFilters[0], label: "Año de cobro" },
-                  { ...periodFilters[1], label: "Mes de cobro" },
+                  periodFilters[0],
+                  periodFilters[1],
                   feePeriodFilter,
                   paymentMethodFilter,
                 ]

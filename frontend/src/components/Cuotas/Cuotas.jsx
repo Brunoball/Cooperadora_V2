@@ -4,9 +4,8 @@ import {
   faBan,
   faDollarSign,
   faReceipt,
-  faCoins,
-  faWallet,
   faPrint,
+  faSpinner,
   faTrashCan,
   faUserGroup,
 } from "@fortawesome/free-solid-svg-icons";
@@ -112,7 +111,6 @@ function ReceiptResultModal({ open, result, onClose, onPrint, onPdf }) {
       subtitle={`${receipts.length} comprobante(s) generado(s).`}
       onClose={onClose}
       hideSubmit
-      modalClassName="cuotas-v2-receipt-modal"
       cancelLabel="Cerrar"
       footerStart={
         <div className="cuotas-v2-receipt-actions">
@@ -126,42 +124,10 @@ function ReceiptResultModal({ open, result, onClose, onPrint, onPdf }) {
       }
     >
       <div className="cuotas-v2-receipt-summary">
-        <div className="cuotas-v2-receipt-card">
-          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
-            <FontAwesomeIcon icon={faUserGroup} />
-          </span>
-          <span className="cuotas-v2-receipt-card__body">
-            <small>Alumnos procesados</small>
-            <strong>{result?.alumnos_procesados || 1}</strong>
-          </span>
-        </div>
-        <div className="cuotas-v2-receipt-card is-gross">
-          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
-            <FontAwesomeIcon icon={faCoins} />
-          </span>
-          <span className="cuotas-v2-receipt-card__body">
-            <small>Total bruto</small>
-            <strong>{money(result?.monto_bruto_original)}</strong>
-          </span>
-        </div>
-        <div className="cuotas-v2-receipt-card is-success">
-          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
-            <FontAwesomeIcon icon={faWallet} />
-          </span>
-          <span className="cuotas-v2-receipt-card__body">
-            <small>Cooperadora</small>
-            <strong>{money(result?.monto_neto_cooperadora)}</strong>
-          </span>
-        </div>
-        <div className="cuotas-v2-receipt-card is-warning">
-          <span className="cuotas-v2-receipt-card__icon" aria-hidden="true">
-            <FontAwesomeIcon icon={faDollarSign} />
-          </span>
-          <span className="cuotas-v2-receipt-card__body">
-            <small>Comisión cobrador</small>
-            <strong>{money(result?.monto_comision_cobrador)}</strong>
-          </span>
-        </div>
+        <div><small>Alumnos procesados</small><strong>{result?.alumnos_procesados || 1}</strong></div>
+        <div><small>Total bruto</small><strong>{money(result?.monto_bruto_original)}</strong></div>
+        <div><small>Cooperadora</small><strong>{money(result?.monto_neto_cooperadora)}</strong></div>
+        <div><small>Comisión cobrador</small><strong>{money(result?.monto_comision_cobrador)}</strong></div>
       </div>
     </CrudModal>
   );
@@ -391,26 +357,6 @@ export default function Cuotas() {
     return all;
   }, [filtros]);
 
-  const printAllCurrent = async () => {
-    if (estado !== "PAGADOS") {
-      showFeedback("warning", "La impresión de cuotas está disponible en Pagados o en modo Cobrador.");
-      return;
-    }
-    setBulkPrinting(true);
-    try {
-      const rows = await fetchAll();
-      if (!rows.length) {
-        showFeedback("warning", "No hay registros para imprimir con estos filtros.");
-        return;
-      }
-      await printReceipts(rows);
-    } catch (err) {
-      showFeedback("error", err.message || "No se pudo preparar la impresión masiva.");
-    } finally {
-      setBulkPrinting(false);
-    }
-  };
-
   const collectorMode = cobrador === "1" && estado === "DEUDORES";
   const toggleCollectorMode = () => {
     setPagina(1);
@@ -430,37 +376,12 @@ export default function Cuotas() {
     if (externalCategory) setCategoria(String(externalCategory.id_categoria));
   };
 
-  const buildCollectorCoupons = async (row) => {
-    const context = await cuotasApi.contextosPago({
-      id_alumno: row.id_alumno || row.id_socio,
-      anio,
-      fecha_pago: localToday(),
-    });
-    const byId = new Map((context.periodos || []).map((period) => [Number(period.id_mes), period]));
-    return Array.from({ length: 10 }, (_, index) => index + 3).map((month) => {
-      const period = byId.get(month);
-      return {
-        ...row,
-        id_mes: month,
-        mes: month,
-        periodo: period?.nombre || periodName(catalogos.meses || [], month),
-        estado: "DEUDOR",
-        monto_sugerido: Number(period?.monto_sugerido || 0),
-        monto: 0,
-        fecha_pago: null,
-        medio_pago: "",
-        origen_especial: null,
-      };
-    });
-  };
-
   const printCollectorForRow = async (row) => {
     setBulkPrinting(true);
     try {
-      const coupons = await buildCollectorCoupons(row);
-      await printReceipts(coupons);
+      await printReceipts([row]);
     } catch (err) {
-      showFeedback("error", err.message || "No se pudo generar el talonario del cobrador.");
+      showFeedback("error", err.message || "No se pudo imprimir el comprobante del período seleccionado.");
     } finally {
       setBulkPrinting(false);
     }
@@ -469,26 +390,19 @@ export default function Cuotas() {
   const printCollectorBook = async () => {
     setBulkPrinting(true);
     try {
-      const unique = new Map();
-      for (let month = 3; month <= 12; month += 1) {
-        const rows = await fetchAll({ estado: "DEUDORES", cobrador: "1", mes: String(month), medio_pago: "" });
-        rows.forEach((row) => unique.set(Number(row.id_alumno || row.id_socio), row));
-      }
-      const students = Array.from(unique.values());
-      if (!students.length) {
-        showFeedback("warning", "No hay cobradores con períodos pendientes para imprimir.");
+      const rows = await fetchAll({
+        estado: "DEUDORES",
+        cobrador: "1",
+        mes: String(mes),
+        medio_pago: "",
+      });
+      if (!rows.length) {
+        showFeedback("warning", "No hay cobradores pendientes para imprimir en el período seleccionado.");
         return;
       }
-      const all = [];
-      const chunkSize = 8;
-      for (let index = 0; index < students.length; index += chunkSize) {
-        const chunk = students.slice(index, index + chunkSize);
-        const nested = await Promise.all(chunk.map(buildCollectorCoupons));
-        all.push(...nested.flat());
-      }
-      await printReceipts(all);
+      await printReceipts(rows);
     } catch (err) {
-      showFeedback("error", err.message || "No se pudo generar el talonario de cobrador.");
+      showFeedback("error", err.message || "No se pudieron imprimir los comprobantes del período seleccionado.");
     } finally {
       setBulkPrinting(false);
     }
@@ -541,9 +455,9 @@ export default function Cuotas() {
     { type: "search", label: "Buscar", placeholder: "Alumno, DNI o domicilio...", value: buscar, onChange: changeFilter(setBuscar), className: "cuotas-search-filter" },
     { type: "select", label: "Año", value: anio, includeEmptyOption: false, options: (catalogos.anios || [CURRENT_YEAR]).map((value) => ({ value: String(value), label: String(value) })), onChange: changeFilter(setAnio), className: "cuotas-year-filter" },
     { type: "select", label: "Período", value: mes, includeEmptyOption: false, options: (catalogos.meses || []).map((item) => ({ value: String(item.id_mes), label: item.nombre })), onChange: changeFilter(setMes), className: "cuotas-month-filter" },
-    { type: "select", label: "Categoría", value: categoria, placeholder: "Todas", options: (catalogos.categorias || []).map((item) => ({ value: String(item.id_categoria), label: item.nombre })), onChange: changeFilter(setCategoria), className: "cuotas-category-filter" },
-    { type: "select", label: "Año lectivo", value: anioLectivo, placeholder: "Todos", options: (catalogos.anios_lectivos || []).map((item) => ({ value: String(item.id_anio), label: item.nombre })), onChange: changeFilter(setAnioLectivo), className: "cuotas-school-year-filter" },
-    { type: "select", label: "División", value: division, placeholder: "Todas", options: (catalogos.divisiones || []).map((item) => ({ value: String(item.id_division), label: item.nombre })), onChange: changeFilter(setDivision), className: "cuotas-division-filter" },
+    { type: "select", label: "Categoría", value: categoria, placeholder: "TODAS", options: (catalogos.categorias || []).map((item) => ({ value: String(item.id_categoria), label: item.nombre })), onChange: changeFilter(setCategoria), className: "cuotas-category-filter" },
+    { type: "select", key: "anio-lectivo", label: "Año", value: anioLectivo, placeholder: "TODOS", options: (catalogos.anios_lectivos || []).map((item) => ({ value: String(item.id_anio), label: item.nombre })), onChange: changeFilter(setAnioLectivo), className: "cuotas-school-year-filter" },
+    { type: "select", label: "División", value: division, placeholder: "TODAS", options: (catalogos.divisiones || []).map((item) => ({ value: String(item.id_division), label: item.nombre })), onChange: changeFilter(setDivision), className: "cuotas-division-filter" },
   ];
 
   if (estado === "PAGADOS") {
@@ -551,7 +465,7 @@ export default function Cuotas() {
       type: "select",
       label: "Medio",
       value: medioPago,
-      placeholder: "Todos",
+      placeholder: "TODOS",
       options: (catalogos.medios_pago || []).map((item) => ({ value: String(item.id_medio_pago), label: item.nombre })),
       onChange: changeFilter(setMedioPago),
       className: "cuotas-medium-filter",
@@ -586,15 +500,17 @@ export default function Cuotas() {
             onClick: toggleCollectorMode,
             className: `cuotas-collector-action ${collectorMode ? "mov-btn--primary is-active" : "mov-btn--ghost"}`,
           },
-          {
-            key: "imprimir",
-            label: collectorMode ? "Talonarios Mar-Dic" : "Imprimir todos",
-            icon: faPrint,
-            onClick: collectorMode ? printCollectorBook : printAllCurrent,
-            disabled: bulkPrinting || loading || !(estado === "PAGADOS" || collectorMode),
-            className: "mov-btn--ghost cuotas-print-action",
-          },
-        ]}
+          collectorMode
+            ? {
+                key: "imprimir",
+                label: bulkPrinting ? "Preparando impresión..." : "Imprimir todos",
+                icon: bulkPrinting ? faSpinner : faPrint,
+                onClick: printCollectorBook,
+                disabled: bulkPrinting || loading,
+                className: `mov-btn--ghost cuotas-print-action ${bulkPrinting ? "is-preparing" : ""}`.trim(),
+              }
+            : null,
+        ].filter(Boolean)}
         headerActions={
           <BotonExportarGlobal
             label="Exportar"
@@ -644,7 +560,7 @@ export default function Cuotas() {
                       </button>
                     ) : null}
                     {estado === "DEUDORES" && collectorMode ? (
-                      <button type="button" className="cuotas-v2-icon-btn" title="Imprimir talonario marzo-diciembre" disabled={bulkPrinting} onClick={() => printCollectorForRow(item)}>
+                      <button type="button" className="cuotas-v2-icon-btn" title="Imprimir comprobante del período seleccionado" disabled={bulkPrinting} onClick={() => printCollectorForRow(item)}>
                         <FontAwesomeIcon icon={faPrint} />
                       </button>
                     ) : null}
@@ -708,15 +624,17 @@ export default function Cuotas() {
                 <span>{collectorMode ? "Salir cobrador" : "Cobrador"}</span>
               </button>
 
-              <button
-                type="button"
-                className="cuotas-footerAction cuotas-footerAction--imprimir"
-                onClick={collectorMode ? printCollectorBook : printAllCurrent}
-                disabled={bulkPrinting || loading || !(estado === "PAGADOS" || collectorMode)}
-              >
-                <FontAwesomeIcon icon={faPrint} />
-                <span>{collectorMode ? "Talonarios Mar-Dic" : "Imprimir todos"}</span>
-              </button>
+              {collectorMode ? (
+                <button
+                  type="button"
+                  className={`cuotas-footerAction cuotas-footerAction--imprimir ${bulkPrinting ? "is-preparing" : ""}`.trim()}
+                  onClick={printCollectorBook}
+                  disabled={bulkPrinting || loading}
+                >
+                  <FontAwesomeIcon icon={bulkPrinting ? faSpinner : faPrint} />
+                  <span>{bulkPrinting ? "Preparando impresión..." : "Imprimir todos"}</span>
+                </button>
+              ) : null}
 
               <BotonExportarGlobal
                 label="Exportar"

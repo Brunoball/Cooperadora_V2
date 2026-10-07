@@ -2114,106 +2114,12 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
 .cuotas-v2-icon-btn.is-delete { color: #b91c1c; background: #fef2f2; }
 .cuotas-v2-icon-btn:disabled { opacity: .45; cursor: default; }
 .cuotas-v2-empty { padding: 44px 20px; text-align: center; color: var(--text-secondary, #64748b); font-size: .86rem; }
-.cuotas-v2-receipt-modal {
-  width: min(600px, 100%);
-}
-
-.cuotas-v2-receipt-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-/* Pago registrado: resumen compacto y minimalista. */
-.cuotas-v2-receipt-card {
-  --receipt-tone: var(--primary-500);
-  position: relative;
-  min-width: 0;
-  min-height: 64px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  overflow: hidden;
-  padding: 9px 11px 9px 13px;
-  border: 1px solid color-mix(in srgb, var(--receipt-tone) 22%, var(--mov-border));
-  border-radius: 10px;
-  color: var(--receipt-tone);
-  background: color-mix(in srgb, var(--receipt-tone) 5%, var(--balto-white));
-  box-shadow: none;
-}
-
-.cuotas-v2-receipt-card::before {
-  position: absolute;
-  inset: 9px auto 9px 0;
-  width: 3px;
-  border-radius: 0 999px 999px 0;
-  background: var(--receipt-tone);
-  content: "";
-}
-
-.cuotas-v2-receipt-card.is-gross { --receipt-tone: var(--primary-600); }
-.cuotas-v2-receipt-card.is-success { --receipt-tone: var(--success-600); }
-.cuotas-v2-receipt-card.is-warning { --receipt-tone: var(--warning-600); }
-
-.cuotas-v2-receipt-card__icon {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  flex: 0 0 30px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, currentColor 8%, var(--balto-white));
-  font-size: 13px;
-}
-
-.cuotas-v2-receipt-card__body {
-  min-width: 0;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-}
-
-.cuotas-v2-receipt-summary small {
-  display: block;
-  color: color-mix(in srgb, var(--receipt-tone) 82%, var(--balto-text));
-  font-size: 9px;
-  font-weight: 720;
-  line-height: 1.15;
-  letter-spacing: .025em;
-  text-transform: uppercase;
-  white-space: normal;
-}
-
-.cuotas-v2-receipt-summary strong {
-  display: block;
-  overflow: hidden;
-  color: var(--balto-ink);
-  font-size: 17px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -.015em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cuotas-v2-receipt-actions {
-  display: flex;
-  gap: 8px;
-}
-
-@media (max-width: 640px) {
-  .cuotas-v2-receipt-modal { width: 100%; }
-  .cuotas-v2-receipt-summary { grid-template-columns: 1fr; }
-  .cuotas-v2-receipt-card {
-    min-height: 58px;
-    padding: 8px 10px 8px 12px;
-  }
-  .cuotas-v2-receipt-summary strong { font-size: 16px; }
-}
+.cuotas-v2-receipt-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cuotas-v2-receipt-summary > div { display: grid; gap: 3px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 11px; padding: 12px; }
+.cuotas-v2-receipt-summary small { color: var(--text-secondary, #64748b); font-size: .68rem; font-weight: 700; }
+.cuotas-v2-receipt-summary strong { font-size: .94rem; }
+.cuotas-v2-receipt-actions { display: flex; gap: 8px; }
+@media (max-width: 900px) { .cuotas-v2-receipt-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* =========================================================
    COOPERADORA V2 · CUOTAS
@@ -2731,4 +2637,21 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
 
 .cuotas-tableFooter-v2 .global-pagination__ellipsis {
   flex: 0 0 22px;
+}
+
+
+/* =========================================================
+   CUOTAS · PREPARANDO IMPRESIÓN
+   Feedback visual durante la generación masiva de comprobantes.
+   ========================================================= */
+@keyframes cuotas-print-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cuotas-print-action.is-preparing svg,
+.cuotas-footerAction--imprimir.is-preparing svg {
+  animation: cuotas-print-spinner 0.8s linear infinite;
+  transform-origin: center;
 }

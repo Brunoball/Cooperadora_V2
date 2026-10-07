@@ -750,7 +750,7 @@ export default function Alumnos() {
       label: "Año",
       value: anio,
       onChange: changeFilter(setAnio),
-      placeholder: "Todos",
+      placeholder: "TODOS",
       options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })),
     },
     {
@@ -759,7 +759,7 @@ export default function Alumnos() {
       label: "División",
       value: division,
       onChange: changeFilter(setDivision),
-      placeholder: "Todas",
+      placeholder: "TODAS",
       options: (catalogos.divisiones || []).map((item) => ({ value: item.id_division, label: item.nombre_division })),
     },
     {
@@ -768,7 +768,7 @@ export default function Alumnos() {
       label: "Categoría",
       value: categoria,
       onChange: changeFilter(setCategoria),
-      placeholder: "Todas",
+      placeholder: "TODAS",
       options: (catalogos.categorias || []).map((item) => ({ value: item.id_categoria, label: item.nombre_categoria })),
     },
     {
@@ -777,7 +777,7 @@ export default function Alumnos() {
       label: "Familia",
       value: familia,
       onChange: changeFilter(setFamilia),
-      placeholder: "Todas",
+      placeholder: "TODAS",
       options: (catalogos.familias || []).map((item) => ({ value: item.id_familia, label: item.nombre_familia })),
     },
   ];
@@ -798,7 +798,7 @@ export default function Alumnos() {
       label: "Último año",
       value: anio,
       onChange: changeFilter(setAnio),
-      placeholder: "Todos",
+      placeholder: "TODOS",
       options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })),
     },
     {
@@ -807,7 +807,7 @@ export default function Alumnos() {
       label: "División",
       value: division,
       onChange: changeFilter(setDivision),
-      placeholder: "Todas",
+      placeholder: "TODAS",
       options: (catalogos.divisiones || []).map((item) => ({ value: item.id_division, label: item.nombre_division })),
     },
   ];

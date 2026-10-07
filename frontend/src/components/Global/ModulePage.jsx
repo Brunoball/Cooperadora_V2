@@ -137,7 +137,7 @@ function ModuleFilter({ filter }) {
           aria-label={filter.label}
         >
           {filter.includeEmptyOption !== false ? (
-            <option value="">{filter.placeholder || "Todos"}</option>
+            <option value="">{filter.placeholder || "TODOS"}</option>
           ) : null}
           {(filter.options || []).map((option) => (
             <option

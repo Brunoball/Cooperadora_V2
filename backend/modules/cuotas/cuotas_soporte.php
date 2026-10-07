@@ -117,6 +117,25 @@ abstract class CuotasSoporte
         return $periodId >= 3 && $periodId <= 12;
     }
 
+    /**
+     * Regla de negocio: los alumnos de categoría INTERNO no abonan diciembre.
+     * EXTERNO y cualquier otra categoría mantienen diciembre como período normal.
+     */
+    protected static function periodoAplicaAlumno(array $student, int $periodId): bool
+    {
+        if ($periodId !== 12) return true;
+        $category = strtoupper(trim((string)($student['categoria'] ?? $student['nombre_categoria'] ?? '')));
+        return $category !== 'INTERNO';
+    }
+
+    protected static function mesesAplicablesAlumno(array $student, array $months): array
+    {
+        return array_values(array_filter(
+            array_map('intval', $months),
+            static fn(int $month): bool => self::periodoAplicaAlumno($student, $month)
+        ));
+    }
+
     protected static function periodoCubreMes(int $paymentPeriod, int $consultedPeriod): bool
     {
         if ($paymentPeriod === $consultedPeriod) return true;
@@ -388,10 +407,11 @@ abstract class CuotasSoporte
             'SELECT
                 a.id_alumno, a.apellido, a.nombre, a.num_documento, a.activo,
                 a.id_categoria, a.id_cat_monto, a.es_cobrador, a.id_familia,
-                an.nombre_anio, d.nombre_division
+                an.nombre_anio, d.nombre_division, c.nombre_categoria AS categoria
              FROM alumnos a
              LEFT JOIN anio an ON an.id_anio = a.id_anio
              LEFT JOIN division d ON d.id_division = a.id_division
+             LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
              WHERE a.id_familia = ? AND a.eliminado = 0
              ORDER BY a.activo DESC, a.apellido ASC, a.nombre ASC, a.id_alumno ASC'
         );
@@ -406,6 +426,7 @@ abstract class CuotasSoporte
             'activo' => (bool)$row['activo'],
             'id_categoria' => $row['id_categoria'] !== null ? (int)$row['id_categoria'] : null,
             'id_cat_monto' => $row['id_cat_monto'] !== null ? (int)$row['id_cat_monto'] : null,
+            'categoria' => (string)($row['categoria'] ?? ''),
             'es_cobrador' => (bool)$row['es_cobrador'],
             'id_familia' => (int)$row['id_familia'],
             'curso' => trim((string)($row['nombre_anio'] ?? '') . ' ' . (string)($row['nombre_division'] ?? '')),
@@ -493,6 +514,17 @@ abstract class CuotasSoporte
         };
 
         foreach (self::MESES_ESCOLARES as $month) {
+            if (!self::periodoAplicaAlumno($student, $month)) {
+                $amounts[$month] = 0.0;
+                $baseAmounts[$month] = 0.0;
+                $familyCountByPeriod[$month] = 1;
+                $familyRuleByPeriod[$month] = null;
+                $familyDiscountByPeriod[$month] = false;
+                $familyMemberIdsByPeriod[$month] = [];
+                $familyTargetIdsByPeriod[$month] = [];
+                continue;
+            }
+
             $date = self::fechaReferenciaPeriodo($year, $month);
             $base = self::precioHistoricoBase(
                 $db,

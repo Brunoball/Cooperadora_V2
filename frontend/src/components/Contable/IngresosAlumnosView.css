@@ -6,10 +6,6 @@
   gap: 14px;
 }
 
-.ct-student-summary {
-  flex: 0 0 auto;
-}
-
 .ct-student-table {
   min-height: 0;
   width: 100%;
@@ -121,12 +117,6 @@
   }
 }
 
-/* Tarjetas con aire respecto de los bordes del módulo. */
-.ct-student-summary.global-summaryCards--dashboard {
-  width: auto;
-  margin: 12px 14px 0;
-}
-
 /*
  * El alto visible de esta tabla se define en Contable.css para que sea
  * específico de Contabilidad. Las filas conservan el alto global normal.
@@ -134,10 +124,4 @@
 .ct-student-table .mov-gridCell,
 .ct-student-table .mov-gridCell--head {
   min-height: 44px;
-}
-
-@media (max-width: 760px) {
-  .ct-student-summary.global-summaryCards--dashboard {
-    margin: 10px 10px 0;
-  }
 }

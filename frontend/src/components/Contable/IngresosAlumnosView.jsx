@@ -1,11 +1,10 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMoneyBillTransfer, faPeopleGroup } from "@fortawesome/free-solid-svg-icons";
+import { faMoneyBillTransfer } from "@fortawesome/free-solid-svg-icons";
 import GlobalDivTable from "../Global/GlobalDivTable";
 import GlobalPagination from "../Global/GlobalPagination";
 import BotonExportarGlobal from "../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../Global/Modales/ModalExportarGlobal";
-import SummaryCards from "../Global/SummaryCards";
 import { contableApi } from "./api/contableApi";
 import logoIpetPdf from "../../imagenes/logo_ipet50.png";
 import "./IngresosAlumnosView.css";
@@ -53,7 +52,6 @@ export default function IngresosAlumnosView({
 }) {
   const [exportOpen, setExportOpen] = useState(false);
   const items = data?.items || [];
-  const summary = data?.resumen || {};
   const pagination = data?.paginacion || {};
   const filters = data?.filtros || {};
   const currentPage = Number(pagination.pagina || 1);
@@ -104,30 +102,6 @@ export default function IngresosAlumnosView({
 
   return (
     <section className="ct-student-income">
-      <SummaryCards
-        title=""
-        ariaLabel="Resumen de ingresos de alumnos"
-        variant="dashboard"
-        className="ct-student-summary"
-        items={[
-          {
-            key: "students",
-            icon: faPeopleGroup,
-            label: "Alumnos / ingresantes",
-            detail: `${Number(summary.pagos || 0).toLocaleString("es-AR")} cobros registrados`,
-            value: Number(summary.alumnos || 0).toLocaleString("es-AR"),
-          },
-          {
-            key: "amount",
-            icon: faMoneyBillTransfer,
-            label: "Total cobrado",
-            detail: `Cobrado en ${dateLabel}`,
-            tone: "success",
-            value: money(summary.importe),
-          },
-        ]}
-      />
-
       <GlobalDivTable
         className="ct-student-table has-bottom-pagination"
         bodyClassName="entity-table-wrap"

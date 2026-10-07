@@ -149,9 +149,9 @@ final class Dashboard
     /**
      * Calcula cuántos alumnos activos tienen cubierto el mes solicitado.
      *
-     * Cooperadora maneja diez cuotas (marzo-diciembre), más Contado Anual,
-     * 1era Mitad (marzo-julio) y 2da Mitad (agosto-diciembre). Un pago de esas
-     * modalidades cubre el mes correspondiente sin duplicar al alumno.
+     * Cooperadora maneja cuotas de marzo a diciembre, más Contado Anual,
+     * 1era Mitad y 2da Mitad. En diciembre los alumnos INTERNOS no generan
+     * obligación; los EXTERNOS sí. Un pago especial cubre el mes aplicable.
      */
     private static function currentCoverage(PDO $db, int $year, int $month, DateTimeImmutable $today): array
     {
@@ -170,6 +170,7 @@ final class Dashboard
                 MAX(CASE WHEN p.estado = 'pagado' THEN 1 ELSE 0 END) AS pagado,
                 MAX(CASE WHEN p.estado = 'condonado' THEN 1 ELSE 0 END) AS condonado
              FROM alumnos a
+             LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
              LEFT JOIN pagos p
                ON p.id_alumno = a.id_alumno
               AND p.anio_aplicado = ?
@@ -177,8 +178,9 @@ final class Dashboard
              WHERE a.activo = 1
                AND a.eliminado = 0
                AND a.ingreso <= ?
+               AND (? <> 12 OR UPPER(TRIM(COALESCE(c.nombre_categoria, ''))) <> 'INTERNO')
              GROUP BY a.id_alumno",
-            $params
+            array_merge($params, [$month])
         );
 
         $expected = count($rows);
@@ -281,11 +283,14 @@ final class Dashboard
 
         $rows = self::fetchAll(
             $db,
-            "SELECT id_alumno, id_mes, anio_aplicado, estado
-             FROM pagos
-             WHERE anio_aplicado BETWEEN ? AND ?
-               AND estado IN ('pagado', 'condonado')
-               AND id_mes IN (3,4,5,6,7,8,9,10,11,12,13,15,16)",
+            "SELECT p.id_alumno, p.id_mes, p.anio_aplicado, p.estado,
+                    COALESCE(c.nombre_categoria, '') AS categoria
+             FROM pagos p
+             LEFT JOIN alumnos a ON a.id_alumno = p.id_alumno
+             LEFT JOIN categoria c ON c.id_categoria = a.id_categoria
+             WHERE p.anio_aplicado BETWEEN ? AND ?
+               AND p.estado IN ('pagado', 'condonado')
+               AND p.id_mes IN (3,4,5,6,7,8,9,10,11,12,13,15,16)",
             [$minYear, $maxYear]
         );
 
@@ -297,6 +302,7 @@ final class Dashboard
             foreach ($rows as $row) {
                 if ((int)$row['anio_aplicado'] !== $period['anio']) continue;
                 if (!isset($coverageIds[(int)$row['id_mes']])) continue;
+                if ($period['mes'] === 12 && strtoupper(trim((string)($row['categoria'] ?? ''))) === 'INTERNO') continue;
 
                 $studentId = (int)$row['id_alumno'];
                 $state = strtolower((string)$row['estado']);

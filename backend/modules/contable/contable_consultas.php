@@ -3,9 +3,10 @@ declare(strict_types=1);
 
 trait ContableConsultas
 {
-    protected static function resumenDatos(PDO $db, int $year, int $month): array
+    protected static function resumenDatos(PDO $db, int $year, int $month, ?int $mean = null): array
     {
         $payments = array_fill(1, 12, ['cuotas' => 0, 'matriculas' => 0]);
+        $paymentMeanSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(p.fecha_pago) AS mes,
                     SUM(CASE WHEN p.id_mes = ? THEN COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(com.comision, 0) ELSE 0 END) AS matriculas,
@@ -16,10 +17,12 @@ trait ContableConsultas
                  FROM egresos WHERE id_pago_origen IS NOT NULL
                  GROUP BY id_pago_origen
              ) com ON com.id_pago_origen = p.id_pago
-             WHERE p.estado = \'pagado\' AND YEAR(p.fecha_pago) = ?
+             WHERE p.estado = \'pagado\' AND YEAR(p.fecha_pago) = ?' . $paymentMeanSql . '
              GROUP BY MONTH(p.fecha_pago)'
         );
-        $statement->execute([self::MES_MATRICULA, self::MES_MATRICULA, $year]);
+        $paymentParams = [self::MES_MATRICULA, self::MES_MATRICULA, $year];
+        if ($mean !== null) $paymentParams[] = $mean;
+        $statement->execute($paymentParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
             if ($m < 1 || $m > 12) continue;
@@ -33,16 +36,19 @@ trait ContableConsultas
         // del cobro. Mientras todavía no existe id_alumno se leen directamente de
         // ingresantes. Cuando pasan a Alumnos se crea pagos.id_mes=14 y esta fila
         // deja de entrar aquí gracias a id_alumno_confirmado, evitando duplicados.
+        $ingresanteMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(COALESCE(fecha_pago_matricula, fecha_inscripcion)) AS mes,
                     SUM(monto_matricula) AS total
              FROM ingresantes
              WHERE matricula_pagada = 1
                AND id_alumno_confirmado IS NULL
-               AND YEAR(COALESCE(fecha_pago_matricula, fecha_inscripcion)) = ?
+               AND YEAR(COALESCE(fecha_pago_matricula, fecha_inscripcion)) = ?' . $ingresanteMeanSql . '
              GROUP BY MONTH(COALESCE(fecha_pago_matricula, fecha_inscripcion))'
         );
-        $statement->execute([$year]);
+        $ingresanteParams = [$year];
+        if ($mean !== null) $ingresanteParams[] = $mean;
+        $statement->execute($ingresanteParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
             if ($m < 1 || $m > 12) continue;
@@ -50,22 +56,28 @@ trait ContableConsultas
         }
 
         $manual = array_fill(1, 12, 0);
+        $manualMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(fecha) AS mes, SUM(importe) AS total
-             FROM ingresos WHERE YEAR(fecha) = ? GROUP BY MONTH(fecha)'
+             FROM ingresos WHERE YEAR(fecha) = ?' . $manualMeanSql . ' GROUP BY MONTH(fecha)'
         );
-        $statement->execute([$year]);
+        $manualParams = [$year];
+        if ($mean !== null) $manualParams[] = $mean;
+        $statement->execute($manualParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
             if ($m >= 1 && $m <= 12) $manual[$m] = self::aCentavos($row['total'] ?? 0);
         }
 
         $expenses = array_fill(1, 12, 0);
+        $expenseMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(fecha) AS mes, SUM(importe) AS total
-             FROM egresos WHERE YEAR(fecha) = ? GROUP BY MONTH(fecha)'
+             FROM egresos WHERE YEAR(fecha) = ?' . $expenseMeanSql . ' GROUP BY MONTH(fecha)'
         );
-        $statement->execute([$year]);
+        $expenseParams = [$year];
+        if ($mean !== null) $expenseParams[] = $mean;
+        $statement->execute($expenseParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
             if ($m >= 1 && $m <= 12) $expenses[$m] = self::aCentavos($row['total'] ?? 0);
@@ -106,7 +118,7 @@ trait ContableConsultas
             'meses' => $months,
             'totales' => self::convertirResumenCentavos($annual),
             'totales_mes' => $selected,
-            'detalle_mes' => self::detalleResumenMes($db, $year, $month),
+            'detalle_mes' => self::detalleResumenMes($db, $year, $month, $mean),
         ];
     }
 
@@ -119,12 +131,13 @@ trait ContableConsultas
         return $result;
     }
 
-    protected static function detalleResumenMes(PDO $db, int $year, int $month): array
+    protected static function detalleResumenMes(PDO $db, int $year, int $month, ?int $mean = null): array
     {
         $from = sprintf('%04d-%02d-01', $year, $month);
         $to = (new DateTimeImmutable($from))->modify('last day of this month')->format('Y-m-d');
 
         $incomeCategories = [];
+        $paymentMeanSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
         $payment = $db->prepare(
             'SELECT CASE WHEN p.id_mes = ? THEN \'MATRÍCULA\' ELSE COALESCE(cm.nombre_categoria, \'CUOTAS\') END AS nombre,
                     SUM(COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(com.comision, 0)) AS total
@@ -135,49 +148,63 @@ trait ContableConsultas
                  SELECT id_pago_origen, SUM(importe) AS comision
                  FROM egresos WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen
              ) com ON com.id_pago_origen = p.id_pago
-             WHERE p.estado = \'pagado\' AND p.fecha_pago BETWEEN ? AND ?
+             WHERE p.estado = \'pagado\' AND p.fecha_pago BETWEEN ? AND ?' . $paymentMeanSql . '
              GROUP BY 1'
         );
-        $payment->execute([self::MES_MATRICULA, $from, $to]);
+        $paymentParams = [self::MES_MATRICULA, $from, $to];
+        if ($mean !== null) $paymentParams[] = $mean;
+        $payment->execute($paymentParams);
         foreach ($payment->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $incomeCategories[(string)$row['nombre']] = (float)$row['total'];
         }
 
+        $ingresanteMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
         $ingresantesMatricula = $db->prepare(
             'SELECT COALESCE(SUM(monto_matricula), 0) AS total
              FROM ingresantes
              WHERE matricula_pagada = 1
                AND id_alumno_confirmado IS NULL
-               AND COALESCE(fecha_pago_matricula, fecha_inscripcion) BETWEEN ? AND ?'
+               AND COALESCE(fecha_pago_matricula, fecha_inscripcion) BETWEEN ? AND ?' . $ingresanteMeanSql
         );
-        $ingresantesMatricula->execute([$from, $to]);
+        $ingresanteParams = [$from, $to];
+        if ($mean !== null) $ingresanteParams[] = $mean;
+        $ingresantesMatricula->execute($ingresanteParams);
         $totalIngresantesMatricula = (float)$ingresantesMatricula->fetchColumn();
         if ($totalIngresantesMatricula > 0) {
             $incomeCategories['MATRÍCULA'] = ($incomeCategories['MATRÍCULA'] ?? 0) + $totalIngresantesMatricula;
         }
 
+        $manualMeanSql = $mean !== null ? ' AND i.id_medio_pago = ?' : '';
         $manual = $db->prepare(
             'SELECT COALESCE(c.nombre_categoria, \'OTROS INGRESOS\') AS nombre, SUM(i.importe) AS total
              FROM ingresos i
              LEFT JOIN contable_categoria c ON c.id_cont_categoria = i.id_cont_categoria
-             WHERE i.fecha BETWEEN ? AND ? GROUP BY 1'
+             WHERE i.fecha BETWEEN ? AND ?' . $manualMeanSql . ' GROUP BY 1'
         );
-        $manual->execute([$from, $to]);
+        $manualParams = [$from, $to];
+        if ($mean !== null) $manualParams[] = $mean;
+        $manual->execute($manualParams);
         foreach ($manual->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $name = (string)$row['nombre'];
             $incomeCategories[$name] = ($incomeCategories[$name] ?? 0) + (float)$row['total'];
         }
 
+        $expenseMeanSql = $mean !== null ? ' AND e.id_medio_pago = ?' : '';
         $expense = $db->prepare(
             'SELECT CASE WHEN e.id_pago_origen IS NOT NULL THEN \'COMISIÓN COBRADOR\'
                         ELSE COALESCE(c.nombre_categoria, \'SIN CATEGORÍA\') END AS nombre,
                     SUM(e.importe) AS total
              FROM egresos e
              LEFT JOIN contable_categoria c ON c.id_cont_categoria = e.id_cont_categoria
-             WHERE e.fecha BETWEEN ? AND ? GROUP BY 1 ORDER BY total DESC'
+             WHERE e.fecha BETWEEN ? AND ?' . $expenseMeanSql . ' GROUP BY 1 ORDER BY total DESC'
         );
-        $expense->execute([$from, $to]);
+        $expenseParams = [$from, $to];
+        if ($mean !== null) $expenseParams[] = $mean;
+        $expense->execute($expenseParams);
 
+        $meansPaymentSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
+        $meansManualSql = $mean !== null ? ' AND i.id_medio_pago = ?' : '';
+        $meansIngresanteSql = $mean !== null ? ' AND ing.id_medio_pago = ?' : '';
         $means = $db->prepare(
             'SELECT nombre, SUM(total) AS total FROM (
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre,
@@ -188,22 +215,28 @@ trait ContableConsultas
                     SELECT id_pago_origen, SUM(importe) AS comision
                     FROM egresos WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen
                 ) com ON com.id_pago_origen = p.id_pago
-                WHERE p.estado = \'pagado\' AND p.fecha_pago BETWEEN ? AND ? GROUP BY 1
+                WHERE p.estado = \'pagado\' AND p.fecha_pago BETWEEN ? AND ?' . $meansPaymentSql . ' GROUP BY 1
                 UNION ALL
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(i.importe) AS total
                 FROM ingresos i LEFT JOIN medio_pago mp ON mp.id_medio_pago = i.id_medio_pago
-                WHERE i.fecha BETWEEN ? AND ? GROUP BY 1
+                WHERE i.fecha BETWEEN ? AND ?' . $meansManualSql . ' GROUP BY 1
                 UNION ALL
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(ing.monto_matricula) AS total
                 FROM ingresantes ing
                 LEFT JOIN medio_pago mp ON mp.id_medio_pago = ing.id_medio_pago
                 WHERE ing.matricula_pagada = 1
                   AND ing.id_alumno_confirmado IS NULL
-                  AND COALESCE(ing.fecha_pago_matricula, ing.fecha_inscripcion) BETWEEN ? AND ?
+                  AND COALESCE(ing.fecha_pago_matricula, ing.fecha_inscripcion) BETWEEN ? AND ?' . $meansIngresanteSql . '
                 GROUP BY 1
              ) x GROUP BY 1 ORDER BY total DESC'
         );
-        $means->execute([$from, $to, $from, $to, $from, $to]);
+        $meansParams = [$from, $to];
+        if ($mean !== null) $meansParams[] = $mean;
+        array_push($meansParams, $from, $to);
+        if ($mean !== null) $meansParams[] = $mean;
+        array_push($meansParams, $from, $to);
+        if ($mean !== null) $meansParams[] = $mean;
+        $means->execute($meansParams);
 
         $categoryRows = [];
         foreach ($incomeCategories as $name => $total) $categoryRows[] = ['nombre' => $name, 'total' => round($total, 2)];

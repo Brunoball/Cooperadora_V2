@@ -256,7 +256,7 @@ export default function Ingresantes() {
     },
     { key: "buscar", type: "search", label: "Buscar", value: search, onChange: changeFilter(setSearch), placeholder: "Apellido, nombre o DNI...", className: "ingresantes-searchFilter" },
     { key: "ciclo", type: "select", label: "Ciclo", value: cycle, onChange: changeFilter(setCycle), includeEmptyOption: false, className: "ingresantes-cycleFilter", options: (catalogos.ciclos || [suggestedCycle()]).map((value) => ({ value, label: String(value) })) },
-    { key: "anio", type: "select", label: "Ingresa a", value: year, onChange: changeFilter(setYear), placeholder: "Todos", className: "ingresantes-yearFilter", options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })) },
+    { key: "anio", type: "select", label: "Ingresa a", value: year, onChange: changeFilter(setYear), placeholder: "TODOS", className: "ingresantes-yearFilter", options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })) },
   ];
 
   return (
