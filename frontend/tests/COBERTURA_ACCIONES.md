@@ -2,7 +2,7 @@
 
 Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-acciones.spec.js` falla si una ruta registrada del backend (excepto Bot Panel) no fue ejecutada durante la corrida.
 
-**Acciones registradas al generar este paquete: 103 / 103 referenciadas.**
+**Acciones registradas al generar este paquete: 107 / 107 cubiertas en runtime por la suite.**
 
 | Action | Método | Cobertura principal |
 |---|---|---|
@@ -18,6 +18,10 @@ Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-ac
 | `alumnos_obtener` | GET | 10-alumnos-familias-extendido.spec.js |
 | `alumnos_reactivar` | POST | 03-alumnos-familias.spec.js, 10-alumnos-familias-extendido.spec.js |
 | `alumnos_reclasificar` | POST | 10-alumnos-familias-extendido.spec.js |
+| `ingresantes_listar` | GET | 09-dashboard-integridad.spec.js, 16-ingresantes-integridad.spec.js, helpers/entities.helper.js |
+| `ingresantes_guardar` | POST | 00-seguridad-contratos.spec.js, 16-ingresantes-integridad.spec.js, helpers/entities.helper.js |
+| `ingresantes_estado` | POST | 16-ingresantes-integridad.spec.js |
+| `ingresantes_pasar_alumnos` | POST | 16-ingresantes-integridad.spec.js |
 | `auth_login` | POST | 15-usuarios-auth-extendido.spec.js, helpers/api.helper.js |
 | `auth_logout` | POST | 01-login-sesion.spec.js, 15-usuarios-auth-extendido.spec.js, helpers/api.helper.js |
 | `auth_usuario_actual` | GET | 01-login-sesion.spec.js, 15-usuarios-auth-extendido.spec.js, auth.setup.js |
@@ -109,3 +113,25 @@ Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-ac
 | `ventas_productos` | GET | 07-ventas.spec.js, 09-dashboard-integridad.spec.js, 14-ventas-cobertura-total.spec.js |
 | `ventas_productos_listar` | GET | 07-ventas.spec.js, 09-dashboard-integridad.spec.js, 14-ventas-cobertura-total.spec.js |
 | `ventas_resumen` | GET | 09-dashboard-integridad.spec.js |
+
+## Cobertura agregada en el freeze de Ingresantes
+
+- Matrícula de ingresante reflejada en Contable/Dashboard desde la fecha real del cobro.
+- Conversión Ingresante → Alumno sin duplicar el ingreso ni cambiar el `id_alumno` histórico.
+- Estados visibles Pendiente / Cancelado / Ingresado (este último derivado del vínculo).
+- Bloqueo de ciclos futuros, duplicados DNI+ciclo y edición retroactiva de matrículas cobradas.
+- Fechas futuras bloqueadas tanto en Ingresantes como en Cuotas.
+- Eliminación lógica: conserva pagos históricos y bloquea nuevos cobros.
+- Cleanup/Safety reconoce también alumnos creados a partir de Ingresantes E2E.
+
+## Cobertura profunda agregada post-freeze
+
+Además de ejecutar las 107/107 acciones registradas, la suite ahora prueba secuencias y combinaciones críticas entre módulos:
+
+- `17-ingresantes-ciclo-vida-profundo.spec.js`: matrícula antes de ser alumno, conversión, baja, reactivación, eliminación lógica, lote mixto pagado/no pagado, cancelados y concurrencia de conversión.
+- `18-familias-descuentos-profundo.spec.js`: familias de tres hermanos, cambio 3→2 por baja/eliminación, reactivación, edición de integrantes y activación/desactivación de reglas familiares.
+- `19-cuotas-casos-criticos-profundo.spec.js`: solapamientos anual/mitades/mensuales, pago vs condonación, doble cobro concurrente, comprobante post-eliminación y fecha contable real.
+- `20-trazabilidad-integridad-cruzada.spec.js`: conservación de pagos al bajar/reactivar/egresar/eliminar, contexto familiar y etiquetas de historial entendibles.
+- `21-integridad-e2e-profunda.spec.js`: Safety/Residues/Integrity sobre cadenas E2E complejas para asegurar que teardown pueda devolver la base real al baseline exacto.
+
+El objetivo de esta capa no es sólo "tocar" endpoints: valida invariantes de negocio y trazabilidad después de varias transiciones consecutivas.

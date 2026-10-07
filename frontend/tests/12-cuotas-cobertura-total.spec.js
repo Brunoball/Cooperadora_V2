@@ -8,7 +8,7 @@ const {
   createStudent,
   createFamily,
 } = require("./helpers/entities.helper");
-const { suffix, today } = require("./helpers/data.helper");
+const { suffix, today, tomorrow } = require("./helpers/data.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
 
 const env = loadTestEnv();
@@ -326,6 +326,56 @@ test.describe("Cuotas - variantes completas", () => {
       query: { id_alumno: f.student.id_alumno, anio: 2026, mes: 10, fecha_pago: "2026-10-05" },
     });
     expect(context.periodo.estado).toBe("DEUDOR");
+  });
+
+  test("rechaza fecha de cobro futura aunque se fuerce la API", async ({ request }) => {
+    const f = await fixture(request);
+    const result = await apiFetch(request, "cuotas_registrar_pago", {
+      token: f.t,
+      method: "POST",
+      data: {
+        id_alumno: f.student.id_alumno,
+        anio: 2026,
+        periodos: [10],
+        fecha_pago: tomorrow(),
+        id_medio_pago: f.medio,
+      },
+    });
+    expect(result.status).toBe(422);
+    expect(result.body.codigo).toBe("FECHA_PAGO_FUTURA");
+  });
+
+  test("alumno eliminado conserva pagos históricos pero no acepta cobros nuevos", async ({ request }) => {
+    const f = await fixture(request);
+    const first = await pay(request, f, { periodos: [8], monto_libre: 321 });
+    expect(first.items?.[0]?.id_pago).toBeTruthy();
+
+    const deleted = await ok(request, "alumnos_eliminar_definitivo", {
+      token: f.t,
+      method: "POST",
+      data: { id: f.student.id_alumno, motivo: "PW E2E ELIMINACION LOGICA CON PAGO" },
+    });
+    expect(Number(deleted.pagos_preservados)).toBeGreaterThanOrEqual(1);
+
+    const rejected = await apiFetch(request, "cuotas_registrar_pago", {
+      token: f.t,
+      method: "POST",
+      data: {
+        id_alumno: f.student.id_alumno,
+        anio: 2026,
+        periodos: [9],
+        fecha_pago: "2026-10-05",
+        id_medio_pago: f.medio,
+      },
+    });
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.codigo).toBe("ALUMNO_ELIMINADO");
+
+    const accounting = await ok(request, "contable_ingresos_alumnos", {
+      token: f.t,
+      query: { anio: 2026, mes: 10, buscar: f.student.num_documento, pagina: 1 },
+    });
+    expect((accounting.items || []).some((item) => Number(item.id_alumno) === Number(f.student.id_alumno))).toBeTruthy();
   });
 
 });

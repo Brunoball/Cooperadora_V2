@@ -36,4 +36,28 @@ test.describe("Contratos y seguridad", () => {
     expect(r.status).toBe(409);
     expect(r.body.codigo).toBe("E2E_SCOPE_BLOCKED");
   });
+  test("guard E2E bloquea un ingresante que intente usar el DNI de un alumno real", async ({ request }) => {
+    const t = token();
+    const list = await ok(request, "alumnos_listar", { token: t, query: { pagina: 1, por_pagina: 20 } });
+    const real = (list.items || []).find((item) => !String(item.apellido || "").startsWith("PW E2E "));
+    expect(real).toBeTruthy();
+
+    const r = await apiFetch(request, "ingresantes_guardar", {
+      token: t,
+      method: "POST",
+      data: {
+        apellido: "PW E2E INGRESANTE GUARD",
+        nombre: "SEGURIDAD",
+        num_documento: real.num_documento,
+        id_anio_destino: 1,
+        ciclo_lectivo: 2026,
+        fecha_inscripcion: "2026-10-05",
+        matricula_pagada: 0,
+        observaciones: "PW E2E",
+      },
+    });
+    expect(r.status).toBe(409);
+    expect(r.body.codigo).toBe("E2E_SCOPE_BLOCKED");
+  });
+
 });

@@ -4,6 +4,7 @@ const { authenticatePage } = require("./helpers/auth.helper");
 const routes = [
   "/panel",
   "/alumnos/listado",
+  "/alumnos/ingresantes",
   "/alumnos/familias",
   "/cuotas",
   "/categorias",

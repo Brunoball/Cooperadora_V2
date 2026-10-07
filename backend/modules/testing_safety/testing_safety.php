@@ -27,6 +27,61 @@ final class TestingSafety
         api_error('El guard E2E no interceptó la solicitud de prueba.', 'E2E_GUARD_NOT_ACTIVE', 500);
     }
 
+    /**
+     * Activa/desactiva una campaña E2E SIN aplicar la regla productiva de
+     * "una sola campaña activa". Se usa únicamente en entorno local para que
+     * Playwright pueda probar Ventas sin desactivar/modificar la campaña real.
+     */
+    public static function ventasCampaniaEstado(): never
+    {
+        $auth = require_admin();
+        self::requireE2EHeader();
+        if (!function_exists('e2e_is_local_environment') || !e2e_is_local_environment()) {
+            api_error(
+                'La preparación aislada de campañas de Ventas sólo está disponible en entorno local/test.',
+                'E2E_LOCAL_ONLY',
+                403
+            );
+        }
+
+        $body = request_body();
+        $id = positive_id($body['id_campania'] ?? $body['id'] ?? null, 'campaña');
+        $active = !empty($body['activo']);
+        $visible = $active && !empty($body['visible_menu']);
+        $db = $auth['db'];
+
+        $statement = $db->prepare(
+            "SELECT c.id_campania, c.nombre, c.id_producto_principal, p.nombre AS producto_nombre, p.activo AS producto_activo
+               FROM ventas_campanias c
+               LEFT JOIN ventas_productos p ON p.id_producto = c.id_producto_principal
+              WHERE c.id_campania = ?
+              LIMIT 1"
+        );
+        $statement->execute([$id]);
+        $campaign = $statement->fetch(PDO::FETCH_ASSOC);
+        if (!$campaign) api_error('Campaña E2E no encontrada.', 'NOT_FOUND', 404);
+
+        if (!str_starts_with(strtoupper(trim((string)$campaign['nombre'])), 'PW E2E VTA CAMP ')) {
+            api_error('La campaña indicada no pertenece al namespace E2E.', 'E2E_SCOPE_BLOCKED', 409);
+        }
+        if ($active) {
+            if (empty($campaign['id_producto_principal']) || empty($campaign['producto_activo'])) {
+                api_error('La campaña E2E necesita un producto principal activo.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
+            }
+            if (!str_starts_with(strtoupper(trim((string)$campaign['producto_nombre'])), 'PW E2E VTA PROD ')) {
+                api_error('El producto principal no pertenece al namespace E2E.', 'E2E_SCOPE_BLOCKED', 409);
+            }
+        }
+
+        // Importante: NO desactiva ninguna otra campaña. Sólo cambia la fila E2E.
+        $db->prepare('UPDATE ventas_campanias SET activo = ?, visible_menu = ? WHERE id_campania = ?')
+            ->execute([$active ? 1 : 0, $visible ? 1 : 0, $id]);
+
+        $updated = $db->prepare('SELECT * FROM ventas_campanias WHERE id_campania = ? LIMIT 1');
+        $updated->execute([$id]);
+        api_success(['item' => $updated->fetch(PDO::FETCH_ASSOC)], 'Estado E2E de campaña preparado.');
+    }
+
     public static function residuos(): never
     {
         $auth = require_admin();
@@ -125,15 +180,21 @@ final class TestingSafety
             $db,
             "SELECT id_alumno FROM alumnos
              WHERE UPPER(apellido) LIKE 'PW E2E ALUMNO %'
-                OR UPPER(apellido) LIKE 'PW EEE ALUMNO %'"
+                OR UPPER(apellido) LIKE 'PW EEE ALUMNO %'
+                OR UPPER(apellido) LIKE 'PW E2E INGRESANTE %'
+                OR UPPER(apellido) LIKE 'PW EEE INGRESANTE %'"
         );
         $archived = self::ids(
             $db,
             "SELECT id_alumno_original FROM alumnos_eliminados
              WHERE UPPER(COALESCE(apellido,'')) LIKE 'PW E2E ALUMNO %'
                 OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE ALUMNO %'
+                OR UPPER(COALESCE(apellido,'')) LIKE 'PW E2E INGRESANTE %'
+                OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE INGRESANTE %'
                 OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW E2E ALUMNO %'
-                OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %'"
+                OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %'
+                OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW E2E INGRESANTE %'
+                OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE INGRESANTE %'"
         );
         $students = array_values(array_unique(array_merge($students, $archived)));
 
@@ -157,6 +218,16 @@ final class TestingSafety
                     $students
                 );
                 $incomingStudents = array_values(array_unique(array_merge($incomingStudents, $linkedIncoming)));
+            }
+            if ($incomingStudents !== []) {
+                $linkedStudents = self::idsPrepared(
+                    $db,
+                    'SELECT id_alumno_confirmado FROM ingresantes WHERE id_ingresante IN ('
+                        . self::placeholders(count($incomingStudents)) . ')
+                       AND id_alumno_confirmado IS NOT NULL',
+                    $incomingStudents
+                );
+                $students = array_values(array_unique(array_merge($students, $linkedStudents)));
             }
         }
 

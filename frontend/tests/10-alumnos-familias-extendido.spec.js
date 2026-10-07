@@ -50,6 +50,10 @@ test.describe("Alumnos y familias - cobertura extendida", () => {
 
     const historyAfter = await ok(request, "alumnos_historial", { token: t, query: { id: student.id_alumno } });
     expect(historyAfter).toBeTruthy();
+    const labels = (historyAfter.items || []).map((item) => item.etiqueta);
+    expect(labels).toContain("Alumno reactivado");
+    expect(labels.some((label) => ["Alumno dado de baja", "Reclasificado como baja"].includes(label))).toBeTruthy();
+    expect(labels).not.toContain("UPDATE");
   });
 
   test("familia: alta, edición, baja, reactivación y eliminación definitiva", async ({ request }) => {

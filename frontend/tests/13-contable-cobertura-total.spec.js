@@ -180,4 +180,38 @@ test.describe("Contable - cobertura extendida", () => {
     });
     expect(JSON.stringify(body)).toContain(String(student.id_alumno));
   });
+  test("filtro contable usa mes de cobro y separa el concepto pagado", async ({ request }) => {
+    const t = token();
+    const catalogs = await baseCatalogs(request, t);
+    const category = await createCategory(request, t, suffix());
+    const student = await createStudent(request, t, { catalogs, category, marker: suffix() });
+
+    await ok(request, "cuotas_registrar_pago", {
+      token: t,
+      method: "POST",
+      data: {
+        id_alumno: student.id_alumno,
+        anio: 2026,
+        periodos: [3],
+        fecha_pago: "2026-10-05",
+        id_medio_pago: catalogs.medio.id_medio_pago,
+        monto_libre: 654.32,
+      },
+    });
+
+    const october = await ok(request, "contable_ingresos_alumnos", {
+      token: t,
+      query: { anio: 2026, mes: 10, periodo: 3, medio: catalogs.medio.id_medio_pago, buscar: student.num_documento },
+    });
+    expect((october.items || []).some((item) => Number(item.id_alumno) === Number(student.id_alumno))).toBeTruthy();
+    expect(october.filtros.mes_pago).toBe(10);
+    expect(october.filtros.periodo).toBe(3);
+
+    const march = await ok(request, "contable_ingresos_alumnos", {
+      token: t,
+      query: { anio: 2026, mes: 3, periodo: 3, buscar: student.num_documento },
+    });
+    expect((march.items || []).some((item) => Number(item.id_alumno) === Number(student.id_alumno))).toBe(false);
+  });
+
 });

@@ -12,8 +12,30 @@ function testDni() {
   return String(90000000 + ((clock + random) % 10000000));
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function argentinaDate(offsetDays = 0) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Cordoba",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.filter((x) => x.type !== "literal").map((x) => [x.type, x.value]));
+  const utc = new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day) + Number(offsetDays || 0)));
+  return utc.toISOString().slice(0, 10);
 }
 
-module.exports = { suffix, testDni, today };
+function today() {
+  return argentinaDate(0);
+}
+
+function tomorrow() {
+  return argentinaDate(1);
+}
+
+function currentYear() {
+  return Number(today().slice(0, 4));
+}
+
+function currentMonth() {
+  return Number(today().slice(5, 7));
+}
+
+module.exports = { suffix, testDni, today, tomorrow, currentYear, currentMonth, argentinaDate };

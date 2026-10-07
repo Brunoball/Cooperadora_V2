@@ -82,15 +82,21 @@ final class TestingCleanup
                 $db,
                 "SELECT id_alumno FROM alumnos
                  WHERE UPPER(apellido) LIKE 'PW E2E ALUMNO %'
-                    OR UPPER(apellido) LIKE 'PW EEE ALUMNO %'"
+                    OR UPPER(apellido) LIKE 'PW EEE ALUMNO %'
+                    OR UPPER(apellido) LIKE 'PW E2E INGRESANTE %'
+                    OR UPPER(apellido) LIKE 'PW EEE INGRESANTE %'"
             );
             $archivedStudentIds = self::ids(
                 $db,
                 "SELECT id_alumno_original FROM alumnos_eliminados
                  WHERE UPPER(COALESCE(apellido,'')) LIKE 'PW E2E ALUMNO %'
                     OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE ALUMNO %'
+                    OR UPPER(COALESCE(apellido,'')) LIKE 'PW E2E INGRESANTE %'
+                    OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE INGRESANTE %'
                     OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW E2E ALUMNO %'
-                    OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %'"
+                    OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %'
+                    OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW E2E INGRESANTE %'
+                    OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE INGRESANTE %'"
             );
             $testStudents = array_values(array_unique(array_merge($testStudents, $archivedStudentIds)));
 
@@ -114,6 +120,21 @@ final class TestingCleanup
                         $testStudents
                     );
                     $testIncoming = array_values(array_unique(array_merge($testIncoming, $linkedIncoming)));
+                }
+
+                // Un ingresante E2E convertido conserva su apellido de Ingresantes.
+                // Incorporamos el alumno vinculado al namespace ANTES de borrar la
+                // preinscripción, para que el teardown pueda retirar también pagos,
+                // auditoría y la identidad de prueba sin dejar residuos.
+                if ($testIncoming !== []) {
+                    $linkedStudents = self::ids(
+                        $db,
+                        'SELECT id_alumno_confirmado FROM ingresantes WHERE id_ingresante IN ('
+                            . self::placeholders(count($testIncoming)) . ')
+                           AND id_alumno_confirmado IS NOT NULL',
+                        $testIncoming
+                    );
+                    $testStudents = array_values(array_unique(array_merge($testStudents, $linkedStudents)));
                 }
             }
 

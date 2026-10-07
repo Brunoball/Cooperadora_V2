@@ -1,5 +1,5 @@
 const { ok } = require("./api.helper");
-const { suffix, testDni, today } = require("./data.helper");
+const { suffix, testDni, today, currentYear } = require("./data.helper");
 
 async function configuracion(api, token) {
   return ok(api, "configuracion_obtener", { token });
@@ -128,6 +128,39 @@ async function accountingFixture(api, token, marker = suffix()) {
   };
 }
 
+
+async function createIncoming(api, token, options = {}) {
+  const marker = options.marker || suffix();
+  const cycle = Number(options.cicloLectivo ?? currentYear());
+  const catalog = await ok(api, "ingresantes_listar", {
+    token,
+    query: { ciclo_lectivo: cycle, pagina: 1, por_pagina: 1 },
+  });
+  const paid = options.matriculaPagada === true;
+  const medium = options.idMedioPago ?? catalog.catalogos?.medios_pago?.[0]?.id_medio_pago ?? null;
+  const configuredAmount = Number(catalog.catalogos?.monto_matricula_actual || 0);
+  const amount = Number((options.montoMatricula ?? configuredAmount) || 25000);
+
+  const body = await ok(api, "ingresantes_guardar", {
+    token,
+    method: "POST",
+    data: {
+      apellido: (options.apellido || `PW E2E INGRESANTE ${marker}`).slice(0, 100),
+      nombre: (options.nombre || "PRUEBA").slice(0, 100),
+      num_documento: options.dni || testDni(),
+      id_anio_destino: Number(options.idAnioDestino ?? 1),
+      ciclo_lectivo: cycle,
+      fecha_inscripcion: options.fechaInscripcion || today(),
+      matricula_pagada: paid ? 1 : 0,
+      monto_matricula: paid ? amount : null,
+      id_medio_pago: paid ? medium : null,
+      fecha_pago_matricula: paid ? (options.fechaPagoMatricula || today()) : null,
+      observaciones: options.observaciones || `PW E2E ${marker}`,
+    },
+  });
+  return body.item;
+}
+
 async function createSalesProduct(api, token, marker = suffix(), overrides = {}) {
   const body = await ok(api, "ventas_producto_guardar", {
     token,
@@ -147,21 +180,40 @@ async function createSalesProduct(api, token, marker = suffix(), overrides = {})
 }
 
 async function createSalesCampaign(api, token, product, marker = suffix(), overrides = {}) {
+  const requestedActive = overrides.activo ?? true;
+  const requestedVisible = overrides.visible_menu ?? false;
+  const { activo: _activo, visible_menu: _visible, ...rest } = overrides;
+
+  // La creación productiva de una campaña activa desactiva la campaña real activa.
+  // Para mantener el aislamiento, Playwright siempre la persiste inactiva y luego
+  // usa un endpoint E2E local que activa SOLAMENTE la campaña de prueba.
   const body = await ok(api, "ventas_campania_guardar", {
     token,
     method: "POST",
     data: {
       nombre: `PW E2E VTA CAMP ${marker}`.slice(0, 150),
       id_producto_principal: product.id_producto,
-      activo: overrides.activo ?? true,
-      visible_menu: overrides.visible_menu ?? false,
+      activo: false,
+      visible_menu: false,
       pregunta_persona: "PW E2E",
       mensaje_inicio: "PW E2E",
       mensaje_aprobado: "PW E2E",
-      ...overrides,
+      ...rest,
     },
   });
-  return body.item;
+
+  if (!requestedActive) return body.item;
+
+  const isolated = await ok(api, "e2e_ventas_campania_estado", {
+    token,
+    method: "POST",
+    data: {
+      id_campania: body.item.id_campania,
+      activo: true,
+      visible_menu: requestedVisible,
+    },
+  });
+  return isolated.item;
 }
 
 async function createSalesPerson(api, token, marker = suffix(), overrides = {}) {
@@ -186,6 +238,7 @@ module.exports = {
   createSiblingRule,
   createStudent,
   createFamily,
+  createIncoming,
   createAccountingOption,
   accountingFixture,
   createSalesProduct,

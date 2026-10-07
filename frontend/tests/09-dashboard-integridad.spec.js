@@ -16,6 +16,7 @@ test.describe("Dashboard e integración global", () => {
     const t = token();
     const actions = [
       ["alumnos_listar", { pagina: 1, por_pagina: 5 }],
+      ["ingresantes_listar", { pagina: 1, por_pagina: 5 }],
       ["familias_listar", { pagina: 1, por_pagina: 5 }],
       ["categorias_listar", {}],
       ["categorias_hermanos_listar", {}],

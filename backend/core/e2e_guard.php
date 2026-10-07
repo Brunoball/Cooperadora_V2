@@ -86,7 +86,7 @@ function e2e_target_state(PDO $db, string $kind, int $id): ?bool
         ],
         'alumno' => [
             'alumnos', 'id_alumno',
-            "UPPER(apellido) LIKE 'PW E2E ALUMNO %' OR UPPER(apellido) LIKE 'PW EEE ALUMNO %'",
+            "UPPER(apellido) LIKE 'PW E2E ALUMNO %' OR UPPER(apellido) LIKE 'PW EEE ALUMNO %' OR UPPER(apellido) LIKE 'PW E2E INGRESANTE %' OR UPPER(apellido) LIKE 'PW EEE INGRESANTE %'",
         ],
         'ingresante' => [
             'ingresantes', 'id_ingresante',
@@ -203,6 +203,16 @@ function e2e_assert_alumno_ids(PDO $db, string $action, array $body): void
 }
 
 
+function e2e_student_marker(string $value): bool
+{
+    return e2e_marker($value, [
+        'PW E2E ALUMNO ',
+        'PW EEE ALUMNO ',
+        'PW E2E INGRESANTE ',
+        'PW EEE INGRESANTE ',
+    ]);
+}
+
 function e2e_assert_ingresante_dni_safe(
     PDO $db,
     string $action,
@@ -220,7 +230,7 @@ function e2e_assert_ingresante_dni_safe(
     );
     $student->execute([$dni]);
     $studentRow = $student->fetch(PDO::FETCH_ASSOC);
-    if ($studentRow && !e2e_marker((string)$studentRow['apellido'], ['PW E2E ALUMNO ', 'PW EEE ALUMNO '])) {
+    if ($studentRow && !e2e_student_marker((string)$studentRow['apellido'])) {
         e2e_scope_error($action, 'El DNI del ingresante E2E coincide con un alumno real.');
     }
 
@@ -288,7 +298,7 @@ function e2e_assert_payment(PDO $db, string $action, mixed $rawId): void
         $row = $statement->fetch(PDO::FETCH_ASSOC);
         if ($row === false) return;
 
-        if (!e2e_marker((string)($row['apellido'] ?? ''), ['PW E2E ALUMNO ', 'PW EEE ALUMNO '])) {
+        if (!e2e_student_marker((string)($row['apellido'] ?? ''))) {
             e2e_scope_error($action, "El pago {$id} pertenece a un alumno real.");
         }
     } catch (Throwable $error) {
@@ -424,7 +434,7 @@ function e2e_assert_sales_person_payload(PDO $db, string $action, array $body): 
     );
     $student->execute([$dni]);
     $studentRow = $student->fetch(PDO::FETCH_ASSOC);
-    if ($studentRow && !e2e_marker((string)$studentRow['apellido'], ['PW E2E ALUMNO ', 'PW EEE ALUMNO '])) {
+    if ($studentRow && !e2e_student_marker((string)$studentRow['apellido'])) {
         e2e_scope_error($action, 'El DNI E2E coincide con un alumno real.');
     }
 
@@ -488,7 +498,7 @@ function e2e_scope_guard(string $action, array $auth): void
     }
 
     // Estos handlers exigen por segunda vez admin + header + confirmación cuando aplica.
-    if (in_array($action, ['e2e_cleanup', 'e2e_residuos', 'e2e_integridad'], true)) return;
+    if (in_array($action, ['e2e_cleanup', 'e2e_residuos', 'e2e_integridad', 'e2e_ventas_campania_estado'], true)) return;
 
     switch ($action) {
         case 'auth_logout':

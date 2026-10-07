@@ -8,4 +8,5 @@ function register_testing_safety_routes(Router $router): void
     $router->register('e2e_guard_probe', 'POST', [TestingSafety::class, 'probe'], true);
     $router->register('e2e_residuos', 'GET', [TestingSafety::class, 'residuos'], true);
     $router->register('e2e_integridad', 'GET', [TestingSafety::class, 'integridad'], true);
+    $router->register('e2e_ventas_campania_estado', 'POST', [TestingSafety::class, 'ventasCampaniaEstado'], true);
 }
