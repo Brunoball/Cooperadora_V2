@@ -195,7 +195,7 @@ final class Ventas
                 $name,
                 $alumno ? (int)$alumno['id_alumno'] : null,
                 $alumno ? 'alumno' : (string)($existing['origen'] ?: 'manual'),
-                optional_text($body['persona_observacion'] ?? null, 255, false),
+                optional_text($body['persona_observacion'] ?? null, 255),
                 (int)$existing['id_persona'],
             ]);
             return (int)$existing['id_persona'];
@@ -210,7 +210,7 @@ final class Ventas
             $name,
             $alumno ? (int)$alumno['id_alumno'] : null,
             $alumno ? 'alumno' : 'manual',
-            optional_text($body['persona_observacion'] ?? null, 255, false),
+            optional_text($body['persona_observacion'] ?? null, 255),
         ];
         try {
             $statement->execute($values);
@@ -496,34 +496,35 @@ final class Ventas
         $start = valid_date($body['fecha_inicio'] ?? null, 'inicio', false);
         $end = valid_date($body['fecha_fin'] ?? null, 'fin', false);
         if ($start && $end && $end < $start) api_error('La fecha de fin no puede ser anterior a la fecha de inicio.', 'VALIDATION_ERROR');
-        $active = self::boolValue($body['activo'] ?? true);
-        $visible = self::boolValue($body['visible_menu'] ?? true);
-        if ($active && (!$product || empty($product['activo']))) {
-            api_error('Para activar una campaña seleccioná un producto principal activo.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
-        }
+        $visibleRequested = array_key_exists('visible_menu', $body) ? self::boolValue($body['visible_menu']) : null;
+        // Los únicos textos que conservan la escritura natural son los que consume el bot.
         $question = optional_text($body['pregunta_persona'] ?? null, 1000, false);
         $startMessage = optional_text($body['mensaje_inicio'] ?? null, 1000, false);
         $approvedMessage = optional_text($body['mensaje_aprobado'] ?? null, 1000, false);
 
-        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $active, $visible, $question, $startMessage, $approvedMessage) {
+        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $product, $start, $end, $visibleRequested, $question, $startMessage, $approvedMessage) {
             $before = $id ? self::campaign($db, $id, true) : null;
-            if ($active) {
-                $db->exec('UPDATE ventas_campanias SET activo = 0, visible_menu = 0 WHERE activo = 1' . ($id ? ' AND id_campania <> ' . (int)$id : ''));
+            // Crear/editar nunca cambia el estado: la activación se hace exclusivamente
+            // desde ventas_campania_estado, con confirmación explícita en la interfaz.
+            $active = $before ? (int)$before['activo'] : 0;
+            $visible = $visibleRequested ?? ($before ? (int)$before['visible_menu'] : 1);
+            if ($active && (!$product || empty($product['activo']))) {
+                api_error('Una campaña activa debe conservar un producto principal activo. Desactivala antes de cambiar este producto.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
             }
             if ($id) {
                 $db->prepare(
                     'UPDATE ventas_campanias
-                        SET nombre=?, activo=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?,
+                        SET nombre=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?,
                             tipo_persona=\'comprador\', pregunta_persona=?, mensaje_inicio=?, mensaje_aprobado=?
                       WHERE id_campania=?'
-                )->execute([$name, $active, $active ? $visible : 0, $productId, $start, $end, $question, $startMessage, $approvedMessage, $id]);
+                )->execute([$name, $visible, $productId, $start, $end, $question, $startMessage, $approvedMessage, $id]);
                 $recordId = $id;
             } else {
                 $db->prepare(
                     'INSERT INTO ventas_campanias
                         (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin, tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado)
-                     VALUES (?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
-                )->execute([$name, $active, $active ? $visible : 0, $productId, $start, $end, $question, $startMessage, $approvedMessage]);
+                     VALUES (?, 0, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
+                )->execute([$name, $visible, $productId, $start, $end, $question, $startMessage, $approvedMessage]);
                 $recordId = (int)$db->lastInsertId();
             }
             $after = self::campaign($db, $recordId);
@@ -541,16 +542,23 @@ final class Ventas
         $id = positive_id($body['id_campania'] ?? $body['id'] ?? null, 'campaña');
         $active = self::boolValue($body['activo'] ?? true);
         transaction($db, function () use ($db, $auth, $id, $active) {
-            $before = self::campaign($db, $id, true);
-            if ($active && (empty($before['id_producto_principal']) || empty($before['producto_principal_activo']))) {
-                api_error('No podés activar esta campaña hasta asignarle un producto principal activo.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
+            // Al activar, bloqueamos todas las configuraciones en un orden estable.
+            // Así dos activaciones concurrentes no pueden dejar más de una activa.
+            if ($active) {
+                $db->query('SELECT id_campania FROM ventas_campanias ORDER BY id_campania FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN);
+                $before = self::campaign($db, $id);
+            } else {
+                $before = self::campaign($db, $id, true);
             }
-            if ($active) $db->exec('UPDATE ventas_campanias SET activo=0, visible_menu=0 WHERE id_campania <> ' . $id);
-            $db->prepare('UPDATE ventas_campanias SET activo=?, visible_menu=CASE WHEN ?=1 THEN visible_menu ELSE 0 END WHERE id_campania=?')->execute([$active, $active, $id]);
+            if ($active && (empty($before['id_producto_principal']) || empty($before['producto_principal_activo']))) {
+                api_error('No podés activar esta configuración hasta asignarle un producto principal activo.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
+            }
+            if ($active) $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_campania <> ?')->execute([$id]);
+            $db->prepare('UPDATE ventas_campanias SET activo=? WHERE id_campania=?')->execute([$active, $id]);
             $after = self::campaign($db, $id);
-            audit_change($db, $auth, 'VENTAS', $active ? 'ACTIVAR_CAMPANIA' : 'DESACTIVAR_CAMPANIA', 'ventas_campanias', $id, 'Cambio de estado de campaña.', $before, $after);
+            audit_change($db, $auth, 'VENTAS', $active ? 'ACTIVAR_CAMPANIA' : 'DESACTIVAR_CAMPANIA', 'ventas_campanias', $id, 'Cambio de estado de configuración de venta.', $before, $after);
         });
-        api_success([], $active ? 'Campaña activada.' : 'Campaña desactivada.');
+        api_success([], $active ? 'Configuración activada.' : 'Configuración dada de baja.');
     }
 
     public static function eliminarCampania(): never
@@ -609,18 +617,20 @@ final class Ventas
         $db = self::db(); $auth = self::auth(); $body = request_body();
         $id = self::nullablePositiveId($body['id_producto'] ?? null);
         $name = required_text($body, 'nombre', 'nombre', 150, true);
-        $description = optional_text($body['descripcion'] ?? null, 3000, false);
+        $description = optional_text($body['descripcion'] ?? null, 3000);
         $anticipated = decimal_amount($body['precio_anticipada'] ?? $body['precio'] ?? 0, 'precio anticipado', 0, 999999999.99);
         $door = decimal_amount($body['precio_puerta'] ?? $anticipated, 'precio en puerta', 0, 999999999.99);
         $normal = decimal_amount($body['precio'] ?? $anticipated, 'precio normal', 0, 999999999.99);
         $stockRaw = $body['stock'] ?? null;
         $stock = ($stockRaw === null || trim((string)$stockRaw) === '') ? null : self::integer($stockRaw, 'stock', 0, 10000000);
-        $active = self::boolValue($body['activo'] ?? true);
-        $after = transaction($db, function () use ($db,$auth,$id,$name,$description,$anticipated,$door,$normal,$stock,$active) {
+        $after = transaction($db, function () use ($db,$auth,$id,$name,$description,$anticipated,$door,$normal,$stock) {
             $before = $id ? self::product($db, $id, true) : null;
+            // El alta/edición no modifica el estado. Los productos nuevos nacen activos
+            // y las bajas/reactivaciones pasan exclusivamente por estadoProducto().
+            $active = $before ? (int)$before['activo'] : 1;
             if ($id) {
-                $db->prepare('UPDATE ventas_productos SET nombre=?, descripcion=?, precio=?, precio_anticipada=?, precio_puerta=?, stock=?, activo=? WHERE id_producto=?')
-                   ->execute([$name,$description,$normal,$anticipated,$door,$stock,$active,$id]);
+                $db->prepare('UPDATE ventas_productos SET nombre=?, descripcion=?, precio=?, precio_anticipada=?, precio_puerta=?, stock=? WHERE id_producto=?')
+                   ->execute([$name,$description,$normal,$anticipated,$door,$stock,$id]);
                 $recordId = $id;
             } else {
                 $db->prepare('INSERT INTO ventas_productos (nombre,descripcion,precio,precio_anticipada,precio_puerta,stock,activo) VALUES (?,?,?,?,?,?,?)')
@@ -641,11 +651,13 @@ final class Ventas
         transaction($db,function()use($db,$auth,$id,$active){
             $before=self::product($db,$id,true);
             $db->prepare('UPDATE ventas_productos SET activo=? WHERE id_producto=?')->execute([$active,$id]);
-            if (!$active) $db->prepare('UPDATE ventas_campanias SET activo=0, visible_menu=0 WHERE id_producto_principal=?')->execute([$id]);
+            // Dar de baja el producto baja cualquier configuración que dependa de él,
+            // pero conserva visible_menu para no perder la preferencia del usuario.
+            if (!$active) $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_producto_principal=?')->execute([$id]);
             $after=self::product($db,$id);
             audit_change($db,$auth,'VENTAS',$active?'ACTIVAR_PRODUCTO':'DESACTIVAR_PRODUCTO','ventas_productos',$id,'Cambio de estado de producto.',$before,$after);
         });
-        api_success([], $active?'Producto activado.':'Producto desactivado.');
+        api_success([], $active?'Producto activado.':'Producto dado de baja.');
     }
 
     public static function eliminarProducto(): never
@@ -656,7 +668,7 @@ final class Ventas
             $uses=(int)self::fetchOne($db,'SELECT (SELECT COUNT(*) FROM ventas_orden_items WHERE id_producto=?)+(SELECT COUNT(*) FROM ventas_campanias WHERE id_producto_principal=?) AS n',[$id,$id])['n'];
             if($uses>0){
                 $db->prepare('UPDATE ventas_productos SET activo=0 WHERE id_producto=?')->execute([$id]);
-                $db->prepare('UPDATE ventas_campanias SET activo=0, visible_menu=0 WHERE id_producto_principal=?')->execute([$id]);
+                $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_producto_principal=?')->execute([$id]);
                 $after=self::product($db,$id);
                 audit_change($db,$auth,'VENTAS','ARCHIVAR_PRODUCTO','ventas_productos',$id,'Producto utilizado: se archivó.',$before,$after);
                 return 'archivado';
@@ -779,8 +791,8 @@ final class Ventas
         $paymentId=positive_id($body['id_medio_pago'] ?? null,'medio de pago');
         $state=self::normalizeState($body['estado'] ?? 'aprobada');
         $saleDate=valid_date($body['fecha_venta'] ?? date('Y-m-d'),'venta',true);
-        $observation=optional_text($body['observacion'] ?? null,3000,false);
-        $reference=optional_text($body['referencia_pago'] ?? null,180,false);
+        $observation=optional_text($body['observacion'] ?? null,3000);
+        $reference=optional_text($body['referencia_pago'] ?? null,180);
         [$items,$total]=self::normalizeItems($db,$body['items'] ?? []);
         $allDoor=self::allDoorPrice($items);
 
@@ -835,7 +847,7 @@ final class Ventas
 
     public static function eliminarOrden(): never
     {
-        $db=self::db();$auth=self::auth();$body=request_body();$id=positive_id($body['id_orden'] ?? $body['id'] ?? null,'venta');$reason=optional_text($body['motivo'] ?? null,1000,false);
+        $db=self::db();$auth=self::auth();$body=request_body();$id=positive_id($body['id_orden'] ?? $body['id'] ?? null,'venta');$reason=optional_text($body['motivo'] ?? null,1000);
         transaction($db,function()use($db,$auth,$id,$reason){
             $before=self::order($db,$id,true);
             if($before['estado']==='cancelada') return;
@@ -855,22 +867,22 @@ final class Ventas
         api_success([
             'anios'=>$db->query('SELECT id_anio,nombre_anio FROM anio ORDER BY id_anio')->fetchAll(PDO::FETCH_ASSOC)?:[],
             'divisiones'=>$db->query('SELECT id_division,nombre_division FROM division ORDER BY id_division')->fetchAll(PDO::FETCH_ASSOC)?:[],
-            'campanias'=>$db->query('SELECT id_campania,nombre,activo,id_producto_principal FROM ventas_campanias ORDER BY id_campania DESC')->fetchAll(PDO::FETCH_ASSOC)?:[],
+            'campanias'=>$db->query('SELECT id_campania,nombre,activo,id_producto_principal FROM ventas_campanias ORDER BY activo DESC,id_campania DESC')->fetchAll(PDO::FETCH_ASSOC)?:[],
             'total_docentes'=>(int)$db->query('SELECT COUNT(*) FROM docentes WHERE activo=1')->fetchColumn(),
         ]);
     }
 
     public static function datosPlanillas(): never
     {
-        $db=self::db();$type=strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));$campaignId=positive_id($_GET['id_campania'] ?? null,'campaña');$campaign=self::campaign($db,$campaignId);$onlyActive=($_GET['solo_activos'] ?? '1')!=='0';
+        $db=self::db();$type=strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));$campaignId=positive_id($_GET['id_campania'] ?? null,'campaña');$campaign=self::campaign($db,$campaignId);
         if($type==='docentes'){
-            $sql='SELECT id_docente, docente AS nombre_completo, dni, email, activo FROM docentes'.($onlyActive?' WHERE activo=1':'').' ORDER BY docente';
+            $sql='SELECT id_docente, docente AS nombre_completo, dni, email, activo FROM docentes WHERE activo=1 ORDER BY docente';
             $rows=$db->query($sql)->fetchAll(PDO::FETCH_ASSOC)?:[];
             api_success(['tipo'=>'docentes','campania'=>$campaign,'items'=>$rows]);
         }
         $year=self::nullablePositiveId($_GET['id_anio'] ?? null);$division=self::nullablePositiveId($_GET['id_division'] ?? null);
         $principalId=(int)($campaign['id_producto_principal'] ?? 0);
-        $where=['a.eliminado=0'];$params=[];if($onlyActive){$where[]='a.activo=1';$where[]='a.ingreso<=CURDATE()';}if($year){$where[]='a.id_anio=?';$params[]=$year;}if($division){$where[]='a.id_division=?';$params[]=$division;}
+        $where=['a.eliminado=0','a.activo=1','a.ingreso<=CURDATE()'];$params=[];if($year){$where[]='a.id_anio=?';$params[]=$year;}if($division){$where[]='a.id_division=?';$params[]=$division;}
         $sql="SELECT a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division,
                     COALESCE(SUM(CASE WHEN o.estado='aprobada' AND oi.id_producto={$principalId} THEN oi.cantidad ELSE 0 END),0) AS cantidad_ven,
                     COALESCE(SUM(CASE WHEN o.estado='aprobada' AND (oi.id_producto IS NULL OR oi.id_producto<>{$principalId}) THEN oi.cantidad ELSE 0 END),0) AS cantidad_gan,
