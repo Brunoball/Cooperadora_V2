@@ -2202,7 +2202,7 @@
 
 @media (max-width: 620px) {
   .alumnos-importModal {
-    width: min(100%, calc(100vw - 20px));
+    width: min(100%, calc(100vw - 21px));
   }
 
   .alumnos-importModal .entity-modal__body {
