@@ -42,10 +42,10 @@
 /* Medidas y alineaciones exclusivas de la tabla de Familias. */
 .familias-grid {
   grid-template-columns:
-    minmax(0, 1.25fr)
-    minmax(0, 2fr)
-    minmax(0, 0.65fr)
-    minmax(0, 0.75fr);
+    1.25fr
+    2fr
+    0.65fr
+    0.75fr;
   width: 100%;
   min-width: 0;
 }

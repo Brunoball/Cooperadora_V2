@@ -148,33 +148,33 @@
 
 .contable-grid--income {
   grid-template-columns:
-    minmax(0, 1.22fr)
-    minmax(0, 0.75fr)
-    minmax(0, 0.92fr)
-    minmax(0, 1.45fr)
-    minmax(0, 0.82fr)
-    minmax(0, 0.58fr);
+    1.22fr
+    0.75fr
+    0.92fr
+    1.45fr
+    0.82fr
+    0.58fr;
 }
 
 .contable-grid--income-readonly {
   grid-template-columns:
-    minmax(0, 1.22fr)
-    minmax(0, 0.75fr)
-    minmax(0, 0.92fr)
-    minmax(0, 1.45fr)
-    minmax(0, 0.82fr);
+    1.22fr
+    0.75fr
+    0.92fr
+    1.45fr
+    0.82fr;
 }
 
 .contable-grid--expense {
   min-width: 0;
   grid-template-columns:
-    minmax(0, 1.18fr)
-    minmax(0, 0.72fr)
-    minmax(0, 0.9fr)
-    minmax(0, 1.35fr)
-    minmax(0, 0.82fr)
-    minmax(0, 0.82fr)
-    minmax(0, 0.6fr);
+    1.18fr
+    0.72fr
+    0.9fr
+    1.35fr
+    0.82fr
+    0.82fr
+    0.6fr;
 }
 
 .contable-grid > * {

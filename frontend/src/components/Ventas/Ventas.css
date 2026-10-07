@@ -170,37 +170,37 @@
 
 .ventas-grid--products {
   grid-template-columns:
-    minmax(0, 1.55fr)
-    minmax(82px, .72fr)
-    minmax(82px, .72fr)
-    minmax(70px, .58fr)
-    minmax(0, 1fr)
-    minmax(82px, .68fr)
-    minmax(104px, .72fr);
+    1.55fr
+    .72fr
+    .72fr
+    .58fr
+    1fr
+    .68fr
+    .72fr;
 }
 
 .ventas-grid--campaigns {
   grid-template-columns:
-    minmax(0, 1.55fr)
-    minmax(0, 1.22fr)
-    minmax(105px, .9fr)
-    minmax(90px, .72fr)
-    minmax(62px, .48fr)
-    minmax(82px, .66fr)
-    minmax(104px, .72fr);
+    1.55fr
+    1.22fr
+    .9fr
+    .72fr
+    .48fr
+    .66fr
+    .72fr;
 }
 
 .ventas-grid--orders {
   grid-template-columns:
-    minmax(0, 1.28fr)
-    minmax(0, 1.18fr)
-    minmax(86px, .72fr)
-    minmax(88px, .72fr)
-    minmax(82px, .67fr)
-    minmax(82px, .67fr)
-    minmax(84px, .68fr)
-    minmax(92px, .72fr)
-    minmax(120px, .82fr);
+    1.28fr
+    1.18fr
+    .72fr
+    .72fr
+    .67fr
+    .67fr
+    .68fr
+    .72fr
+    .82fr;
 }
 
 .ventas-global-table .mov-gridCell,
@@ -1027,15 +1027,15 @@
 
   .ventas-grid--orders {
     grid-template-columns:
-      minmax(0, 1.18fr)
-      minmax(0, 1.05fr)
-      minmax(72px, .62fr)
-      minmax(78px, .66fr)
-      minmax(76px, .62fr)
-      minmax(76px, .62fr)
-      minmax(76px, .62fr)
-      minmax(84px, .66fr)
-      minmax(112px, .78fr);
+      1.18fr
+      1.05fr
+      .62fr
+      .66fr
+      .62fr
+      .62fr
+      .62fr
+      .66fr
+      .78fr;
   }
 
   .ventas-global-table .mov-gridCell {

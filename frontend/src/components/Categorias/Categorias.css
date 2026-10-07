@@ -1,12 +1,12 @@
 /* Medidas y alineaciones exclusivas de las tablas de Categorías. */
 .categorias-grid {
   grid-template-columns:
-    minmax(0, 1.15fr)
-    minmax(0, 0.9fr)
-    minmax(0, 0.9fr)
-    minmax(0, 0.72fr)
-    minmax(0, 0.82fr)
-    minmax(0, 0.68fr);
+    1.15fr
+    0.9fr
+    0.9fr
+    0.72fr
+    0.82fr
+    0.68fr;
   width: 100%;
   min-width: 0;
 }
@@ -33,13 +33,13 @@
 
 .categorias-discountsGrid {
   grid-template-columns:
-    minmax(0, 1fr)
-    minmax(0, 0.62fr)
-    minmax(0, 1.02fr)
-    minmax(0, 1.02fr)
-    minmax(0, 0.82fr)
-    minmax(0, 0.72fr)
-    minmax(0, 0.72fr);
+    1fr
+    0.62fr
+    1.02fr
+    1.02fr
+    0.82fr
+    0.72fr
+    0.72fr;
   width: 100%;
   min-width: 0;
 }

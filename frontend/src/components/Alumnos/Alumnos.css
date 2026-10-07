@@ -57,23 +57,23 @@
 
 .socios-grid {
   grid-template-columns:
-    minmax(220px, 2fr)
-    minmax(130px, 1fr)
-    minmax(175px, 1.4fr)
-    minmax(160px, 1.2fr)
-    minmax(120px, .85fr)
-    minmax(136px, .84fr);
+    2fr
+    1fr
+    1.4fr
+    1.2fr
+    .85fr
+    .84fr;
   width: 100%;
   min-width: 900px;
 }
 
 .socios-grid.socios-grid--bajas {
   grid-template-columns:
-    minmax(64px, .42fr)
-    minmax(0, 2fr)
-    minmax(128px, .72fr)
-    minmax(0, 3.45fr)
-    minmax(0, .9fr);
+    .42fr
+    2fr
+    .72fr
+    3.45fr
+    .9fr;
 }
 
 .socios-bajaDateCell {
@@ -1854,14 +1854,14 @@
 
 .alumnos-inactive-grid {
   grid-template-columns:
-    minmax(190px, 1.65fr)
-    minmax(130px, .95fr)
-    minmax(165px, 1.25fr)
-    minmax(150px, 1.05fr)
-    minmax(120px, .8fr)
-    minmax(112px, .8fr)
-    minmax(155px, 1.15fr)
-    minmax(136px, .82fr);
+    1.65fr
+    .95fr
+    1.25fr
+    1.05fr
+    .8fr
+    .8fr
+    1.15fr
+    .82fr;
   min-width: 1080px;
   width: 100%;
 }

@@ -194,10 +194,10 @@
   min-width: 0;
   display: grid;
   grid-template-columns:
-    minmax(0, 1.7fr)
-    minmax(150px, 0.9fr)
-    minmax(100px, 0.65fr)
-    minmax(92px, 0.55fr);
+    1.7fr
+    0.9fr
+    0.65fr
+    0.55fr;
   align-items: center;
 }
 
@@ -525,7 +525,7 @@
 
   .config-catalogTable__row,
   .config-catalogTable__skeletonRow {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr .7fr;
     grid-template-areas:
       "identity actions"
       "usage state";

@@ -16,7 +16,7 @@
 }
 
 .ct-student-grid {
-  grid-template-columns: minmax(240px, 1.55fr) 120px 150px minmax(145px, .9fr) minmax(135px, .85fr) minmax(145px, .9fr);
+  grid-template-columns: 1.55fr .8fr 1fr .9fr .85fr .9fr;
 }
 
 

@@ -192,12 +192,12 @@
   min-width: 0;
   display: grid;
   grid-template-columns:
-    minmax(0, 1.35fr)
-    minmax(0, 1.45fr)
-    minmax(92px, 0.8fr)
-    minmax(88px, 0.65fr)
-    minmax(112px, 0.8fr)
-    minmax(106px, 0.65fr);
+    1.35fr
+    1.45fr
+    0.8fr
+    0.65fr
+    0.8fr
+    0.65fr;
   align-items: center;
 }
 
@@ -627,7 +627,7 @@
 
   .config-usersTable__row,
   .config-usersTable__skeletonRow {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr .7fr;
     grid-template-areas:
       "identity actions"
       "email email"
