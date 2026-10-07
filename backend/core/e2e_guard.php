@@ -88,6 +88,10 @@ function e2e_target_state(PDO $db, string $kind, int $id): ?bool
             'alumnos', 'id_alumno',
             "UPPER(apellido) LIKE 'PW E2E ALUMNO %' OR UPPER(apellido) LIKE 'PW EEE ALUMNO %'",
         ],
+        'ingresante' => [
+            'ingresantes', 'id_ingresante',
+            "UPPER(apellido) LIKE 'PW E2E INGRESANTE %' OR UPPER(apellido) LIKE 'PW EEE INGRESANTE %'",
+        ],
         'familia' => [
             'familias', 'id_familia',
             "UPPER(nombre_familia) LIKE 'PW E2E FAM %' OR UPPER(nombre_familia) LIKE 'PW EEE FAM %'",
@@ -195,6 +199,75 @@ function e2e_assert_alumno_ids(PDO $db, string $action, array $body): void
     );
     foreach (array_values(array_unique($ids)) as $id) {
         e2e_assert_target($db, $action, 'alumno', $id);
+    }
+}
+
+
+function e2e_assert_ingresante_dni_safe(
+    PDO $db,
+    string $action,
+    mixed $rawDni,
+    ?int $excludeIncomingId = null
+): void {
+    $dni = preg_replace('/\D+/', '', (string)$rawDni) ?: '';
+    if ($dni === '') return;
+
+    $student = $db->prepare(
+        'SELECT id_alumno, apellido
+           FROM alumnos
+          WHERE num_documento = ?
+          LIMIT 1'
+    );
+    $student->execute([$dni]);
+    $studentRow = $student->fetch(PDO::FETCH_ASSOC);
+    if ($studentRow && !e2e_marker((string)$studentRow['apellido'], ['PW E2E ALUMNO ', 'PW EEE ALUMNO '])) {
+        e2e_scope_error($action, 'El DNI del ingresante E2E coincide con un alumno real.');
+    }
+
+    $sql = 'SELECT id_ingresante, apellido
+              FROM ingresantes
+             WHERE num_documento = ?';
+    $params = [$dni];
+    if ($excludeIncomingId !== null && $excludeIncomingId > 0) {
+        $sql .= ' AND id_ingresante <> ?';
+        $params[] = $excludeIncomingId;
+    }
+    $sql .= ' LIMIT 1';
+
+    $incoming = $db->prepare($sql);
+    $incoming->execute($params);
+    $incomingRow = $incoming->fetch(PDO::FETCH_ASSOC);
+    if (
+        $incomingRow
+        && !e2e_marker((string)$incomingRow['apellido'], ['PW E2E INGRESANTE ', 'PW EEE INGRESANTE '])
+    ) {
+        e2e_scope_error($action, 'El DNI del ingresante E2E coincide con una preinscripción real.');
+    }
+}
+
+function e2e_assert_ingresantes_conversion(PDO $db, string $action, array $body): void
+{
+    $rawIds = $body['ids_ingresantes'] ?? $body['ids'] ?? [];
+    if (!is_array($rawIds)) return; // El handler funcional responderá 422.
+
+    foreach ($rawIds as $rawId) {
+        if (!is_scalar($rawId) || !preg_match('/^\d+$/', (string)$rawId)) continue;
+        $id = (int)$rawId;
+        if ($id <= 0) continue;
+
+        e2e_assert_target($db, $action, 'ingresante', $id);
+
+        // La conversión puede crear/reactivar/actualizar alumnos por DNI.
+        // Un ingresante E2E jamás puede reutilizar una identidad real.
+        $statement = $db->prepare(
+            'SELECT num_documento
+               FROM ingresantes
+              WHERE id_ingresante = ?
+              LIMIT 1'
+        );
+        $statement->execute([$id]);
+        $dni = $statement->fetchColumn();
+        if ($dni !== false) e2e_assert_ingresante_dni_safe($db, $action, (string)$dni, $id);
     }
 }
 
@@ -483,6 +556,35 @@ function e2e_scope_guard(string $action, array $auth): void
             // Playwright sólo cubre la acción verificando esta barrera: nunca la ejecuta,
             // ni siquiera en local, porque la base local puede ser una copia con datos reales.
             e2e_scope_error($action, 'La sincronización completa del padrón está bloqueada para Playwright para proteger datos reales.');
+
+        case 'ingresantes_guardar':
+            $incomingIdRaw = $body['id_ingresante'] ?? $body['id'] ?? null;
+            $incomingId = null;
+            if ($incomingIdRaw !== null && trim((string)$incomingIdRaw) !== '') {
+                e2e_assert_target($db, $action, 'ingresante', $incomingIdRaw);
+                if (preg_match('/^\d+$/', (string)$incomingIdRaw)) $incomingId = (int)$incomingIdRaw;
+            } else {
+                $surname = trim((string)($body['apellido'] ?? ''));
+                if (
+                    $surname !== ''
+                    && !e2e_marker($surname, ['PW E2E INGRESANTE ', 'PW EEE INGRESANTE '])
+                ) {
+                    e2e_scope_error(
+                        $action,
+                        'Un ingresante creado por Playwright debe usar apellido PW E2E/PW EEE INGRESANTE.'
+                    );
+                }
+            }
+            e2e_assert_ingresante_dni_safe($db, $action, $body['num_documento'] ?? $body['dni'] ?? null, $incomingId);
+            return;
+
+        case 'ingresantes_estado':
+            e2e_assert_target($db, $action, 'ingresante', $body['id'] ?? $body['id_ingresante'] ?? null);
+            return;
+
+        case 'ingresantes_pasar_alumnos':
+            e2e_assert_ingresantes_conversion($db, $action, $body);
+            return;
 
         case 'familias_guardar':
             if (!empty($body['id_familia'])) {

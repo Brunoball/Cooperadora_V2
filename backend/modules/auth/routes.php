@@ -101,7 +101,10 @@ function auth_reject_locked_login(array $lock): never
 
 function auth_cookie(string $token, int $expires): void
 {
-    $secure = env_bool('SESSION_COOKIE_SECURE', (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'));
+    $requestIsHttps = !empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off';
+    // Si la petición ya llegó por HTTPS, el token nunca debe emitirse en una
+    // cookie sin Secure aunque el .env haya quedado mal configurado.
+    $secure = $requestIsHttps || env_bool('SESSION_COOKIE_SECURE', false);
     setcookie((string)env_value('SESSION_COOKIE_NAME', 'cooperadora_session'), $token, [
         'expires' => $expires,
         'path' => '/',

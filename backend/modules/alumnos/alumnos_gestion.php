@@ -1067,7 +1067,7 @@ trait AlumnosGestion
         if (in_array($driverCode, [1451, 1452], true)) api_error('Uno de los datos relacionados seleccionados no existe o está siendo utilizado.', 'RELACION_INVALIDA', 409);
         error_log('[alumnos][PDO][' . $driverCode . '] ' . $error->__toString());
         $message = 'No se pudo guardar el alumno.';
-        if (env_bool('APP_DEBUG', false)) $message .= ' MySQL: ' . $error->getMessage();
+        if (app_debug_enabled()) $message .= ' MySQL: ' . $error->getMessage();
         api_error($message, 'ALUMNO_DB_ERROR', 500);
     }
 }

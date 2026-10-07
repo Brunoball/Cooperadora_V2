@@ -28,7 +28,7 @@ require_once __DIR__ . '/../modules/testing_cleanup/routes.php';
 require_once __DIR__ . '/../modules/testing_safety/routes.php';
 
 date_default_timezone_set((string)env_value('APP_TIMEZONE', 'America/Argentina/Cordoba'));
-ini_set('display_errors', env_bool('APP_DEBUG', false) ? '1' : '0');
+ini_set('display_errors', app_debug_enabled() ? '1' : '0');
 
 $router = new Router();
 $router->register('health', 'GET', static function () {
@@ -57,6 +57,6 @@ try {
 } catch (Throwable $error) {
     error_log($error->__toString());
     $payload = ['exito' => false, 'mensaje' => 'Error interno del servidor.'];
-    if (env_bool('APP_DEBUG', false)) $payload['detalle'] = $error->getMessage();
+    if (app_debug_enabled()) $payload['detalle'] = $error->getMessage();
     json_response($payload, 500);
 }

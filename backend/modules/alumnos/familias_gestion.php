@@ -75,7 +75,7 @@ trait FamiliasGestion
             if ($driverCode === 1062) api_error('Ya existe una familia con ese nombre.', 'FAMILIA_DUPLICADA', 409);
             error_log('[familias][PDO][' . $driverCode . '] ' . $error->__toString());
             $message = 'No se pudo guardar la familia.';
-            if (env_bool('APP_DEBUG', false)) $message .= ' MySQL: ' . $error->getMessage();
+            if (app_debug_enabled()) $message .= ' MySQL: ' . $error->getMessage();
             api_error($message, 'FAMILIA_DB_ERROR', 500);
         }
 
