@@ -32,7 +32,22 @@ abstract class CuotasSoporte
 
     protected static function fechaPago(mixed $value): string
     {
-        return valid_date($value, 'pago') ?? date('Y-m-d');
+        $date = valid_date($value, 'pago') ?? date('Y-m-d');
+        $today = date('Y-m-d');
+
+        // Contable registra el momento real en que ingresó el dinero. Una fecha
+        // futura generaría movimientos contables anticipados y rompería ese criterio.
+        // Se valida en backend aunque el frontend también limite el selector.
+        if ($date > $today) {
+            api_error(
+                'La fecha de pago no puede ser posterior a hoy.',
+                'FECHA_PAGO_FUTURA',
+                422,
+                ['fecha_pago' => $date, 'fecha_maxima' => $today]
+            );
+        }
+
+        return $date;
     }
 
     protected static function idOpcional(mixed $value, string $label): ?int

@@ -218,8 +218,11 @@ export default function ModalPagoCuota({
     });
   };
 
+  const fechaMaxima = today();
+  const fechaFutura = Boolean(fecha && fecha > fechaMaxima);
   const submitDisabled =
     selected.length === 0 ||
+    fechaFutura ||
     (!condoning && !medio) ||
     (!condoning && selected.some((id) => Number(amounts[String(id)] || 0) <= 0));
 
@@ -255,8 +258,10 @@ export default function ModalPagoCuota({
   };
 
   const changeDate = async (value) => {
-    setFecha(value);
-    await onReloadContext?.({ anio: Number(anio), fecha_pago: value });
+    const maximum = today();
+    const normalized = value && value > maximum ? maximum : value;
+    setFecha(normalized);
+    await onReloadContext?.({ anio: Number(anio), fecha_pago: normalized });
   };
 
   const saveGlobalRegistration = async () => {
@@ -323,7 +328,12 @@ export default function ModalPagoCuota({
     <section className="cuotas-v2-payment-toolbar cuotas-v2-payment-toolbar--inside-tab">
       <label>
         <span><FontAwesomeIcon icon={faCalendarDays} /> Fecha</span>
-        <input type="date" value={fecha} onChange={(event) => changeDate(event.target.value)} />
+        <input
+          type="date"
+          value={fecha}
+          max={fechaMaxima}
+          onChange={(event) => changeDate(event.target.value)}
+        />
       </label>
       <label>
         <span>Año</span>
