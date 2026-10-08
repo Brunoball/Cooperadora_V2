@@ -4,6 +4,24 @@ declare(strict_types=1);
 /** Funciones de Ventas agrupadas por subsección; cargado desde ventas.php. */
 trait VentasConfiguracion
 {
+    // Dependencias explícitas del trait. Las implementa la clase Ventas
+    // (directamente o mediante VentasOrdenes). Evita falsos avisos del
+    // analizador PHP del editor sin cambiar ninguna operación del sistema.
+    abstract private static function db(): PDO;
+    abstract private static function auth(): array;
+    abstract private static function nullablePositiveId(mixed $value): ?int;
+    abstract private static function boolValue(mixed $value): int;
+    abstract private static function integer(mixed $value, string $label, int $min = 0, int $max = 1000000): int;
+    abstract private static function pagination(): array;
+    abstract private static function fetchOne(PDO $db, string $sql, array $params = []): ?array;
+    abstract private static function campaign(PDO $db, int $id, bool $forUpdate = false): array;
+    abstract private static function product(PDO $db, int $id, bool $forUpdate = false): array;
+    abstract private static function resolvePerson(PDO $db, array $body): ?int;
+    abstract private static function objectiveForSold(array $campaign, int $sold): array;
+
+    // El mismo valor y visibilidad que Ventas::MONEY_MAX. PHP 8.2+
+    // permite declarar una constante compatible en la clase y en su trait.
+    private const MONEY_MAX = 9999999999.99;
     // Campañas y configuración
     public static function campanias(): never
     {
@@ -262,7 +280,7 @@ trait VentasConfiguracion
     public static function menuActivo(): never
     {
         $db=app_db();
-        $row=self::fetchOne($db,"SELECT c.id_campania,c.nombre,c.pregunta_persona,c.mensaje_inicio,c.mensaje_aprobado,c.fecha_inicio,c.fecha_fin,
+        $row=self::fetchOne($db,"SELECT c.id_campania,c.nombre,c.tipo_persona,c.pregunta_persona,c.mensaje_inicio,c.mensaje_aprobado,c.fecha_inicio,c.fecha_fin,
                    c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
                    p.id_producto,p.nombre AS producto_nombre,p.descripcion AS producto_descripcion,p.precio_anticipada,p.precio_puerta,p.stock
               FROM ventas_campanias c INNER JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
@@ -271,7 +289,7 @@ trait VentasConfiguracion
              ORDER BY c.id_campania DESC LIMIT 1");
         if(!$row)api_success(['mostrar_opcion_menu'=>false,'campania_activa'=>null,'campanias'=>[]]);
         $campaign=[
-            'id_campania'=>(int)$row['id_campania'],'nombre'=>$row['nombre'],'tipo_persona'=>'vendedor','tipo_flujo'=>'dni_persona','dato_requerido'=>'dni',
+            'id_campania'=>(int)$row['id_campania'],'nombre'=>$row['nombre'],'tipo_persona'=>$row['tipo_persona'],'tipo_flujo'=>'dni_persona','dato_requerido'=>'dni',
             'pregunta_persona'=>$row['pregunta_persona'],'mensaje_inicio'=>$row['mensaje_inicio'],'mensaje_aprobado'=>$row['mensaje_aprobado'],'fecha_inicio'=>$row['fecha_inicio'],'fecha_fin'=>$row['fecha_fin'],
             'objetivo_venta'=>[
                 'cantidad_minima'=>(int)($row['cantidad_minima_persona'] ?? 0),
