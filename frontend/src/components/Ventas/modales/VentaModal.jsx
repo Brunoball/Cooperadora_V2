@@ -27,7 +27,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [conceptsOpen, setConceptsOpen] = useState(false);
-  const [objectiveBase, setObjectiveBase] = useState({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
+  const [objectiveBase, setObjectiveBase] = useState({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
   const searchTimer = useRef(null);
   const personSearchSeq = useRef(0);
 
@@ -50,7 +50,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setPersonSearch("");
     setPeople([]);
     setConceptsOpen(false);
-    setObjectiveBase({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
+    setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
       return undefined;
@@ -96,13 +96,13 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   useEffect(() => {
     if (!open || !form.id_campania || !objectiveEnabled || !hasPersonReference) {
-      setObjectiveBase({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
+      setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
       return undefined;
     }
 
     let alive = true;
     const timer = setTimeout(async () => {
-      setObjectiveBase((current) => ({ ...current, loading: true }));
+      setObjectiveBase((current) => ({ ...current, loading: true, ready: false }));
       try {
         const data = await ventasApi.objetivoPersona({
           id_campania: form.id_campania,
@@ -113,12 +113,14 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         if (!alive) return;
         setObjectiveBase({
           loading: false,
+          ready: true,
           vendidas_previas: Number(data?.vendidas_previas || 0),
+          ganancia_cobrada_previa: Number(data?.ganancia_cobrada_previa || 0),
           persona_encontrada: Number(data?.persona_encontrada || 0),
         });
       } catch (err) {
         if (!alive) return;
-        setObjectiveBase({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
+        setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
         onFeedback("error", err.message);
       }
     }, 180);
@@ -182,21 +184,30 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const currentCountedQuantity = form.estado === "aprobada" ? principalQuantity : 0;
   const objectiveSold = previousQuantity + currentCountedQuantity;
   const objectiveMissing = Math.max(0, objectiveMinimum - objectiveSold);
-  const objectiveDue = objectiveMissing <= 0
+  const objectiveRuleDue = objectiveMissing <= 0
     ? 0
     : objectiveSold === 0
       ? objectiveNoSales
       : objectiveMissing * objectivePerMissing;
-  const objectiveGainForTotal = objectiveEnabled && hasPersonReference
-    ? (objectiveBase.loading ? Math.max(0, Number(form.ganancia_objetivo || 0)) : objectiveDue)
+  const objectiveReady = objectiveBase.ready && !objectiveBase.loading;
+  const objectiveDue = Math.max(0, objectiveRuleDue - Math.max(0, Number(objectiveBase.ganancia_cobrada_previa || 0)));
+  const objectiveGainForTotal = objectiveEnabled && hasPersonReference && objectiveReady && form.estado === "aprobada"
+    ? objectiveDue
     : 0;
+  const canSettleGainOnly = !hasConfiguredItems && configuredItems.length === 0 && objectiveGainForTotal > 0;
+  const canSave = (hasConfiguredItems || canSettleGainOnly)
+    && !(objectiveEnabled && hasPersonReference && !objectiveReady);
   const total = itemsSubtotal + objectiveGainForTotal;
 
   const submit = (event) => {
     event.preventDefault();
-    if (!hasConfiguredItems) {
-      setConceptsOpen(true);
-      onFeedback("error", "Agregá al menos un concepto válido antes de guardar la venta.");
+    if (!canSave) {
+      if (!objectiveReady && objectiveEnabled && hasPersonReference) {
+        onFeedback("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
+      } else {
+        onFeedback("error", "Agregá un concepto válido o liquidá una ganancia pendiente.");
+        if (!canSettleGainOnly) setConceptsOpen(true);
+      }
       return;
     }
     onSave({
@@ -205,13 +216,15 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       id_venta_persona: form.id_venta_persona || null,
       dni: form.dni.replace(/\D/g, ""),
       nombre_apellido: upper(form.nombre_apellido, 160),
-      items: form.items.map((item) => ({ ...item, cantidad: Number(item.cantidad || 0), precio_unitario: Number(item.precio_unitario || 0) })),
+      items: canSettleGainOnly ? [] : form.items
+        .filter((item) => String(item.producto_nombre || "").trim())
+        .map((item) => ({ ...item, cantidad: Number(item.cantidad || 0), precio_unitario: Number(item.precio_unitario || 0) })),
     });
   };
 
   return (
     <>
-      <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!hasConfiguredItems} wide modalClassName="ventas-modal ventas-order-modal">
+      <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
       <div className="ventas-form-grid ventas-form-grid--order-head">
         <FloatingField label="Venta / campaña" className="ventas-modal-field">
           <select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
@@ -233,7 +246,9 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           <small>
             {hasConfiguredItems
               ? `${configuredItems.length} ${configuredItems.length === 1 ? "concepto agregado" : "conceptos agregados"}`
-              : "Agregá los productos o conceptos que forman parte de esta venta."}
+              : canSettleGainOnly
+                ? "Ganancia por objetivo sin unidades vendidas. No se descontará stock."
+                : "Agregá los productos o conceptos que forman parte de esta venta."}
           </small>
         </div>
         <div className="ventas-concepts-launcher__actions">
@@ -241,7 +256,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
             <span>Total venta</span>
             <strong>{money(total)}</strong>
             {objectiveGainForTotal > 0 ? (
-              <small>{money(itemsSubtotal)} productos + {money(objectiveGainForTotal)} ganancia</small>
+              <small>{itemsSubtotal > 0 ? `${money(itemsSubtotal)} productos + ` : ""}{money(objectiveGainForTotal)} ganancia</small>
             ) : null}
           </div>
           <button
@@ -302,6 +317,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           <div className="ventas-objective-card__rule">
             <strong>Regla de la campaña</strong>
             <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
+            {Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 && objectiveReady ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
             {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar APROBADA.</span> : null}
             {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
           </div>

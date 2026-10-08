@@ -274,7 +274,7 @@ export default function Ingresantes() {
         className="ingresantes-page"
         secondaryActions={writable ? [{
           key: "pasar-alumnos",
-          label: "Pasar seleccionados a alumnos",
+          label: "Pasar a alumnos",
           icon: faCheck,
           className: "mov-btn--ghost",
           disabled: selectedCount <= 0 || processingBulk || !cycleCanActivate,

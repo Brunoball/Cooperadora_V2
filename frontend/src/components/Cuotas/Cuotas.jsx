@@ -557,6 +557,8 @@ export default function Cuotas() {
           ) : (
             items.map((item) => {
               const amount = item.estado === "DEUDOR" ? item.monto_sugerido : item.monto;
+              const tipoPago = String(item.origen_especial || "").trim();
+              const mostrarTipoPago = /CONTADO\s+ANUAL|(?:1(?:RA|ERA)?|PRIMERA|2(?:DA|NDA)?|SEGUNDA)\s+MITAD/i.test(tipoPago);
               return (
                 <div className="mov-gridTable mov-gridTable--row cuotas-grid-v2" role="row" key={`${item.id_alumno}-${item.id_mes}-${item.estado}-${item.id_pago || "deuda"}`}>
                   <div className="mov-gridCell cuotas-v2-student" role="cell">
@@ -571,8 +573,7 @@ export default function Cuotas() {
                   </div>
                   <div className="mov-gridCell cuotas-v2-amount" role="cell">
                     <strong>{money(amount)}</strong>
-                    {item.origen_especial ? <small>{item.origen_especial}</small> : null}
-                    {item.fecha_pago ? <small>{dateLabel(item.fecha_pago)}{item.medio_pago ? ` · ${item.medio_pago}` : ""}</small> : null}
+                    {mostrarTipoPago ? <small>{tipoPago}</small> : null}
                   </div>
                   <div className="mov-gridCell cuotas-v2-actions" role="cell">
                     {estado === "PAGADOS" ? (

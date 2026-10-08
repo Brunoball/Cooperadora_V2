@@ -42,7 +42,7 @@ const originText = (origin) => ({
 
 const exportRecord = (row) => ({
   campania: upper(row.campania_nombre, 150),
-  detalle: row.detalle_items ? upper(row.detalle_items, 3000) : `${row.cantidad_items || 0} CONCEPTOS`,
+  detalle: row.detalle_items ? upper(row.detalle_items, 3000) : Number(row.ganancia_objetivo || 0) > 0 ? "GANANCIA POR OBJETIVO" : `${row.cantidad_items || 0} CONCEPTOS`,
   persona: row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA",
   dni: row.dni || "—",
   medio: upper(row.medio_pago, 120),
@@ -245,7 +245,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
           >
             <div className="mov-gridCell entity-main-cell">
               <strong>{upper(row.campania_nombre, 150)}</strong>
-              <small>{row.detalle_items ? upper(row.detalle_items, 3000) : `${row.cantidad_items} CONCEPTOS`}</small>
+              <small>{row.detalle_items ? upper(row.detalle_items, 3000) : Number(row.ganancia_objetivo || 0) > 0 ? "GANANCIA POR OBJETIVO" : `${row.cantidad_items} CONCEPTOS`}</small>
             </div>
             <div className="mov-gridCell entity-main-cell">
               <strong>{row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA"}</strong>
@@ -352,7 +352,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
         confirmLabel={retreatConfirm && yes(retreatConfirm.retirado) ? "Quitar retiro" : "Marcar como retirado"}
         details={retreatConfirm ? [
           { label: "Venta", value: retreatConfirm.campania_nombre },
-          { label: "Detalle", value: retreatConfirm.detalle_items || `${retreatConfirm.cantidad_items || 0} conceptos` },
+          { label: "Detalle", value: retreatConfirm.detalle_items || (Number(retreatConfirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${retreatConfirm.cantidad_items || 0} conceptos`) },
           { label: "Persona", value: retreatConfirm.nombre_apellido || "Venta en puerta" },
         ] : []}
         onClose={() => setRetreatConfirm(null)}
@@ -362,7 +362,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
           return { mensaje: result.mensaje };
         }}
       />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || `${confirm.cantidad_items || 0} conceptos` }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); setConfirm(null); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
+      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); setConfirm(null); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
       {feedback}
     </ModulePage>
   );

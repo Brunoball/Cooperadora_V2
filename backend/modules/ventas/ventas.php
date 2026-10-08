@@ -171,8 +171,23 @@ final class Ventas
             }
         }
 
+        // La ganancia ya cobrada en otras órdenes aprobadas no se vuelve a
+        // facturar. Las históricas anteriores a V2 tienen ganancia_objetivo=0.
+        // El lock de ventas_personas en guardarOrden serializa operaciones
+        // simultáneas de una misma persona dentro de esta transacción.
+        if ($state !== 'aprobada') return 0.0;
+        $previousGain = self::fetchOne($db,
+            "SELECT COALESCE(SUM(ganancia_objetivo), 0) AS cobrado
+               FROM ventas_ordenes
+              WHERE id_venta_persona = ? AND id_campania = ? AND estado = 'aprobada'" .
+              ($excludeOrderId ? ' AND id_orden <> ?' : ''),
+            $excludeOrderId
+                ? [$personId, (int)$campaign['id_campania'], $excludeOrderId]
+                : [$personId, (int)$campaign['id_campania']]
+        );
         $objective = self::objectiveForSold($campaign, $soldBefore + $soldThisOrder);
-        return round(max(0.0, (float)($objective['ganancia_pendiente'] ?? 0)), 2);
+        $due = (float)($objective['ganancia_pendiente'] ?? 0);
+        return round(max(0.0, $due - (float)($previousGain['cobrado'] ?? 0)), 2);
     }
 
     private static function order(PDO $db, int $id, bool $forUpdate = false): array
@@ -304,7 +319,7 @@ final class Ventas
 
     private static function normalizeItems(PDO $db, mixed $rawItems): array
     {
-        if (!is_array($rawItems) || $rawItems === []) api_error('Agregá al menos un producto o concepto a la venta.', 'VALIDATION_ERROR');
+        if (!is_array($rawItems)) api_error('Los conceptos de la venta no son válidos.', 'VALIDATION_ERROR');
         $items = [];
         $total = 0.0;
         foreach ($rawItems as $index => $raw) {
@@ -343,8 +358,8 @@ final class Ventas
                 'tipo_precio' => $type,
             ];
         }
-        if ($items === []) api_error('Agregá al menos un concepto válido.', 'VALIDATION_ERROR');
-        if ($total <= 0) api_error('El total de la venta debe ser mayor a cero.', 'VALIDATION_ERROR');
+        // Un detalle vacío solo será válido cuando guardarOrden determine
+        // una ganancia por objetivo positiva, aprobada y ligada a una persona.
         return [$items, number_format($total, 2, '.', '')];
     }
 
@@ -1026,6 +1041,16 @@ final class Ventas
         }
 
         $sold=0;
+        $previousGain=0.0;
+        if ($personId) {
+            $gainSql="SELECT COALESCE(SUM(ganancia_objetivo),0) AS cobrado
+                        FROM ventas_ordenes
+                       WHERE id_venta_persona=? AND id_campania=? AND estado='aprobada'";
+            $gainParams=[$personId,$campaignId];
+            if ($excludeOrder) {$gainSql.=' AND id_orden<>?';$gainParams[]=$excludeOrder;}
+            $gainRow=self::fetchOne($db,$gainSql,$gainParams);
+            $previousGain=(float)($gainRow['cobrado'] ?? 0);
+        }
         $principalId=(int)($campaign['id_producto_principal'] ?? 0);
         if($personId && $principalId>0){
             $sql="SELECT COALESCE(SUM(oi.cantidad),0) AS vendidas
@@ -1043,6 +1068,7 @@ final class Ventas
             'id_venta_persona'=>$personId,
             'persona_encontrada'=>$personId ? 1 : 0,
             'vendidas_previas'=>$sold,
+            'ganancia_cobrada_previa'=>round($previousGain,2),
             'objetivo'=>$objective,
         ]);
     }
@@ -1123,10 +1149,18 @@ final class Ventas
             if($before && $before['estado']==='aprobada' && self::isStockManagedOrder($before)) self::adjustStock($db,$oldItems,+1);
             $personId=self::resolvePerson($db,$body);
             if(!$personId && !$allDoor) api_error('Las ventas anticipadas deben estar asociadas a una persona o alumno.','VALIDATION_ERROR');
+            if ($personId) {
+                // Bloqueo por persona: impide dos liquidaciones simultáneas
+                // de la misma campaña/persona con ganancia duplicada.
+                self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona=? FOR UPDATE', [$personId]);
+            }
 
             // La ganancia por objetivo forma parte del importe final de la venta.
             // Se calcula siempre en backend para que no pueda alterarse desde el navegador.
             $objectiveGain=self::objectiveChargeForOrder($db,$campaign,$personId,$id,$items,$state);
+            if ($items === [] && !($state === 'aprobada' && $personId && $objectiveGain > 0)) {
+                api_error('Agregá un concepto válido o liquidá una ganancia por objetivo pendiente.', 'VALIDATION_ERROR');
+            }
             $finalTotal=round((float)$itemsTotal+$objectiveGain,2);
             if($finalTotal<=0 || $finalTotal>self::MONEY_MAX) api_error('El total final de la venta no es válido.','VALIDATION_ERROR');
             $total=number_format($finalTotal,2,'.','');
@@ -1257,16 +1291,26 @@ final class Ventas
         $params=[];
         if($year){$where[]='a.id_anio=?';$params[]=$year;}
         if($division){$where[]='a.id_division=?';$params[]=$division;}
+        // Preagrupar ítems por orden evita multiplicar o.total y
+        // ganancia_objetivo cuando una venta contiene varios conceptos.
+        // El importe cobrado incluye productos + ganancias (total real).
         $sql="SELECT a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' AND oi.id_producto={$principalId} THEN oi.cantidad ELSE 0 END),0) AS cantidad_ven,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' AND (oi.id_producto IS NULL OR oi.id_producto<>{$principalId}) THEN oi.cantidad ELSE 0 END),0) AS cantidad_gan,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad ELSE 0 END),0) AS cantidad_vendida,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.subtotal ELSE 0 END),0) AS importe_vendido
+                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad_ven ELSE 0 END),0) AS cantidad_ven,
+                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad_gan ELSE 0 END),0) AS cantidad_gan,
+                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad_vendida ELSE 0 END),0) AS cantidad_vendida,
+                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN o.total ELSE 0 END),0) AS importe_vendido,
+                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN o.ganancia_objetivo ELSE 0 END),0) AS ganancia_cobrada
                FROM alumnos a
                LEFT JOIN anio an ON an.id_anio=a.id_anio LEFT JOIN division d ON d.id_division=a.id_division
                LEFT JOIN ventas_personas vp ON vp.id_alumno=a.id_alumno
                LEFT JOIN ventas_ordenes o ON o.id_venta_persona=vp.id_persona AND o.id_campania=?
-               LEFT JOIN ventas_orden_items oi ON oi.id_orden=o.id_orden
+               LEFT JOIN (
+                   SELECT id_orden,
+                          SUM(CASE WHEN id_producto={$principalId} THEN cantidad ELSE 0 END) AS cantidad_ven,
+                          SUM(CASE WHEN id_producto IS NULL OR id_producto<>{$principalId} THEN cantidad ELSE 0 END) AS cantidad_gan,
+                          SUM(cantidad) AS cantidad_vendida
+                     FROM ventas_orden_items GROUP BY id_orden
+               ) oi ON oi.id_orden=o.id_orden
               ".($where?'WHERE '.implode(' AND ',$where):'')."
               GROUP BY a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division
               ORDER BY a.id_anio,a.id_division,a.apellido,a.nombre";
@@ -1275,6 +1319,9 @@ final class Ventas
 
         foreach ($rows as &$row) {
             $objective=self::objectiveForSold($campaign,(int)($row['cantidad_ven'] ?? 0));
+            $objective['ganancia_pendiente']=round(max(0.0,
+                (float)$objective['ganancia_pendiente'] - (float)($row['ganancia_cobrada'] ?? 0)
+            ),2);
             $row=array_merge($row,$objective);
         }
         unset($row);
