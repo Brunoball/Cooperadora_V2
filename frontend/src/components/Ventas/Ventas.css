@@ -19,10 +19,10 @@
   min-height: 44px;
   display: flex;
   align-items: center;
+  justify-content: center;
 }
 
 .ventas-page .module-titleRow {
-  min-height: 44px;
   align-items: center;
 }
 
@@ -937,15 +937,18 @@
 .ventas-page--planillas .module-card {
   display: flex;
   flex-direction: column;
+  /* Si el alto de pantalla es reducido, el pie nunca queda recortado. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .ventas-planillas-panel {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: 18px;
+  padding: 0;
   border: 0;
   border-top: 1px solid var(--mov-border);
   border-radius: 0;
@@ -1003,7 +1006,7 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border: 1px solid var(--mov-border);
   border-radius: 10px;
   background: var(--surface-color, #fff);
@@ -1041,26 +1044,9 @@
   color: var(--mov-muted);
   font-size: 10px;
   line-height: 1.35;
-}
-
-.ventas-back-link {
-  flex: 0 0 auto;
-  min-height: 36px;
-  margin: 0;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--balto-action);
-  background: transparent;
-  font-size: 11px;
-  font-weight: 620;
-  cursor: pointer;
-  transition: background .15s ease, border-color .15s ease;
-}
-
-.ventas-back-link:hover {
-  border-color: color-mix(in srgb, var(--balto-action) 16%, transparent);
-  background: color-mix(in srgb, var(--balto-action) 6%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ventas-global-table .entity-table-row.is-changing {
@@ -1070,105 +1056,61 @@
 
 .ventas-planillas-tableCard {
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  margin-top: 12px;
+  margin-top: 0;
   border: 1px solid var(--mov-border);
   border-radius: 12px;
   background: var(--surface-color, #fff);
   overflow: hidden;
 }
 
-.ventas-planillas-tableCard__head {
-  min-height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--mov-border);
-  background: color-mix(in srgb, var(--balto-bg) 34%, #fff);
+/* Paginación global en el pie de la tabla, sin duplicar sus bordes. */
+.ventas-planillas-tableCard .ventas-planillas-pagination {
+  border: 0;
+  border-top: 1px solid var(--mov-border);
+  border-radius: 0;
 }
 
-.ventas-planillas-tableCard__head > div {
+/* Tarjeta y pestañas de paginación comparten el mismo pie. */
+.ventas-planillas-pagination .global-pagination__left {
   min-width: 0;
 }
 
-.ventas-planillas-tableCard__head strong,
-.ventas-planillas-tableCard__head span {
-  display: block;
+.ventas-planillas-pagination .ventas-planillas-preview {
+  flex: 1 1 220px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.ventas-planillas-tableCard__head strong {
-  color: var(--balto-ink);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.ventas-planillas-tableCard__head span,
-.ventas-planillas-tableCard__head small {
-  margin-top: 2px;
-  color: var(--mov-muted);
-  font-size: 10px;
-  line-height: 1.3;
-}
-
-.ventas-planillas-tableCard__head small {
+.ventas-planillas-pagination .global-pagination__summary {
   flex: 0 0 auto;
-  margin: 0;
+}
+
+/* Sin alto propio: el cuerpo toma exclusivamente el tamaño global. */
+.ventas-planillas-tableWrap {
+  min-height: 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ventas-planillas-divTable { min-height: 0; flex: 0 0 auto; }
+.ventas-planillas-columns--docentes {
+  grid-template-columns: .48fr 2fr .85fr .65fr 1fr 1.45fr;
+}
+.ventas-planillas-columns--alumnos {
+  grid-template-columns: .46fr 1.8fr .55fr .5fr .55fr .55fr 1.1fr 1.1fr 1.2fr;
+}
+.ventas-planillas-divTable .mov-gridCell,
+.ventas-planillas-divTable .mov-gridCell--head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.ventas-planillas-tableWrap {
-  min-height: 210px;
-  flex: 1 1 auto;
-  overflow: auto;
-}
-
-.ventas-planillas-table {
-  width: 100%;
-  min-width: 880px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  background: #fff;
-}
-
-.ventas-planillas-table th,
-.ventas-planillas-table td {
-  min-height: 38px;
-  padding: 9px 10px;
-  border-right: 1px solid color-mix(in srgb, var(--mov-border) 78%, transparent);
-  border-bottom: 1px solid var(--mov-border);
-  text-align: center;
-  vertical-align: middle;
-  font-size: 10.5px;
-}
-
-.ventas-planillas-table th:last-child,
-.ventas-planillas-table td:last-child {
-  border-right: 0;
-}
-
-.ventas-planillas-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  color: #fff;
-  background: var(--primary-700, #23498c);
-  font-size: 9.5px;
-  font-weight: 750;
-  letter-spacing: .02em;
-}
-
-.ventas-planillas-table tbody tr:hover {
-  background: color-mix(in srgb, var(--primary-500, #3b82f6) 4%, #fff);
-}
-
-.ventas-planillas-table td.is-name {
-  text-align: left;
-  font-weight: 650;
-}
+.ventas-planillas-divTable .entity-main-cell { text-align: left; }
 
 .ventas-planillas-empty {
   min-height: 230px;
@@ -1303,18 +1245,6 @@
     align-self: flex-start;
   }
 
-  .ventas-planillas-tableCard__head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .ventas-planillas-tableCard__head small {
-    white-space: normal;
-  }
-
-  .ventas-planillas-tableWrap {
-    min-height: 280px;
-  }
 
   .ventas-page .module-filter--search,
   .ventas-page .module-filter--select {
@@ -1512,12 +1442,6 @@
     margin-left: auto;
   }
 
-  /* Mismo alto global que cualquier tabla con paginación: no se agrega
-     una segunda fila artificial para las acciones. */
-  .ventas-page--orders .module-card .global-divTable.has-bottom-pagination > .mov-tableWrap {
-    height: calc(100vh - 282px);
-    max-height: calc(100vh - 282px);
-  }
 }
 
 @media (max-width: 720px) {
@@ -1620,4 +1544,54 @@
   .ventas-order-objective__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Productos y Configuración de ventas comparten las pestañas globales
+   bajo el título, alineadas a la izquierda en todos los breakpoints. */
+.ventas-page--products .module-titleBox,
+.ventas-page--products .module-titleTabs,
+.ventas-page--campaigns .module-titleBox,
+.ventas-page--campaigns .module-titleTabs {
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  margin-left: 0;
+}
+.ventas-page--products .module-titleTab,
+.ventas-page--campaigns .module-titleTab {
+  text-align: left;
+}
+
+/* Los filtros de Planillas ahora usan ModuleFilter y su floating label global. */
+.ventas-page--planillas .module-card__headLeft { flex: 1 1 auto; min-width: 0; }
+.ventas-page--planillas .module-headFilters {
+  justify-content: flex-end;
+  align-items: center;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+.ventas-page--planillas .module-filter--select { width: 128px; min-width: 0; max-width: 128px; flex: 0 1 128px; }
+.ventas-page--planillas .module-filter--select:first-child { width: 225px; max-width: 225px; flex-basis: 225px; }
+.ventas-page--planillas .module-filter--select:nth-child(2) { width: 175px; max-width: 175px; flex-basis: 175px; }
+.ventas-page--planillas .module-filter--year { max-width: 90px; flex-basis: 90px; }
+.ventas-page--planillas .module-card__head { gap: 12px; }
+.ventas-page--planillas .ventas-planillas-panel { border-top: 1px solid var(--mov-border); }
+
+@media (max-width: 1499px) {
+  .ventas-page--orders .module-card__actions .ventas-headAction--export { display: none; }
+  .ventas-page--orders .ventas-pagination-actions .ventas-footer-action--export {
+    min-height: 32px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    box-shadow: none;
+  }
+  .ventas-page--planillas .module-card__headLeft { flex-wrap: wrap; }
+}
+@media (max-width: 700px) {
+  .ventas-page--planillas .module-headFilters { width: 100%; }
+  .ventas-page--planillas .module-filter--select:first-child,
+  .ventas-page--planillas .module-filter--select:nth-child(2) { flex: 1 1 170px; max-width: none; }
 }

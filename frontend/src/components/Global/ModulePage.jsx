@@ -95,6 +95,18 @@ function ModuleFilter({ filter }) {
   // Los buscadores mantienen siempre el floating label arriba para que
   // el placeholder nunca compita visualmente con la etiqueta.
   const active = ["search", "select"].includes(filter.type) || String(value).trim() !== "";
+  const normalizedLabel = String(filter.label || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+  const compactSelectClass =
+    filter.type === "select" && normalizedLabel.startsWith("ano")
+      ? "module-filter--year"
+      : filter.type === "select" &&
+          (normalizedLabel === "mes" || normalizedLabel.startsWith("mes "))
+        ? "module-filter--month"
+        : "";
 
   if (filter.type === "tabs") {
     return (
@@ -127,7 +139,7 @@ function ModuleFilter({ filter }) {
 
   return (
     <label
-      className={`module-filter module-filter--${filter.type || "search"} ${active ? "is-active" : ""} ${filter.className || ""}`.trim()}
+      className={`module-filter module-filter--${filter.type || "search"} ${active ? "is-active" : ""} ${compactSelectClass} ${filter.className || ""}`.trim()}
     >
       {filter.type === "select" ? (
         <select

@@ -570,11 +570,18 @@ export default function Familias() {
                 >
                   <div className="mov-gridCell entity-main-cell">
                     <strong>{item.nombre_familia}</strong>
-                    <small>{item.observaciones || `ID ${item.id_familia}`}</small>
+                    {item.observaciones ? <small>{item.observaciones}</small> : null}
                   </div>
-                  <div className="mov-gridCell">
-                    <strong>{item.cantidad_integrantes}</strong>
-                    <small>{item.integrantes_resumen || "SIN INTEGRANTES"}</small>
+                  <div className="mov-gridCell familias-integrantesCell">
+                    <strong className="familias-integrantesCell__resumen">
+                      {item.integrantes_resumen || "SIN INTEGRANTES"}
+                    </strong>
+                    <span className="familias-integrantesCountChip">
+                      {Number(item.cantidad_integrantes || 0)}{" "}
+                      {Number(item.cantidad_integrantes || 0) === 1
+                        ? "integrante"
+                        : "integrantes"}
+                    </span>
                   </div>
                   <div className="mov-gridCell is-center">
                     <span className={`socios-statusChip ${item.activo ? "is-active" : "is-inactive"}`}>

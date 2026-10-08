@@ -335,7 +335,7 @@ export default function ModalPagoCuota({
           onChange={(event) => changeDate(event.target.value)}
         />
       </label>
-      <label>
+      <label className="global-year-select-field">
         <span>Año</span>
         <select value={anio} onChange={(event) => changeYear(event.target.value)}>
           {years.map((year) => <option value={year} key={year}>{year}</option>)}

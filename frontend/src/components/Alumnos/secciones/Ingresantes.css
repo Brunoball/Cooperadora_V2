@@ -34,8 +34,8 @@
 }
 
 .ingresantes-headFilters .ingresantes-yearFilter {
-  width: 108px;
-  max-width: 108px;
+  width: 90px;
+  max-width: 90px;
 }
 
 .ingresantes-headFilters .ingresantes-cycleFilter .module-filterControl,
@@ -350,9 +350,9 @@
   }
 
   .ingresantes-headFilters .ingresantes-yearFilter {
-    flex: 0 0 104px;
-    width: 104px;
-    max-width: 104px;
+    flex: 0 0 90px;
+    width: 90px;
+    max-width: 90px;
   }
 
   .ingresantes-formGrid {

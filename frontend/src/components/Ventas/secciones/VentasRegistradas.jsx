@@ -203,7 +203,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
       headerActions={(
         <BotonExportarGlobal
           label="Exportar"
-          className="ventas-headAction"
+          className="ventas-headAction ventas-headAction--export"
           onClick={() => setExportOpen(true)}
           disabled={loading || Number(pagination.total || 0) <= 0}
         />
@@ -296,18 +296,24 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
         onPageChange={setPage}
         compactPageItems
         className="ventas-tableFooter"
-        leftContent={writable ? (
+        leftContent={(
           <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
-            <button
+            {writable ? <button
               type="button"
               className="ventas-footer-action ventas-footer-action--new"
               onClick={() => setModal({ open: true, id: null })}
             >
               <FontAwesomeIcon icon={faPlus} />
               <span>Nueva venta</span>
-            </button>
+            </button> : null}
+            <BotonExportarGlobal
+              label="Exportar"
+              className="ventas-footer-action ventas-footer-action--export"
+              onClick={() => setExportOpen(true)}
+              disabled={loading || Number(pagination.total || 0) <= 0}
+            />
           </div>
-        ) : null}
+        )}
       />
 
       <VentaModal open={modal.open} initialId={modal.id} catalogs={catalogs} saving={saving} onClose={() => setModal({ open: false, id: null })} onSave={save} onFeedback={showFeedback} />

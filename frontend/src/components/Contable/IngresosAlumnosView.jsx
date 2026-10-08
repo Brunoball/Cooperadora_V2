@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMoneyBillTransfer } from "@fortawesome/free-solid-svg-icons";
 import GlobalDivTable from "../Global/GlobalDivTable";
@@ -51,7 +52,14 @@ export default function IngresosAlumnosView({
   onFeedback,
 }) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [headerActionsHost, setHeaderActionsHost] = useState(null);
   const items = data?.items || [];
+
+  useEffect(() => {
+    setHeaderActionsHost(
+      document.querySelector(".contable-page .module-card__actions"),
+    );
+  }, []);
   const pagination = data?.paginacion || {};
   const filters = data?.filtros || {};
   const currentPage = Number(pagination.pagina || 1);
@@ -101,9 +109,21 @@ export default function IngresosAlumnosView({
   }, [exportSections, filters?.anio_pago, filters?.mes_pago, filters?.periodo, filters?.id_medio_pago, search]);
 
   return (
-    <section className="ct-student-income">
+    <section className="ct-student-income contable-table">
+      {headerActionsHost
+        ? createPortal(
+            <BotonExportarGlobal
+              label="Exportar"
+              className="contable-export-top ct-student-export-top"
+              onClick={() => setExportOpen(true)}
+              disabled={loading || totalRecords <= 0}
+            />,
+            headerActionsHost,
+          )
+        : null}
+
       <GlobalDivTable
-        className="ct-student-table has-bottom-pagination"
+        className="ct-student-table contable-table__data has-bottom-pagination"
         bodyClassName="entity-table-wrap"
         gridClassName="ct-student-grid"
         columns={[
@@ -162,16 +182,6 @@ export default function IngresosAlumnosView({
         ariaLabel="Paginación de pagos de alumnos"
         onPageChange={onPageChange}
         showSummary={totalRecords > 0}
-        rightContent={(
-          <div className="global-tableActions">
-            <BotonExportarGlobal
-              label="Exportar"
-              className="mov-btn--compact"
-              onClick={() => setExportOpen(true)}
-              disabled={loading || totalRecords <= 0}
-            />
-          </div>
-        )}
       />
 
       <ModalExportarGlobal

@@ -361,3 +361,21 @@
   padding: 0;
   border: 0;
 }
+
+
+/* Selects temporales compactos dentro de formularios/modales. */
+.entity-floating-field.entity-field--year-select {
+  width: 100%;
+  max-width: 90px;
+}
+
+.entity-floating-field.entity-field--month-select {
+  width: 100%;
+  max-width: 120px;
+}
+
+.entity-floating-field.entity-field--year-select > select,
+.entity-floating-field.entity-field--month-select > select {
+  width: 100%;
+  max-width: 100%;
+}

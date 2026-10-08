@@ -31,15 +31,24 @@
   text-overflow: clip;
 }
 
-.contable-head-filters > .contable-filter--year,
+.contable-head-filters > .contable-filter--year {
+  width: 90px;
+  flex: 0 0 90px;
+  max-width: 90px;
+}
+
 .contable-head-filters > .contable-filter--month,
 .contable-head-filters > .contable-filter--period {
-  width: 100%;
+  width: 120px;
   flex: 0 0 120px;
   max-width: 120px;
 }
 
-.contable-head-filters > .contable-filter--year select,
+.contable-head-filters > .contable-filter--year select {
+  width: 100%;
+  max-width: 90px;
+}
+
 .contable-head-filters > .contable-filter--month select,
 .contable-head-filters > .contable-filter--period select {
   width: 100%;
@@ -123,32 +132,15 @@
 }
 
 /*
- * INGRESOS DE ALUMNOS · ALTO FIJO DE TABLA
- * Esta vista tiene tarjetas de resumen encima, por eso no puede reutilizar el
- * alto de las tablas normales. El alto se fija sobre la tabla completa (header
- * + cuerpo), no sobre el cuerpo: así la paginación queda siempre en la misma
- * posición aunque haya 1 registro y el scroll aparece sólo al superar el área
- * visible disponible.
+ * INGRESOS DE ALUMNOS · MISMO TAMAÑO QUE EGRESOS
+ * La vista reutiliza las clases `contable-table` y `contable-table__data`,
+ * por lo que hereda exactamente la misma estructura, altura y paginación
+ * que Egresos. No se define un viewport especial para esta tabla.
  */
 .contable-page .ct-student-table.global-divTable {
-  flex: 0 0 auto;
   width: 100%;
-  height: calc(100vh - 380px);
-  max-height: calc(100vh - 380px);
-  min-height: 0;
-  overflow: hidden;
-}
-
-.contable-page .ct-student-table.global-divTable > .global-divTable__body,
-.contable-page .ct-student-table.global-divTable > .entity-table-wrap {
-  flex: 1 1 auto;
-  height: auto !important;
-  max-height: none !important;
-  min-height: 0;
-  width: 100%;
+  min-width: 0;
   max-width: 100%;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
 }
 
 .contable-grid {
@@ -885,7 +877,6 @@
 }
 
 @media (max-width: 1499px) {
-  .module-card__actions .mov-btn.contable-export-top,
   .module-card__actions .mov-btn.contable-create-top {
     display: none !important;
   }
@@ -1066,4 +1057,14 @@
 
 .contable-page .module-titleBox {
   align-self: center;
+}
+
+
+/* Ingresos de alumnos: Exportar comparte la fila superior con los filtros.
+   Usa el tamaño normal de los botones del header, no la variante compacta. */
+.contable-page .module-card__actions .ct-student-export-top {
+  height: 44px;
+  min-height: 44px;
+  padding-inline: 14px;
+  flex: 0 0 auto;
 }

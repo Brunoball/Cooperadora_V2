@@ -68,6 +68,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
     <ModulePage
       className="ventas-page ventas-page--campaigns"
       title="Configuración de ventas"
+      tabsInTitle
       filters={[viewTabs]}
       canCreate={view === "activas" && writable}
       primaryActionLabel="Nueva configuración"

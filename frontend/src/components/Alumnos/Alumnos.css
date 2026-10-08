@@ -113,6 +113,16 @@
   min-width: 0;
 }
 
+/* ALUMNOS: Curso ocupa la quinta columna en Activos, Bajas y Egresados. */
+.socios-page .socios-grid.mov-gridTable--head > .mov-gridCell--head:nth-child(5),
+.socios-page .socios-grid.mov-gridTable--row > .mov-gridCell:nth-child(5),
+.socios-page .alumnos-inactive-grid.mov-gridTable--head > .mov-gridCell--head:nth-child(5),
+.socios-page .alumnos-inactive-grid.mov-gridTable--row > .mov-gridCell:nth-child(5) {
+  justify-content: center !important;
+  text-align: center !important;
+  align-items: center;
+}
+
 .socios-idCell {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;

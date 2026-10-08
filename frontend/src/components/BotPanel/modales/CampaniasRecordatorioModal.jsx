@@ -1087,7 +1087,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                             <th aria-label="Enviar" />
                             <th>Nombre y apellido</th>
                             <th>Teléfono</th>
-                            <th>Curso</th>
+                            <th className="global-courseColumn">Curso</th>
                             <th>División</th>
                             <th>Categoría</th>
                           </tr>
@@ -1133,7 +1133,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                                     <span className="wp-campaign-missing-phone">Sin teléfono</span>
                                   )}
                                 </td>
-                                <td>{alumno.anio || "—"}</td>
+                                <td className="global-courseColumn">{alumno.anio || "—"}</td>
                                 <td>{alumno.division || "—"}</td>
                                 <td>{alumno.categoria || "—"}</td>
                               </tr>

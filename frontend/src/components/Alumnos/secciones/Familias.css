@@ -79,6 +79,50 @@
   text-align: center;
 }
 
+
+
+/* Resumen de integrantes en la tabla principal:
+   nombres como contenido y cantidad como subtítulo tipo chip. */
+.familias-integrantesCell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start !important;
+  justify-content: center;
+  text-align: left !important;
+  gap: 5px;
+}
+
+.familias-integrantesCell__resumen {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.familias-integrantesCountChip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start !important;
+  margin: 0 !important;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 20px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--primary-500) 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-500) 9%, var(--surface-color));
+  color: var(--primary-600);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 @media (max-width: 1040px) {
   .familias-table .entity-table-wrap {
     overflow-x: hidden;

@@ -819,7 +819,7 @@ export default function Alumnos() {
     { label: "Documento", align: "center" },
     "Domicilio",
     "Localidad / Teléfono",
-    { label: "Curso", align: "center" },
+    { label: "Curso", align: "center", className: "global-courseColumn" },
     { label: "Acciones", align: "center" },
   ];
   const bajaColumns = [
@@ -827,7 +827,7 @@ export default function Alumnos() {
     { label: "Documento", align: "center" },
     "Domicilio",
     "Localidad / Teléfono",
-    { label: "Curso", align: "center" },
+    { label: "Curso", align: "center", className: "global-courseColumn" },
     "Fecha de baja",
     "Motivo",
     { label: "Acciones", align: "center" },
@@ -837,7 +837,7 @@ export default function Alumnos() {
     { label: "Documento", align: "center" },
     "Domicilio",
     "Localidad / Teléfono",
-    { label: "Curso", align: "center" },
+    { label: "Curso", align: "center", className: "global-courseColumn" },
     { label: "Fecha de egreso", align: "center" },
     { label: "Promoción", align: "center" },
     { label: "Acciones", align: "center" },
@@ -918,7 +918,7 @@ export default function Alumnos() {
                     <strong>{item.localidad || "—"}</strong>
                     <span>{item.telefono || "SIN TELÉFONO"}</span>
                   </div>
-                  <div className="mov-gridCell is-center alumnos-courseCell">
+                  <div className="mov-gridCell is-center alumnos-courseCell global-courseColumn">
                     <strong>{[item.nombre_anio, item.nombre_division].filter(Boolean).join(" ") || "SIN CURSO"}</strong>
                   </div>
                   <div className="mov-gridCell mov-actionsInline is-center">
@@ -980,7 +980,7 @@ export default function Alumnos() {
                     <strong>{item.localidad || "—"}</strong>
                     <span>{item.telefono || "SIN TELÉFONO"}</span>
                   </div>
-                  <div className="mov-gridCell is-center alumnos-courseCell">
+                  <div className="mov-gridCell is-center alumnos-courseCell global-courseColumn">
                     <strong>{[item.nombre_anio, item.nombre_division].filter(Boolean).join(" ") || "SIN CURSO"}</strong>
                   </div>
                   <div className="mov-gridCell is-center">{formatDate(view === "egresados" ? item.fecha_egreso : item.actualizado_en)}</div>

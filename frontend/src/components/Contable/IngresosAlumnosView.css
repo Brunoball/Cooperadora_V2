@@ -3,7 +3,7 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
 }
 
 .ct-student-table {

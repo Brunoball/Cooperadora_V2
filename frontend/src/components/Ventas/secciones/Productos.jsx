@@ -75,6 +75,7 @@ export default function Productos({ writable, feedback, showFeedback }) {
     <ModulePage
       className="ventas-page ventas-page--products"
       title="Productos de ventas"
+      tabsInTitle
       filters={[
         viewTabs,
         {

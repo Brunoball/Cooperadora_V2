@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileLines, faPrint, faUsers } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
+import GlobalDivTable from "../../Global/GlobalDivTable";
+import GlobalPagination from "../../Global/GlobalPagination";
 import BotonExportarGlobal from "../../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../../Global/Modales/ModalExportarGlobal";
 import logoIpetPdf from "../../../imagenes/logo_ipet50.png";
@@ -21,7 +22,17 @@ export default function Planillas({ feedback, showFeedback }) {
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState(null);
-  const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const previewBodyRef = useRef(null);
+
+  const resetPage = (setter) => (value) => {
+    setter(value);
+    setPage(1);
+  };
+
+  useEffect(() => {
+    if (previewBodyRef.current) previewBodyRef.current.scrollTop = 0;
+  }, [page, campaign, type, year, division]);
 
   const requestParams = useMemo(() => ({
     tipo: type,
@@ -224,8 +235,13 @@ export default function Planillas({ feedback, showFeedback }) {
   };
 
   const previewItems = previewData?.items || [];
-  const previewLimit = 80;
-  const visiblePreviewItems = previewItems.slice(0, previewLimit);
+  // Paginación local: el servicio devuelve toda la planilla para que la
+  // impresión y exportación sigan incluyendo todos los registros filtrados.
+  const previewPageSize = 20;
+  const previewTotalPages = Math.max(1, Math.ceil(previewItems.length / previewPageSize));
+  const previewPage = Math.min(page, previewTotalPages);
+  const previewStart = (previewPage - 1) * previewPageSize;
+  const visiblePreviewItems = previewItems.slice(previewStart, previewStart + previewPageSize);
   const previewCampaignName = upper(previewData?.campania?.nombre || "", 150);
   const previewProductName = upper(previewData?.campania?.producto_principal_nombre || "", 150);
   const previewMinimum = Number(previewData?.campania?.cantidad_minima_persona || 0);
@@ -313,6 +329,16 @@ export default function Planillas({ feedback, showFeedback }) {
     <ModulePage
       className="ventas-page ventas-page--planillas"
       title="Planillas de ventas"
+      filters={[
+        { key: "campania", type: "select", label: "Venta / campaña", value: campaign, onChange: resetPage(setCampaign), includeEmptyOption: false,
+          options: [{ value: "", label: "SELECCIONAR..." }, ...(options.campanias || []).map((item) => ({ value: String(item.id_campania), label: `${upper(item.nombre, 150)}${yes(item.activo) ? " · ACTIVA" : " · DADA DE BAJA"}` }))] },
+        { key: "tipo", type: "select", label: "Tipo de planilla", value: type, onChange: resetPage(setType), includeEmptyOption: false,
+          options: [{ value: "cursos", label: "CURSOS Y ALUMNOS" }, { value: "docentes", label: "DOCENTES" }] },
+        ...(type === "cursos" ? [
+          { key: "anio", type: "select", label: "Año", value: year, onChange: resetPage(setYear), options: (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) })), placeholder: "TODOS" },
+          { key: "division", type: "select", label: "División", value: division, onChange: resetPage(setDivision), options: (options.divisiones || []).map((item) => ({ value: String(item.id_division), label: upper(item.nombre_division, 80) })), placeholder: "TODAS" },
+        ] : []),
+      ]}
       canCreate={false}
       headerActions={(
         <BotonExportarGlobal
@@ -327,47 +353,12 @@ export default function Planillas({ feedback, showFeedback }) {
       ]}
     >
       <div className="ventas-planillas-panel">
-        <div className="ventas-planillas-toolbar">
-          <div className="ventas-planillas-grid">
-            <label className="ventas-field ventas-planillas-field--campaign"><span>Venta / campaña</span><select value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">SELECCIONAR...</option>{(options.campanias || []).map((item) => <option key={item.id_campania} value={item.id_campania}>{upper(item.nombre, 150)}{yes(item.activo) ? " · ACTIVA" : " · DADA DE BAJA"}</option>)}</select></label>
-            <label className="ventas-field ventas-planillas-field--type"><span>Tipo de planilla</span><select value={type} onChange={(e) => setType(e.target.value)}><option value="cursos">CURSOS Y ALUMNOS</option><option value="docentes">DOCENTES</option></select></label>
-            {type === "cursos" && (
-              <>
-                <label className="ventas-field ventas-planillas-field--year"><span>Año</span><select value={year} onChange={(e) => setYear(e.target.value)}><option value="">TODOS</option>{(options.anios || []).map((item) => <option key={item.id_anio} value={item.id_anio}>{upper(item.nombre_anio, 80)}</option>)}</select></label>
-                <label className="ventas-field ventas-planillas-field--division"><span>División</span><select value={division} onChange={(e) => setDivision(e.target.value)}><option value="">TODAS</option>{(options.divisiones || []).map((item) => <option key={item.id_division} value={item.id_division}>{upper(item.nombre_division, 80)}</option>)}</select></label>
-              </>
-            )}
-          </div>
-
-        </div>
-
-        <div className="ventas-planillas-meta">
-          <div className="ventas-planillas-preview">
-            <span className="ventas-planillas-preview__icon" aria-hidden="true"><FontAwesomeIcon icon={type === "docentes" ? faUsers : faFileLines} /></span>
-            <div>
-              <strong>{previewLoading ? "Preparando vista previa..." : `${previewItems.length} ${type === "docentes" ? "docentes" : "alumnos"} en la planilla`}</strong>
-              <span>{previewCampaignName ? `${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""} · ${previewObjective}` : "Seleccioná una venta para visualizar la planilla."}</span>
-            </div>
-          </div>
-          <button type="button" className="ventas-back-link" onClick={() => navigate("/ventas/registradas")}>Volver a ventas registradas</button>
-        </div>
-
-        <section className="ventas-planillas-tableCard" aria-label="Vista previa de planilla">
-          <header className="ventas-planillas-tableCard__head">
-            <div>
-              <strong>Vista previa</strong>
-              <span>La impresión y la exportación respetan exactamente los filtros seleccionados arriba.</span>
-            </div>
-            {!previewLoading && previewItems.length > previewLimit ? (
-              <small>Mostrando los primeros {previewLimit} de {previewItems.length} registros.</small>
-            ) : null}
-          </header>
-
+        <section className="ventas-planillas-tableCard" aria-label="Planilla de ventas">
           <div className="ventas-planillas-tableWrap">
             {previewLoading ? (
               <div className="ventas-planillas-empty">
                 <FontAwesomeIcon icon={faFileLines} />
-                <strong>Preparando vista previa...</strong>
+                <strong>Cargando planilla...</strong>
               </div>
             ) : !campaign ? (
               <div className="ventas-planillas-empty">
@@ -379,61 +370,74 @@ export default function Planillas({ feedback, showFeedback }) {
               <div className="ventas-planillas-empty">
                 <FontAwesomeIcon icon={faFileLines} />
                 <strong>Sin registros para estos filtros</strong>
-                <span>Cambiá el año o la división para completar la vista previa.</span>
+                <span>Cambiá el año o la división para completar la planilla.</span>
               </div>
             ) : (
-              <table className="ventas-planillas-table">
-                <thead>
-                  {type === "docentes" ? (
-                    <tr>
-                      <th>ORDEN</th>
-                      <th>DOCENTE</th>
-                      <th>DNI</th>
-                      <th>CANT.</th>
-                      <th>COBRADO</th>
-                      <th>OBSERVACIONES</th>
-                    </tr>
-                  ) : (
-                    <tr>
-                      <th>ORDEN</th>
-                      <th>APELLIDO Y NOMBRES</th>
-                      <th>AÑO</th>
-                      <th>DIV.</th>
-                      <th>VEND.</th>
-                      <th>FALT.</th>
-                      <th>GANANCIA A PAGAR</th>
-                      <th>IMPORTE COBRADO</th>
-                      <th>OBSERVACIONES</th>
-                    </tr>
-                  )}
-                </thead>
-                <tbody>
-                  {visiblePreviewItems.map((row, index) => type === "docentes" ? (
-                    <tr key={row.id_docente || `${row.dni}-${index}`}>
-                      <td>{index + 1}</td>
-                      <td className="is-name">{upper(row.nombre_completo || "", 180)}</td>
-                      <td>{row.dni || "—"}</td>
-                      <td></td>
-                      <td></td>
-                      <td></td>
-                    </tr>
-                  ) : (
-                    <tr key={row.id_alumno || `${row.num_documento}-${index}`}>
-                      <td>{index + 1}</td>
-                      <td className="is-name">{upper(`${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`, 180)}</td>
-                      <td>{upper(row.nombre_anio || "—", 80)}</td>
-                      <td>{upper(row.nombre_division || "—", 80)}</td>
-                      <td>{Number(row.cantidad_ven || 0) || ""}</td>
-                      <td>{Number(row.cantidad_faltante || 0) || ""}</td>
-                      <td>{Number(row.ganancia_pendiente || 0) > 0 ? money(row.ganancia_pendiente) : ""}</td>
-                      <td>{Number(row.importe_vendido || 0) > 0 ? money(row.importe_vendido) : ""}</td>
-                      <td></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <GlobalDivTable
+                className="ventas-global-table ventas-planillas-divTable has-bottom-pagination"
+                gridClassName={`ventas-planillas-columns ${type === "docentes" ? "ventas-planillas-columns--docentes" : "ventas-planillas-columns--alumnos"}`}
+                columns={type === "docentes" ? [
+                  { label: "Orden", align: "center" }, "Docente", { label: "DNI", align: "center" },
+                  { label: "Cant.", align: "center" }, { label: "Cobrado", align: "right" }, "Observaciones",
+                ] : [
+                  { label: "Orden", align: "center" }, "Apellido y nombres", { label: "Año", align: "center" },
+                  { label: "Div.", align: "center" }, { label: "Vend.", align: "center" },
+                  { label: "Falt.", align: "center" }, { label: "Ganancia a pagar", align: "right" },
+                  { label: "Importe cobrado", align: "right" }, "Observaciones",
+                ]}
+                ariaLabel="Planilla de ventas"
+                skeletonActionColumn={false}
+                bodyRef={previewBodyRef}
+              >
+                {visiblePreviewItems.map((row, index) => type === "docentes" ? (
+                  <div className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-planillas-columns ventas-planillas-columns--docentes" role="row" key={row.id_docente || `${row.dni}-${index}`}>
+                    <div className="mov-gridCell is-center" role="cell">{previewStart + index + 1}</div>
+                    <div className="mov-gridCell entity-main-cell" role="cell">{upper(row.nombre_completo || "", 180)}</div>
+                    <div className="mov-gridCell is-center" role="cell">{row.dni || "—"}</div>
+                    <div className="mov-gridCell is-center" role="cell">—</div>
+                    <div className="mov-gridCell is-right" role="cell">—</div>
+                    <div className="mov-gridCell" role="cell">—</div>
+                  </div>
+                ) : (
+                  <div className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-planillas-columns ventas-planillas-columns--alumnos" role="row" key={row.id_alumno || `${row.num_documento}-${index}`}>
+                    <div className="mov-gridCell is-center" role="cell">{previewStart + index + 1}</div>
+                    <div className="mov-gridCell entity-main-cell" role="cell">{upper(`${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`, 180)}</div>
+                    <div className="mov-gridCell is-center" role="cell">{upper(row.nombre_anio || "—", 80)}</div>
+                    <div className="mov-gridCell is-center" role="cell">{upper(row.nombre_division || "—", 80)}</div>
+                    <div className="mov-gridCell is-center" role="cell">{Number(row.cantidad_ven || 0) || "—"}</div>
+                    <div className="mov-gridCell is-center" role="cell">{Number(row.cantidad_faltante || 0) || "—"}</div>
+                    <div className="mov-gridCell is-right" role="cell">{Number(row.ganancia_pendiente || 0) > 0 ? money(row.ganancia_pendiente) : "—"}</div>
+                    <div className="mov-gridCell is-right" role="cell">{Number(row.importe_vendido || 0) > 0 ? money(row.importe_vendido) : "—"}</div>
+                    <div className="mov-gridCell" role="cell">—</div>
+                  </div>
+                ))}
+              </GlobalDivTable>
             )}
           </div>
+          <GlobalPagination
+            currentPage={previewPage}
+            totalPages={previewTotalPages}
+            totalRecords={previewItems.length}
+            from={previewItems.length ? previewStart + 1 : 0}
+            to={Math.min(previewStart + previewPageSize, previewItems.length)}
+            onPageChange={setPage}
+            loading={previewLoading}
+            itemLabel={type === "docentes" ? "docentes" : "alumnos"}
+            ariaLabel="Paginación de planillas de ventas"
+            compactPageItems
+            className="ventas-tableFooter ventas-planillas-pagination"
+            leftContent={(
+              <div className="ventas-planillas-preview">
+                <span className="ventas-planillas-preview__icon" aria-hidden="true">
+                  <FontAwesomeIcon icon={type === "docentes" ? faUsers : faFileLines} />
+                </span>
+                <div>
+                  <strong>{previewLoading ? "Cargando planilla..." : `${previewItems.length} ${type === "docentes" ? "docentes" : "alumnos"} en la planilla`}</strong>
+                  <span>{previewCampaignName ? `${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""} · ${previewObjective}` : "Seleccioná una venta para visualizar la planilla."}</span>
+                </div>
+              </div>
+            )}
+          />
         </section>
       </div>
 

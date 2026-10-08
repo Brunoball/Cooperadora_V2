@@ -63,6 +63,27 @@ const isExternal = (item) =>
     .toUpperCase()
     .includes("EXTERNO");
 
+// La API puede devolver el nombre de la categoria o solo su identificador.
+// Usar tambien el catalogo evita que todos los chips queden con el color base.
+const categoryChipVariant = (item, categorias = []) => {
+  const id = item?.id_categoria ?? item?.categoria_id ?? item?.categoria;
+  const delCatalogo = categorias.find(
+    (categoria) => String(categoria.id_categoria ?? categoria.id) === String(id),
+  );
+  const nombres = [
+    item?.categoria,
+    item?.categoria_nombre,
+    item?.nombre_categoria,
+    delCatalogo?.nombre,
+    delCatalogo?.nombre_categoria,
+  ];
+  const name = nombres.filter(Boolean).join(" ").normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  if (/EXTERN[OA]/.test(name)) return "is-externo";
+  if (/INTERN[OA]/.test(name)) return "is-interno";
+  return "";
+};
+
 const receiptFromRow = (item, periods = []) => ({
   ...item,
   id_alumno: item.id_alumno || item.id_socio,
@@ -475,7 +496,7 @@ export default function Cuotas() {
   const columns = [
     { key: "alumno", label: "Alumno" },
     { key: "domicilio", label: "Domicilio" },
-    { key: "curso", label: "Curso" },
+    { key: "curso", label: "Curso", align: "center", className: "global-courseColumn" },
     { key: "categoria", label: "Categoría" },
     { key: "cobrador", label: "Cobrador" },
     { key: "importe", label: "Importe", align: "right" },
@@ -543,8 +564,8 @@ export default function Cuotas() {
                     <small>DNI {item.documento || "—"}{item.familia ? ` · ${item.familia}` : ""}</small>
                   </div>
                   <div className="mov-gridCell cuotas-address-cell" role="cell" title={item.domicilio || ""}>{item.domicilio || "—"}</div>
-                  <div className="mov-gridCell" role="cell">{item.curso || "—"}</div>
-                  <div className="mov-gridCell" role="cell"><span className="cuotas-v2-category">{item.categoria || "—"}</span></div>
+                  <div className="mov-gridCell is-center global-courseColumn" role="cell">{item.curso || "—"}</div>
+                  <div className="mov-gridCell" role="cell"><span className={`cuotas-v2-category ${categoryChipVariant(item, catalogos.categorias || [])}`.trim()}>{item.categoria || "—"}</span></div>
                   <div className="mov-gridCell cuotas-collector-cell" role="cell">
                     <span className={`cuotas-v2-collector ${item.es_cobrador ? "is-yes" : ""}`}>{item.es_cobrador ? "SÍ" : "NO"}</span>
                   </div>

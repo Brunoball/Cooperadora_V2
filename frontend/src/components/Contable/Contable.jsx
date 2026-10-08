@@ -1168,7 +1168,7 @@ export default function ContableModule({ view = "summary" }) {
         headerActions={
           view === "income" && isStudentIncomeTab
             ? null
-            : view !== "summary" && !compactActions
+            : view !== "summary"
               ? (
                   <BotonExportarGlobal
                     className="contable-export-top"
@@ -1370,13 +1370,6 @@ export default function ContableModule({ view = "summary" }) {
                 showWhenEmpty={compactActions}
                 rightContent={(
                   <div className="contable-lower-actions">
-                    {compactActions ? (
-                      <BotonExportarGlobal
-                        className="mov-btn--compact"
-                        onClick={() => setExportOpen(true)}
-                        disabled={!data.items?.length}
-                      />
-                    ) : null}
                     {canCreateMovement ? (
                       <button
                         type="button"

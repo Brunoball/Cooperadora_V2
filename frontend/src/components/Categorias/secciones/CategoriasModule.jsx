@@ -529,7 +529,7 @@ export default function CategoriasModule({ section = "categorias" }) {
         description={
           siblingsSection
             ? "Definí los importes que Cuotas aplica automáticamente por alumno según la cantidad de hermanos de la familia."
-            : "Administrá las categorías de cuota, sus importes mensual/anual y el historial de cada cambio."
+            : undefined
         }
         filters={filters}
         tabsInTitle={siblingsSection}

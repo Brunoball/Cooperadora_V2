@@ -30,3 +30,21 @@ textarea {
 a {
   color: inherit;
 }
+
+
+/* Selects Año/Mes que no pasan por ModulePage/FloatingField. */
+.global-year-select-field {
+  width: 100%;
+  max-width: 90px !important;
+}
+
+.global-month-select-field {
+  width: 100%;
+  max-width: 120px !important;
+}
+
+.global-year-select-field select,
+.global-month-select-field select {
+  width: 100% !important;
+  max-width: 100% !important;
+}

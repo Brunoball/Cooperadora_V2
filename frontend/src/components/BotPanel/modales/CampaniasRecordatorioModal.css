@@ -1182,6 +1182,12 @@
   text-align: center;
 }
 
+/* CAMPAÑAS: refuerzo específico para Curso, cuarta columna. */
+.wp-campaign-table thead th:nth-child(4),
+.wp-campaign-table tbody td:nth-child(4) {
+  text-align: center !important;
+}
+
 .wp-campaign-recipient-check {
   position: relative;
   width: 28px;
@@ -2142,4 +2148,9 @@
   .wp-campaign-history-actions .wp-campaign-secondary {
     width: 100%;
   }
+}
+
+/* Curso centrado de forma explícita; el resto de columnas conserva su alineación actual. */
+.wp-campaign-table .global-courseColumn {
+  text-align: center !important;
 }

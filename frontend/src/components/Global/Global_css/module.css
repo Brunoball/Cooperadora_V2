@@ -365,7 +365,6 @@
 
 .mov-tableWrap {
   flex: 1;
-  height: calc(100vh - 250px);
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -1249,7 +1248,7 @@
   display: flex;
   align-items: flex-end;
   gap: 18px;
-  margin-top: 9px;
+  margin-top: 0;
   padding: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1497,14 +1496,13 @@
   align-items: center;
 }
 
+/* Altura única del cuerpo de las tablas globales, con o sin paginación.
+   No permitir que flex: 1 reduzca la altura calculada. */
 .module-card .global-divTable > .mov-tableWrap {
-  height: calc(100vh - 240px);
-  max-height: calc(100vh - 240px);
-}
-
-.module-card .global-divTable.has-bottom-pagination > .mov-tableWrap {
+  flex: 0 0 auto;
+  min-height: 0;
   height: calc(100vh - 282px);
-  max-height: calc(100vh - 282px);
+  max-height: none;
 }
 
 .module-empty {
@@ -1922,4 +1920,34 @@
     padding-bottom: 2px;
     scrollbar-width: thin;
   }
+}
+
+/* Columnas Curso: centrado semántico global para encabezado y celdas,
+ * tanto en Alumnos como en Cuotas y en las tablas que usen esta clase. */
+.global-courseColumn {
+  text-align: center !important;
+  justify-content: center !important;
+}
+
+
+/* Tamaños globales de filtros temporales.
+   Año nunca supera 90px y Mes nunca supera 120px. */
+.module-filter--select.module-filter--year {
+  width: 90px !important;
+  max-width: 90px !important;
+  min-width: 0 !important;
+  flex: 0 0 90px !important;
+}
+
+.module-filter--select.module-filter--month {
+  width: 120px !important;
+  max-width: 120px !important;
+  min-width: 0 !important;
+  flex: 0 0 120px !important;
+}
+
+.module-filter--year .module-filterControl,
+.module-filter--month .module-filterControl {
+  width: 100% !important;
+  max-width: 100% !important;
 }

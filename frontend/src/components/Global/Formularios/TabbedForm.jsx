@@ -206,10 +206,22 @@ export function FloatingField({
 }) {
   const control = findFloatingControl(children);
   const isActive = Boolean(active) || controlNeedsFloatingLabel(control);
+  const normalizedLabel = String(label || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+  const compactSelectClass =
+    control?.type === "select" && normalizedLabel.startsWith("ano")
+      ? "entity-field--year-select"
+      : control?.type === "select" &&
+          (normalizedLabel === "mes" || normalizedLabel.startsWith("mes "))
+        ? "entity-field--month-select"
+        : "";
 
   return (
     <label
-      className={`entity-field entity-floating-field ${wide ? "entity-field--wide" : ""} ${textarea ? "is-textarea" : ""} ${isActive ? "is-active" : ""} ${placeholderOnFloat ? "has-placeholder-on-float" : ""} ${className}`.trim()}
+      className={`entity-field entity-floating-field ${wide ? "entity-field--wide" : ""} ${textarea ? "is-textarea" : ""} ${isActive ? "is-active" : ""} ${placeholderOnFloat ? "has-placeholder-on-float" : ""} ${compactSelectClass} ${className}`.trim()}
     >
       {children}
       <span>{label}</span>
