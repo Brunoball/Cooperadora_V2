@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("./helpers/playwright.helper");
 const { authState } = require("./helpers/auth.helper");
 const { ok, apiFetch } = require("./helpers/api.helper");
 const { loadTestEnv } = require("./helpers/env.helper");

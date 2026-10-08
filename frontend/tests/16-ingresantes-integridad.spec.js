@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("./helpers/playwright.helper");
 const { token, authenticatePage } = require("./helpers/auth.helper");
 const { ok, apiFetch } = require("./helpers/api.helper");
 const { createIncoming, createStudent } = require("./helpers/entities.helper");
@@ -19,7 +19,12 @@ test.describe("Ingresantes - integración y trazabilidad", () => {
     await expect(page.getByText("Pendientes", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Cancelados", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Ingresados", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /Pasar seleccionados a alumnos/i })).toBeVisible();
+    // La acción principal cambió de etiqueta en la UI. Sin filas seleccionadas
+    // debe existir, pero permanecer inhabilitada para evitar conversiones.
+    const convertAction = page.getByRole("button", { name: /^Pasar a alumnos$/i });
+    await expect(page.getByRole("tablist", { name: "Situación" }).getByRole("tab")).toHaveCount(4);
+    await expect(convertAction).toBeVisible();
+    await expect(convertAction).toBeDisabled();
   });
 
   test("alta, filtros, cancelación y reapertura mantienen la preinscripción", async ({ request }) => {

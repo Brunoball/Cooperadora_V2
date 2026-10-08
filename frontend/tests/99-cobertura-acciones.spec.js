@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./helpers/playwright.helper');
 const fs = require('fs');
 const path = require('path');
 const { coverageFile } = require('./helpers/api.helper');
@@ -33,8 +33,10 @@ function registeredActions() {
   return [...actions].filter((action) => !action.startsWith('bot_')).sort();
 }
 
-test('todas las acciones registradas del sistema (excepto Bot Panel) fueron ejecutadas por la suite', async () => {
+test('todas las acciones registradas del sistema (excepto Bot Panel) respondieron durante la suite', async () => {
+  test.skip(!env.isLocal && !env.allowRemoteWrites, 'La ejecución completa requiere un entorno E2E con escrituras habilitadas.');
   const all = registeredActions();
+  expect(all.length, 'No se pudieron leer las rutas reales del backend').toBeGreaterThan(100);
   const file = coverageFile();
   const covered = fs.existsSync(file)
     ? new Set(JSON.parse(fs.readFileSync(file, 'utf8')))
@@ -43,6 +45,6 @@ test('todas las acciones registradas del sistema (excepto Bot Panel) fueron ejec
   const missing = all.filter((action) => !covered.has(action));
   expect(
     missing,
-    `Acciones sin cobertura E2E (${missing.length}/${all.length}): ${missing.join(', ')}`
+    `Acciones sin respuesta HTTP durante E2E (${missing.length}/${all.length}): ${missing.join(', ')}`
   ).toEqual([]);
 });

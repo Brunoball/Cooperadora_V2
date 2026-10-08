@@ -44,4 +44,4 @@ export default BASE_URL;
 // URL LOCAL= http://localhost:3001/routes
 // URL PRODUCCIÓN= https://cooperadora.ipet50.edu.ar/api/routes
 
-
+// npx playwright test --project=chromium --workers=1 --reporter=list
