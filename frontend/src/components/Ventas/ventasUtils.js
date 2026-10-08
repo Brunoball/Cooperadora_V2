@@ -18,7 +18,7 @@ export const asId = (value) => (value === "" || value == null ? "" : String(valu
 
 export const stateLabel = (state) => ({
   pendiente: "PENDIENTE",
-  aprobada: "APROBADA",
+  aprobada: "PAGADO",
   cancelada: "CANCELADA",
   fallida: "FALLIDA",
   vencida: "VENCIDA",

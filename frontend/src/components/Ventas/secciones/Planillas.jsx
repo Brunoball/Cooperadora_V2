@@ -143,15 +143,7 @@ export default function Planillas({ feedback, showFeedback }) {
       const price = Number(data.meta?.precio_unitario_referencia || 0);
       const priceLabel = data.meta?.precio_unitario_multiple ? "VARIOS" : (price > 0 ? money(price) : "");
       const currentYear = Number(data.meta?.anio_planilla || new Date().getFullYear());
-      const minimumQuantity = Number(data.campania?.cantidad_minima_persona || 0);
-      const missingUnitGain = Number(data.campania?.ganancia_unidad_faltante || 0);
-      const noSalesGain = Number(data.campania?.ganancia_total_sin_ventas || 0);
-      const objectiveLabel = minimumQuantity > 0
-        ? `OBJETIVO: ${minimumQuantity} · ${money(missingUnitGain)}/FALT. · ${money(noSalesGain)} SIN VENTAS`
-        : "SIN OBJETIVO OBLIGATORIO";
       const botNumber = "3564 665050";
-      const numberOrBlank = (value) => Number(value || 0) > 0 ? String(Number(value)) : "";
-      const amountOrBlank = (value) => Number(value || 0) > 0 ? money(value) : "";
       const normalizeCourse = (value) => String(value || "").replace(/[°º]/g, "").trim();
 
       const courseSheet = (rows, courseYear, courseDivision) => {
@@ -159,14 +151,14 @@ export default function Planillas({ feedback, showFeedback }) {
         return `<section class="legacy-sheet">
           <div class="legacy-meta"><span>Curso: ${escapeHtml(courseLabel)} · Alumnos: ${rows.length}</span><strong>Número bot: ${botNumber}</strong><span>Docente responsable: _______________________________</span></div>
           <table class="legacy-grid legacy-grid--course">
-            <colgroup><col class="c-order"><col class="c-name"><col class="c-year"><col class="c-div"><col class="c-qty"><col class="c-qty"><col class="c-gain"><col class="c-paid"><col class="c-notes"></colgroup>
+            <colgroup><col class="c-name"><col class="c-dni"><col class="c-year"><col class="c-div"><col class="c-qty"><col class="c-qty"><col class="c-gain"><col class="c-paid"><col class="c-notes"></colgroup>
             <tbody>
               <tr><th class="legacy-school" colspan="9">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
               <tr class="legacy-top"><th colspan="2">ALUMNOS</th><th colspan="6">${escapeHtml(String(campaignName).toLocaleUpperCase("es-AR"))}</th><th>${currentYear}</th></tr>
-              <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(courseLabel)}</th><th colspan="2">${escapeHtml(priceLabel)}</th><th colspan="3">${escapeHtml(objectiveLabel)}</th></tr>
-              <tr class="legacy-columns"><th rowspan="2">ORDEN</th><th rowspan="2">APELLIDO Y NOMBRES</th><th colspan="2">CURSO</th><th colspan="2">OBJETIVO</th><th rowspan="2">GANANCIA<br>A PAGAR</th><th rowspan="2">IMPORTE<br>COBRADO</th><th rowspan="2">OBSERVACIONES</th></tr>
+              <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(courseLabel)}</th><th colspan="5">COMPLETAR A MANO</th></tr>
+              <tr class="legacy-columns"><th rowspan="2">APELLIDO Y NOMBRES</th><th rowspan="2">DNI</th><th colspan="2">CURSO</th><th colspan="2">UNIDADES</th><th rowspan="2">GANANCIA<br>A PAGAR</th><th rowspan="2">IMPORTE<br>COBRADO</th><th rowspan="2">OBSERVACIONES</th></tr>
               <tr class="legacy-columns legacy-columns--sub"><th>AÑO</th><th>DIV.</th><th>VEND.</th><th>FALT.</th></tr>
-              ${rows.map((row, index) => `<tr class="legacy-data-row"><td>${index + 1}</td><td class="legacy-name">${escapeHtml(`${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`)}</td><td>${escapeHtml(normalizeCourse(courseYear))}</td><td>${escapeHtml(courseDivision || "")}</td><td>${numberOrBlank(row.cantidad_ven)}</td><td>${numberOrBlank(row.cantidad_faltante)}</td><td>${escapeHtml(amountOrBlank(row.ganancia_pendiente))}</td><td>${escapeHtml(amountOrBlank(row.importe_vendido))}</td><td></td></tr>`).join("")}
+              ${rows.map((row) => `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(`${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`)}</td><td>${escapeHtml(row.num_documento || "")}</td><td>${escapeHtml(normalizeCourse(courseYear))}</td><td>${escapeHtml(courseDivision || "")}</td><td></td><td></td><td></td><td></td><td></td></tr>`).join("")}
             </tbody>
           </table>
           <div class="legacy-total">TOTAL COBRADO: ______________</div>
@@ -226,7 +218,8 @@ export default function Planillas({ feedback, showFeedback }) {
         .legacy-data-row td{height:5.2mm;font-size:7.6px;padding-top:.8mm;padding-bottom:.8mm}
         .legacy-data-row .legacy-name{text-align:left;font-weight:700;padding-left:1.3mm;white-space:nowrap;overflow:hidden;text-overflow:clip}
         .legacy-total{margin:4mm 0 0 auto;width:74mm;height:11mm;border:0.75px solid #000;display:flex;align-items:center;padding:0 3mm;font-size:8px;font-weight:700}
-        .legacy-grid--course .c-order{width:11mm}.legacy-grid--course .c-name{width:60mm}.legacy-grid--course .c-year{width:11mm}.legacy-grid--course .c-div{width:11mm}.legacy-grid--course .c-qty{width:13mm}.legacy-grid--course .c-gain{width:23mm}.legacy-grid--course .c-paid{width:23mm}.legacy-grid--course .c-notes{width:auto}
+        .legacy-grid--course .c-name{width:58mm}.legacy-grid--course .c-dni{width:23mm}.legacy-grid--course .c-year{width:12mm}.legacy-grid--course .c-div{width:12mm}.legacy-grid--course .c-qty{width:13mm}.legacy-grid--course .c-gain{width:21mm}.legacy-grid--course .c-paid{width:21mm}.legacy-grid--course .c-notes{width:auto}
+        .legacy-grid--course .legacy-data-row td{height:6mm;font-size:8px}
         .legacy-grid--teachers .t-order{width:11mm}.legacy-grid--teachers .t-name{width:80mm}.legacy-grid--teachers .t-dni{width:25mm}.legacy-grid--teachers .t-qty{width:17mm}.legacy-grid--teachers .t-paid{width:26mm}.legacy-grid--teachers .t-notes{width:auto}
         @media print{.legacy-sheet{margin:0;width:200mm;min-height:287mm}}
       </style></head><body>${body}<script>window.onload=()=>{window.focus();window.print();};</script></body></html>`);
@@ -244,10 +237,6 @@ export default function Planillas({ feedback, showFeedback }) {
   const visiblePreviewItems = previewItems.slice(previewStart, previewStart + previewPageSize);
   const previewCampaignName = upper(previewData?.campania?.nombre || "", 150);
   const previewProductName = upper(previewData?.campania?.producto_principal_nombre || "", 150);
-  const previewMinimum = Number(previewData?.campania?.cantidad_minima_persona || 0);
-  const previewObjective = previewMinimum > 0
-    ? `OBJETIVO MÍN. ${previewMinimum} · ${money(previewData?.campania?.ganancia_unidad_faltante || 0)} / FALTANTE · ${money(previewData?.campania?.ganancia_total_sin_ventas || 0)} SIN VENTAS`
-    : "SIN OBJETIVO OBLIGATORIO";
 
   const exportSourceData = exportOpen && exportData ? exportData : previewData;
   const exportItems = exportSourceData?.items || [];
@@ -265,15 +254,10 @@ export default function Planillas({ feedback, showFeedback }) {
           observaciones: "",
         }
       : {
-          orden: index + 1,
           alumno: upper(`${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`, 180),
+          dni: row.num_documento || "",
           anio: upper(row.nombre_anio || "", 80),
           division: upper(row.nombre_division || "", 80),
-          vendidas: Number(row.cantidad_ven || 0) || "",
-          faltantes: Number(row.cantidad_faltante || 0) || "",
-          ganancia_a_pagar: Number(row.ganancia_pendiente || 0) || "",
-          importe_cobrado: Number(row.importe_vendido || 0) || "",
-          observaciones: "",
         }));
 
     return [{
@@ -290,15 +274,10 @@ export default function Planillas({ feedback, showFeedback }) {
             { label: "Observaciones", key: "observaciones" },
           ]
         : [
-            { label: "Orden", key: "orden" },
             { label: "Apellido y nombres", key: "alumno" },
+            { label: "DNI", key: "dni" },
             { label: "Año", key: "anio" },
             { label: "División", key: "division" },
-            { label: "Vendidas", key: "vendidas" },
-            { label: "Faltantes", key: "faltantes" },
-            { label: "Ganancia a pagar", key: "ganancia_a_pagar" },
-            { label: "Importe cobrado", key: "importe_cobrado" },
-            { label: "Observaciones", key: "observaciones" },
           ],
       registros: rows,
     }];
@@ -352,6 +331,10 @@ export default function Planillas({ feedback, showFeedback }) {
         { key: "imprimir", label: "Imprimir", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || previewLoading || !campaign },
       ]}
     >
+      {/* Ajuste exclusivo de esta tabla: cuatro columnas, sin cambiar el CSS global. */}
+      <style>{`.ventas-planillas-divTable .ventas-planillas-columns--alumnos {
+        grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, .65fr) minmax(0, .65fr);
+      }`}</style>
       <div className="ventas-planillas-panel">
         <section className="ventas-planillas-tableCard" aria-label="Planilla de ventas">
           <div className="ventas-planillas-tableWrap">
@@ -380,10 +363,8 @@ export default function Planillas({ feedback, showFeedback }) {
                   { label: "Orden", align: "center" }, "Docente", { label: "DNI", align: "center" },
                   { label: "Cant.", align: "center" }, { label: "Cobrado", align: "right" }, "Observaciones",
                 ] : [
-                  { label: "Orden", align: "center" }, "Apellido y nombres", { label: "Año", align: "center" },
-                  { label: "Div.", align: "center" }, { label: "Vend.", align: "center" },
-                  { label: "Falt.", align: "center" }, { label: "Ganancia a pagar", align: "right" },
-                  { label: "Importe cobrado", align: "right" }, "Observaciones",
+                  "Apellido y nombres", { label: "DNI", align: "center" },
+                  { label: "Año", align: "center" }, { label: "Div.", align: "center" },
                 ]}
                 ariaLabel="Planilla de ventas"
                 skeletonActionColumn={false}
@@ -400,15 +381,10 @@ export default function Planillas({ feedback, showFeedback }) {
                   </div>
                 ) : (
                   <div className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-planillas-columns ventas-planillas-columns--alumnos" role="row" key={row.id_alumno || `${row.num_documento}-${index}`}>
-                    <div className="mov-gridCell is-center" role="cell">{previewStart + index + 1}</div>
                     <div className="mov-gridCell entity-main-cell" role="cell">{upper(`${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`, 180)}</div>
+                    <div className="mov-gridCell is-center" role="cell">{row.num_documento || "—"}</div>
                     <div className="mov-gridCell is-center" role="cell">{upper(row.nombre_anio || "—", 80)}</div>
                     <div className="mov-gridCell is-center" role="cell">{upper(row.nombre_division || "—", 80)}</div>
-                    <div className="mov-gridCell is-center" role="cell">{Number(row.cantidad_ven || 0) || "—"}</div>
-                    <div className="mov-gridCell is-center" role="cell">{Number(row.cantidad_faltante || 0) || "—"}</div>
-                    <div className="mov-gridCell is-right" role="cell">{Number(row.ganancia_pendiente || 0) > 0 ? money(row.ganancia_pendiente) : "—"}</div>
-                    <div className="mov-gridCell is-right" role="cell">{Number(row.importe_vendido || 0) > 0 ? money(row.importe_vendido) : "—"}</div>
-                    <div className="mov-gridCell" role="cell">—</div>
                   </div>
                 ))}
               </GlobalDivTable>
@@ -433,7 +409,7 @@ export default function Planillas({ feedback, showFeedback }) {
                 </span>
                 <div>
                   <strong>{previewLoading ? "Cargando planilla..." : `${previewItems.length} ${type === "docentes" ? "docentes" : "alumnos"} en la planilla`}</strong>
-                  <span>{previewCampaignName ? `${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""} · ${previewObjective}` : "Seleccioná una venta para visualizar la planilla."}</span>
+                  <span>{previewCampaignName ? `${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""}` : "Seleccioná una venta para visualizar la planilla."}</span>
                 </div>
               </div>
             )}

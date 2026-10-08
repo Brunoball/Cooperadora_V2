@@ -235,8 +235,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         <FloatingField label="Fecha de venta" className="ventas-modal-field">
           <input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
         </FloatingField>
-        <FloatingField label="Estado" className="ventas-modal-field">
-          <select value={form.estado} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select>
+        <FloatingField label="Estado de pago" className="ventas-modal-field">
+          <select value={form.estado} disabled={form.origen === "bot_whatsapp"} title={form.origen === "bot_whatsapp" ? "Las ventas de WhatsApp ya están pagadas." : undefined} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select>
         </FloatingField>
       </div>
 
@@ -318,7 +318,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
             <strong>Regla de la campaña</strong>
             <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
             {Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 && objectiveReady ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
-            {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar APROBADA.</span> : null}
+            {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
             {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
           </div>
         </section>

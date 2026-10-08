@@ -36,9 +36,8 @@ const dateText = (value) => {
 
 const originText = (origin) => ({
   bot_whatsapp: "WHATSAPP",
-  importado: "IMPORTADO",
   manual: "MANUAL",
-}[origin] || upper(origin || "—", 80));
+}[origin] || "—");
 
 const exportRecord = (row) => ({
   campania: upper(row.campania_nombre, 150),
@@ -87,7 +86,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
   const queryFilters = useMemo(() => ({
     buscar: search,
     id_campania: campaign,
-    estado: state,
+    estado: state || "vigentes",
     retiro: retreat,
     origen: origin,
     mes: month,
@@ -146,9 +145,9 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI o referencia...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
     { key: "campania", type: "select", label: "Campaña", value: campaign, placeholder: "TODAS", options: (catalogs.campanias || []).map((c) => ({ value: c.id_campania, label: upper(c.nombre, 150) })), onChange: (v) => { setPage(1); setCampaign(v); } },
     { key: "mes", type: "select", label: "Mes de ventas", value: month, placeholder: "TODOS", options: monthOptions, onChange: (v) => { setPage(1); setMonth(v); } },
-    { key: "estado", type: "select", label: "Estado", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
+    { key: "estado", type: "select", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
     { key: "retiro", type: "select", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
-    { key: "origen", type: "select", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }, { value: "importado", label: "IMPORTADO" }], onChange: (v) => { setPage(1); setOrigin(v); } },
+    { key: "origen", type: "select", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
   ];
 
   const exportSections = useMemo(() => [{
@@ -162,7 +161,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
       { label: "Medio", key: "medio" },
       { label: "Ganancia", key: "ganancia" },
       { label: "Total", key: "total" },
-      { label: "Estado", key: "estado" },
+      { label: "Estado de pago", key: "estado" },
       { label: "Retiro", key: "retiro" },
       { label: "Origen", key: "origen" },
       { label: "Fecha", key: "fecha" },
@@ -187,7 +186,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
   const exportSubtitle = [
     month ? monthLabel(month) : "TODOS LOS MESES",
     selectedCampaignName ? upper(selectedCampaignName, 150) : "TODAS LAS CAMPAÑAS",
-    state ? stateLabel(state) : "TODOS LOS ESTADOS",
+    state ? stateLabel(state) : "PAGADOS Y PENDIENTES",
     origin ? originText(origin) : "TODOS LOS ORÍGENES",
   ].join(" · ");
 
@@ -218,7 +217,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
           "Persona",
           "Medio",
           { label: "Total", align: "right" },
-          { label: "Estado", align: "center" },
+          { label: "Pago", align: "center" },
           { label: "Retiro", align: "center" },
           { label: "Origen", align: "center" },
           { label: "Fecha", align: "center" },
@@ -362,7 +361,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
           return { mensaje: result.mensaje };
         }}
       />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); setConfirm(null); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
+      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); await load({ silent: true }); showFeedback(Number(result.ganancia_pendiente || 0) > 0 ? "warning" : "success", result.mensaje); return { mensaje: result.mensaje }; }} />
       {feedback}
     </ModulePage>
   );
