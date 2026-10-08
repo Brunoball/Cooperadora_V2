@@ -157,7 +157,7 @@ export default function ModalCambioEstadoGlobal({
       }
       extraContent={
         isExit ? (
-          <FloatingField label="Destino" active wide>
+          <FloatingField label="Destino" active wide className="alumnos-stateField">
             <select value={tipo} onChange={(event) => setTipo(NORMALIZE_TYPE(event.target.value))}>
               <option value="BAJA">Dar de baja</option>
               <option value="EGRESO">Mover a Egresados</option>

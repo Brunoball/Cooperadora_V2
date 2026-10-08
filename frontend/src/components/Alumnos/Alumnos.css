@@ -2369,3 +2369,11 @@
 .alumnos-importCycle span { font-weight: 700; }
 .alumnos-importCycle input { min-height: 42px; padding: 8px 10px; border: 1px solid var(--mov-border, #d9dee7); border-radius: 9px; }
 .alumnos-importCycle small { opacity: .72; }
+
+/* Selects de la sección y sus modales: sin relleno derecho. */
+.socios-page select,
+.socios-modal select,
+.alumnos-importModal select,
+.alumnos-stateField select {
+  padding-right: 0 !important;
+}

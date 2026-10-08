@@ -718,3 +718,9 @@
     padding: 10px;
   }
 }
+
+/* Selects de la sección y sus modales: sin relleno derecho. */
+.familias-page select,
+.familias-modal select {
+  padding-right: 0 !important;
+}

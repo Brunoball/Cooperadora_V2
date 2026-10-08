@@ -41,7 +41,7 @@
 .ingresantes-headFilters .ingresantes-cycleFilter .module-filterControl,
 .ingresantes-headFilters .ingresantes-yearFilter .module-filterControl {
   padding-left: 12px;
-  padding-right: 26px;
+  padding-right: 0;
   text-overflow: ellipsis;
 }
 
@@ -363,4 +363,10 @@
   .ingresantes-formGrid > [class*="ingresantes-field--span-"] {
     grid-column: 1 / -1 !important;
   }
+}
+
+/* Selects de la sección y sus modales: sin relleno derecho. */
+.ingresantes-page select,
+.ingresantes-modal select {
+  padding-right: 0 !important;
 }

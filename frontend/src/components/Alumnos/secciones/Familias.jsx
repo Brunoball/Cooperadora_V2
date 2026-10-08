@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faAddressBook,
@@ -13,6 +13,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
+import GlobalPagination from "../../Global/GlobalPagination";
 import CrudModal from "../../Global/Modales/CrudModal";
 import InfoModal, {
   InfoEmpty,
@@ -32,6 +33,8 @@ import { canWrite } from "../../_shared/auth/session";
 import { familiasApi } from "../api/alumnosApi";
 import { useFamilias } from "../hooks/useFamilias";
 import "./Familias.css";
+
+const PAGE_SIZE = 100;
 
 const FORM_TAB_DETAILS = "datos";
 const FORM_TAB_MEMBERS = "integrantes";
@@ -416,6 +419,8 @@ export default function Familias() {
   const writable = canWrite();
   const [status, setStatus] = useState("activo");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const tableBodyRef = useRef(null);
   const [feedback, setFeedback] = useState(null);
   const [formModal, setFormModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -431,6 +436,29 @@ export default function Familias() {
     [status, search],
   );
   const { items, resumen, catalogos, loading, error, cargar } = useFamilias(filters);
+
+  const totalRecords = items.length;
+  const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
+  const currentPage = Math.min(page, Math.max(1, totalPages));
+  const firstIndex = (currentPage - 1) * PAGE_SIZE;
+  const visibleItems = useMemo(
+    () => items.slice(firstIndex, firstIndex + PAGE_SIZE),
+    [items, firstIndex],
+  );
+
+  // Si se elimina o da de baja la última fila, volver a una página válida.
+  useEffect(() => {
+    if (!loading) setPage(currentPage);
+  }, [currentPage, loading]);
+
+  useEffect(() => {
+    if (tableBodyRef.current) tableBodyRef.current.scrollTop = 0;
+  }, [currentPage, search, status]);
+
+  const changeFilter = (setter) => (value) => {
+    setPage(1);
+    setter(value);
+  };
 
   const openCreate = () => {
     setForm(emptyForm());
@@ -513,7 +541,7 @@ export default function Familias() {
       type: "tabs",
       label: "Estado",
       value: status,
-      onChange: setStatus,
+      onChange: changeFilter(setStatus),
       options: [
         { value: "activo", label: "Activas", count: resumen.activas ?? 0 },
         { value: "inactivo", label: "Bajas", count: resumen.inactivas ?? 0 },
@@ -524,7 +552,7 @@ export default function Familias() {
       type: "search",
       label: "Buscar familia",
       value: search,
-      onChange: setSearch,
+      onChange: changeFilter(setSearch),
       placeholder: "Familia o integrante...",
       className: "familias-mainSearch",
     },
@@ -545,7 +573,8 @@ export default function Familias() {
         className="familias-page"
       >
         <GlobalDivTable
-          className="familias-table"
+          className="familias-table has-bottom-pagination"
+          bodyRef={tableBodyRef}
           gridClassName="familias-grid"
           ariaLabel="Listado de familias"
           columns={["Familia", "Integrantes", "Estado", "Acciones"]}
@@ -563,7 +592,7 @@ export default function Familias() {
             </div>
           ) : null}
           {!loading && !error
-            ? items.map((item) => (
+            ? visibleItems.map((item) => (
                 <div
                   className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row familias-grid"
                   key={item.id_familia}
@@ -622,6 +651,20 @@ export default function Familias() {
               ))
             : null}
         </GlobalDivTable>
+        {!error ? (
+          <GlobalPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalRecords={totalRecords}
+            from={totalRecords ? firstIndex + 1 : 0}
+            to={Math.min(firstIndex + PAGE_SIZE, totalRecords)}
+            onPageChange={setPage}
+            loading={loading}
+            itemLabel="familias"
+            ariaLabel="Paginación de familias"
+            showWhenEmpty
+          />
+        ) : null}
       </ModulePage>
 
       <CrudModal
