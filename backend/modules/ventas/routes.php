@@ -17,6 +17,7 @@ function register_ventas_routes(Router $router): void
     $router->register('ventas_catalogos', 'GET', [Ventas::class, 'catalogos'], true);
     $router->register('ventas_personas_buscar', 'GET', [Ventas::class, 'buscarPersonas'], true);
     $router->register('ventas_persona_guardar', 'POST', [Ventas::class, 'guardarPersona'], true);
+    $router->register('ventas_objetivo_persona', 'GET', [Ventas::class, 'objetivoPersona'], true);
     $router->register('ventas_ordenes_listar', 'GET', [Ventas::class, 'ordenes'], true);
     $router->register('ventas_orden_detalle', 'GET', [Ventas::class, 'detalleOrden'], true);
     $router->register('ventas_orden_guardar', 'POST', [Ventas::class, 'guardarOrden'], true);

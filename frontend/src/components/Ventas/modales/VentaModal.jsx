@@ -16,6 +16,7 @@ const emptyOrder = {
   estado: "aprobada",
   referencia_pago: "",
   observacion: "",
+  ganancia_objetivo: 0,
   items: [blankItem()],
 };
 
@@ -26,6 +27,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [conceptsOpen, setConceptsOpen] = useState(false);
+  const [objectiveBase, setObjectiveBase] = useState({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
   const searchTimer = useRef(null);
   const personSearchSeq = useRef(0);
 
@@ -36,6 +38,11 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     (campaign) => yes(campaign.activo) || (initialId && String(campaign.id_campania) === String(form.id_campania))
   );
 
+  const selectedCampaign = useMemo(
+    () => campaigns.find((campaign) => String(campaign.id_campania) === String(form.id_campania)) || null,
+    [campaigns, form.id_campania],
+  );
+
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -43,6 +50,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setPersonSearch("");
     setPeople([]);
     setConceptsOpen(false);
+    setObjectiveBase({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
       return undefined;
@@ -79,6 +87,45 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setForm((current) => current.id_campania ? current : { ...current, id_campania: String(activeCampaign.id_campania) });
   }, [open, initialId, campaigns, form.id_campania]);
 
+  const objectiveMinimum = Math.max(0, Number(selectedCampaign?.cantidad_minima_persona || 0));
+  const objectivePerMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
+  const objectiveNoSales = Math.max(0, Number(selectedCampaign?.ganancia_total_sin_ventas || 0));
+  const objectiveEnabled = objectiveMinimum > 0 && Number(selectedCampaign?.id_producto_principal || 0) > 0;
+  const personDni = String(form.dni || "").replace(/\D/g, "");
+  const hasPersonReference = Boolean(form.id_venta_persona || personDni.length >= 5);
+
+  useEffect(() => {
+    if (!open || !form.id_campania || !objectiveEnabled || !hasPersonReference) {
+      setObjectiveBase({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
+      return undefined;
+    }
+
+    let alive = true;
+    const timer = setTimeout(async () => {
+      setObjectiveBase((current) => ({ ...current, loading: true }));
+      try {
+        const data = await ventasApi.objetivoPersona({
+          id_campania: form.id_campania,
+          id_venta_persona: form.id_venta_persona || "",
+          dni: personDni,
+          id_orden_excluir: initialId || "",
+        });
+        if (!alive) return;
+        setObjectiveBase({
+          loading: false,
+          vendidas_previas: Number(data?.vendidas_previas || 0),
+          persona_encontrada: Number(data?.persona_encontrada || 0),
+        });
+      } catch (err) {
+        if (!alive) return;
+        setObjectiveBase({ loading: false, vendidas_previas: 0, persona_encontrada: 0 });
+        onFeedback("error", err.message);
+      }
+    }, 180);
+
+    return () => { alive = false; clearTimeout(timer); };
+  }, [form.id_campania, form.id_venta_persona, hasPersonReference, initialId, objectiveEnabled, onFeedback, open, personDni]);
+
   useEffect(() => () => clearTimeout(searchTimer.current), []);
 
   const searchPeople = (value) => {
@@ -114,7 +161,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setPeople([]);
   };
 
-  const total = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
+  const itemsSubtotal = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
   const configuredItems = form.items.filter((item) => String(item.producto_nombre || "").trim());
   const hasConfiguredItems = configuredItems.length > 0 && configuredItems.every((item) => (
     item.precio_unitario !== ""
@@ -123,6 +170,27 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     && Number(item.cantidad || 0) >= 1
   ));
   const allDoor = hasConfiguredItems && configuredItems.every((item) => item.tipo_precio === "puerta");
+
+  const principalQuantity = useMemo(() => {
+    const principalId = String(selectedCampaign?.id_producto_principal || "");
+    if (!principalId) return 0;
+    return form.items.reduce((sum, item) => (
+      String(item.id_producto || "") === principalId ? sum + Math.max(0, Number(item.cantidad || 0)) : sum
+    ), 0);
+  }, [form.items, selectedCampaign?.id_producto_principal]);
+  const previousQuantity = Math.max(0, Number(objectiveBase.vendidas_previas || 0));
+  const currentCountedQuantity = form.estado === "aprobada" ? principalQuantity : 0;
+  const objectiveSold = previousQuantity + currentCountedQuantity;
+  const objectiveMissing = Math.max(0, objectiveMinimum - objectiveSold);
+  const objectiveDue = objectiveMissing <= 0
+    ? 0
+    : objectiveSold === 0
+      ? objectiveNoSales
+      : objectiveMissing * objectivePerMissing;
+  const objectiveGainForTotal = objectiveEnabled && hasPersonReference
+    ? (objectiveBase.loading ? Math.max(0, Number(form.ganancia_objetivo || 0)) : objectiveDue)
+    : 0;
+  const total = itemsSubtotal + objectiveGainForTotal;
 
   const submit = (event) => {
     event.preventDefault();
@@ -170,8 +238,11 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         </div>
         <div className="ventas-concepts-launcher__actions">
           <div className="ventas-concepts-launcher__total">
-            <span>Total</span>
+            <span>Total venta</span>
             <strong>{money(total)}</strong>
+            {objectiveGainForTotal > 0 ? (
+              <small>{money(itemsSubtotal)} productos + {money(objectiveGainForTotal)} ganancia</small>
+            ) : null}
           </div>
           <button
             type="button"
@@ -208,12 +279,41 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           </FloatingField>
         </div>
       </section>
+
+      {objectiveEnabled ? (
+        <section className="ventas-objective-card ventas-order-objective" aria-label="Objetivo de venta de la persona">
+          <div className="ventas-objective-card__head">
+            <div>
+              <strong>Objetivo de venta</strong>
+              <span>Calcula automáticamente la ganancia pendiente de esta persona para la campaña seleccionada.</span>
+            </div>
+            <span className={`ventas-pill ${hasPersonReference && objectiveMissing === 0 ? "success" : "warning"}`}>
+              {!hasPersonReference ? "SELECCIONAR PERSONA" : objectiveMissing === 0 ? "OBJETIVO CUMPLIDO" : "OBJETIVO PENDIENTE"}
+            </span>
+          </div>
+          <div className="ventas-objective-grid ventas-order-objective__grid">
+            <div className="ventas-objective-cell"><small>MÍNIMO</small><strong>{objectiveMinimum} UN.</strong></div>
+            <div className="ventas-objective-cell"><small>VENDIDAS ANTES</small><strong>{objectiveBase.loading ? "..." : previousQuantity}</strong></div>
+            <div className="ventas-objective-cell"><small>ESTA VENTA</small><strong>{principalQuantity}</strong></div>
+            <div className="ventas-objective-cell"><small>COMPUTABLES</small><strong>{objectiveBase.loading ? "..." : objectiveSold}</strong></div>
+            <div className="ventas-objective-cell"><small>FALTANTES</small><strong>{objectiveBase.loading ? "..." : objectiveMissing}</strong></div>
+            <div className="ventas-objective-cell ventas-objective-cell--due"><small>GANANCIA A PAGAR</small><strong>{objectiveBase.loading || !hasPersonReference ? "—" : money(objectiveDue)}</strong></div>
+          </div>
+          <div className="ventas-objective-card__rule">
+            <strong>Regla de la campaña</strong>
+            <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
+            {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar APROBADA.</span> : null}
+            {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
+          </div>
+        </section>
+      ) : null}
       </CrudModal>
 
       <VentaItemsModal
         open={open && conceptsOpen}
         items={form.items}
         products={products}
+        campaign={selectedCampaign}
         initialId={initialId}
         onClose={() => setConceptsOpen(false)}
         onApply={(items) => setForm((current) => ({ ...current, items }))}

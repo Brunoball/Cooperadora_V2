@@ -99,6 +99,7 @@ export default function Productos({ writable, feedback, showFeedback }) {
           { label: "Anticipada", align: "right" },
           { label: "Puerta", align: "right" },
           { label: "Stock", align: "center" },
+          "Objetivo vigente",
           "Uso",
           { label: "Acciones", align: "center" },
         ]}
@@ -133,6 +134,21 @@ export default function Productos({ writable, feedback, showFeedback }) {
                 <span className="ventas-pill neutral">SIN CONTROL</span>
               ) : (
                 <span className={`ventas-pill ${Number(row.stock) === 0 ? "danger" : "success"}`}>{row.stock}</span>
+              )}
+            </div>
+            <div className="mov-gridCell entity-main-cell ventas-objective-cell">
+              {row.configuracion_activa_nombre && Number(row.objetivo_cantidad_minima || 0) > 0 ? (
+                <>
+                  <strong>MÍN. {Number(row.objetivo_cantidad_minima)} UNIDADES</strong>
+                  <small>{money(row.objetivo_ganancia_unidad)} / FALTANTE · {money(row.objetivo_ganancia_total)} SIN VENTAS</small>
+                </>
+              ) : row.configuracion_activa_nombre ? (
+                <>
+                  <strong>SIN OBJETIVO</strong>
+                  <small>{upper(row.configuracion_activa_nombre, 150)}</small>
+                </>
+              ) : (
+                <span className="ventas-pill neutral">SIN CONFIGURACIÓN ACTIVA</span>
               )}
             </div>
             <div className="mov-gridCell">{Number(row.cantidad_usos || 0)} ventas · {Number(row.cantidad_campanias || 0)} campañas</div>

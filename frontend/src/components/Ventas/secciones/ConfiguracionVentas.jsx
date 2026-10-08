@@ -40,8 +40,8 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
       const isNew = !payload.id_campania;
       const result = await ventasApi.guardarCampania(payload);
       setModal({ open: false, row: null });
-      showFeedback("success", isNew ? `${result.mensaje} Quedó en DADAS DE BAJA hasta que la actives.` : result.mensaje);
-      if (isNew) setView("bajas");
+      showFeedback("success", result.mensaje);
+      if (isNew) setView("activas");
       await load();
     } catch (err) { showFeedback("error", err.message); }
     finally { setSaving(false); }
@@ -80,6 +80,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
         columns={[
           "Venta / campaña",
           "Producto principal",
+          "Objetivo por persona",
           { label: "Vigencia", align: "center" },
           { label: "WhatsApp", align: "center" },
           { label: "Ventas", align: "center" },
@@ -115,13 +116,36 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
               <strong>{row.producto_principal_nombre ? upper(row.producto_principal_nombre, 150) : "—"}</strong>
               {row.precio_anticipada != null ? <small>ANT. {money(row.precio_anticipada)} · PUERTA {money(row.precio_puerta)}</small> : null}
             </div>
+            <div className="mov-gridCell entity-main-cell ventas-objective-cell">
+              {Number(row.cantidad_minima_persona || 0) > 0 ? (
+                <>
+                  <strong>MÍN. {Number(row.cantidad_minima_persona)} UNIDADES</strong>
+                  <small>
+                    {money(row.ganancia_unidad_faltante)} / FALTANTE · {money(row.ganancia_total_sin_ventas)} SIN VENTAS
+                  </small>
+                </>
+              ) : (
+                <>
+                  <strong>SIN OBJETIVO</strong>
+                  <small>NO GENERA GANANCIA POR FALTANTES</small>
+                </>
+              )}
+            </div>
             <div className="mov-gridCell is-center entity-main-cell">
               <strong>{row.fecha_inicio || "SIN INICIO"}</strong>
               <small>HASTA {row.fecha_fin || "SIN FIN"}</small>
             </div>
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${yes(row.disponible_bot) ? "whatsapp" : "neutral"}`}>
-                <FontAwesomeIcon icon={faCommentDots} /> {yes(row.visible_menu) ? "VISIBLE" : "OCULTA"}
+                <FontAwesomeIcon icon={faCommentDots} /> {
+                  !yes(row.activo)
+                    ? "NO DISPONIBLE"
+                    : yes(row.disponible_bot)
+                      ? "DISPONIBLE"
+                      : yes(row.visible_menu)
+                        ? "FUERA DE VIGENCIA"
+                        : "OCULTA"
+                }
               </span>
             </div>
             <div className="mov-gridCell is-center is-strong">{Number(row.cantidad_ordenes || 0)}</div>
@@ -181,6 +205,12 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
         details={stateConfirm ? [
           { label: "Configuración", value: stateConfirm.nombre },
           { label: "Producto principal", value: stateConfirm.producto_principal_nombre || "SIN PRODUCTO" },
+          {
+            label: "Objetivo por persona",
+            value: Number(stateConfirm.cantidad_minima_persona || 0) > 0
+              ? `MÍN. ${Number(stateConfirm.cantidad_minima_persona)} · ${money(stateConfirm.ganancia_unidad_faltante)} POR FALTANTE · ${money(stateConfirm.ganancia_total_sin_ventas)} SIN VENTAS`
+              : "SIN OBJETIVO",
+          },
           { label: "Ventas asociadas", value: stateConfirm.cantidad_ordenes || 0 },
         ] : []}
         onClose={() => setStateConfirm(null)}

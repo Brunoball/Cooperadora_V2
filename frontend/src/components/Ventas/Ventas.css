@@ -100,22 +100,24 @@
 
 .ventas-grid--products {
   grid-template-columns:
-    1.55fr
-    .72fr
-    .72fr
-    .58fr
-    1fr
-    .72fr;
+    1.45fr
+    .68fr
+    .68fr
+    .55fr
+    1.25fr
+    .88fr
+    .68fr;
 }
 
 .ventas-grid--campaigns {
   grid-template-columns:
-    1.55fr
-    1.22fr
-    .9fr
+    1.35fr
+    1.05fr
+    1.35fr
+    .78fr
     .72fr
-    .48fr
-    .72fr;
+    .45fr
+    .66fr;
 }
 
 .ventas-grid--orders {
@@ -279,6 +281,97 @@
 .ventas-form-grid--campaign .ventas-check--field,
 .ventas-form-grid--product .ventas-check--field {
   align-self: stretch;
+}
+
+
+.ventas-objective-card {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid #e8c9c9;
+  border-radius: 14px;
+  background: #fff8f8;
+}
+
+.ventas-objective-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ventas-objective-card__head > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ventas-objective-card__head strong {
+  color: #8f2f2f;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.ventas-objective-card__head span:not(.ventas-pill) {
+  color: var(--mov-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ventas-objective-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ventas-objective-card__rule {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 11px;
+  border-top: 1px dashed #e7c1c1;
+  color: var(--mov-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ventas-objective-card__rule > strong {
+  color: #8f2f2f;
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.ventas-objective-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 3px;
+}
+
+.ventas-objective-examples > span {
+  padding: 6px 8px;
+  border: 1px solid #ead2d2;
+  border-radius: 9px;
+  color: #7a3b3b;
+  background: #fff;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.ventas-objective-cell small {
+  white-space: normal;
+}
+
+.ventas-pill.warning {
+  border-color: #ecd39a;
+  color: #8a6300;
+  background: #fff8df;
 }
 
 .ventas-field {
@@ -595,6 +688,16 @@
   color: var(--balto-action);
   font-size: 16px;
   font-weight: 720;
+  white-space: nowrap;
+}
+
+.ventas-concepts-launcher__total small {
+  max-width: 250px;
+  color: var(--mov-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -1434,3 +1537,87 @@
   }
 }
 
+
+
+@media (max-width: 900px) {
+  .ventas-objective-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ventas-objective-card__head {
+    flex-direction: column;
+  }
+}
+
+/* =========================================================
+   VENTAS REGISTRADAS · cierre de filtros y objetivo
+   ========================================================= */
+.ventas-page--orders .module-filter--search {
+  width: 205px;
+  min-width: 205px;
+  max-width: 205px;
+  flex-basis: 205px;
+}
+
+.ventas-page--orders .module-filter--select {
+  width: 124px;
+  min-width: 124px;
+  max-width: 124px;
+  flex-basis: 124px;
+}
+
+.ventas-order-objective {
+  margin-top: 0;
+  background: color-mix(in srgb, var(--primary-50, #eff6ff) 76%, #fff);
+  border-color: color-mix(in srgb, var(--primary-500, #3b82f6) 22%, #dbe4ef);
+}
+
+.ventas-order-objective .ventas-objective-card__head strong,
+.ventas-order-objective .ventas-objective-card__rule > strong {
+  color: var(--primary-700, #1d4ed8);
+}
+
+.ventas-order-objective__grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.ventas-order-objective .ventas-objective-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--primary-500, #3b82f6) 14%, #e5e7eb);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.ventas-order-objective .ventas-objective-cell small {
+  color: var(--mov-muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+.ventas-order-objective .ventas-objective-cell strong {
+  color: var(--balto-ink);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.ventas-order-objective .ventas-objective-cell--due strong {
+  color: var(--primary-700, #1d4ed8);
+}
+
+@media (max-width: 1180px) {
+  .ventas-order-objective__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ventas-order-objective__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

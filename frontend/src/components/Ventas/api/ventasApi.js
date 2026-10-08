@@ -16,6 +16,8 @@ export const ventasApi = {
   buscarPersonas: (params) => apiGet("ventas_personas_buscar", params),
   guardarPersona: (payload) => apiPost("ventas_persona_guardar", payload),
 
+  objetivoPersona: (params) => apiGet("ventas_objetivo_persona", params),
+
   ordenes: (params) => apiGet("ventas_ordenes_listar", params),
   detalleOrden: (params) => apiGet("ventas_orden_detalle", params),
   guardarOrden: (payload) => apiPost("ventas_orden_guardar", payload),

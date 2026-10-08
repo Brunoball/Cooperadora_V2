@@ -111,6 +111,70 @@ final class Ventas
         return $row;
     }
 
+    private static function objectiveForSold(array $campaign, int $sold): array
+    {
+        $minimum = max(0, (int)($campaign['cantidad_minima_persona'] ?? 0));
+        $sold = max(0, $sold);
+        $missing = max(0, $minimum - $sold);
+        $perMissing = max(0.0, (float)($campaign['ganancia_unidad_faltante'] ?? 0));
+        $noSales = max(0.0, (float)($campaign['ganancia_total_sin_ventas'] ?? 0));
+
+        $due = 0.0;
+        if ($minimum > 0 && $missing > 0) {
+            $due = $sold === 0 ? $noSales : ($missing * $perMissing);
+        }
+
+        return [
+            'cantidad_objetivo' => $minimum,
+            'cantidad_faltante' => $missing,
+            'ganancia_pendiente' => round($due, 2),
+            'objetivo_cumplido' => $minimum === 0 || $missing === 0 ? 1 : 0,
+            'estado_objetivo' => $minimum === 0
+                ? 'SIN_OBJETIVO'
+                : ($missing === 0 ? 'CUMPLIDO' : ($sold === 0 ? 'SIN_VENTAS' : 'PARCIAL')),
+        ];
+    }
+
+    private static function objectiveChargeForOrder(
+        PDO $db,
+        array $campaign,
+        ?int $personId,
+        ?int $excludeOrderId,
+        array $items,
+        string $state
+    ): float {
+        $minimum = max(0, (int)($campaign['cantidad_minima_persona'] ?? 0));
+        $principalId = (int)($campaign['id_producto_principal'] ?? 0);
+        if ($minimum <= 0 || $principalId <= 0 || !$personId) return 0.0;
+
+        $sql = "SELECT COALESCE(SUM(oi.cantidad), 0) AS vendidas
+                  FROM ventas_ordenes o
+                  INNER JOIN ventas_orden_items oi ON oi.id_orden = o.id_orden
+                 WHERE o.id_venta_persona = ?
+                   AND o.id_campania = ?
+                   AND o.estado = 'aprobada'
+                   AND oi.id_producto = ?";
+        $params = [$personId, (int)$campaign['id_campania'], $principalId];
+        if ($excludeOrderId) {
+            $sql .= ' AND o.id_orden <> ?';
+            $params[] = $excludeOrderId;
+        }
+        $row = self::fetchOne($db, $sql, $params);
+        $soldBefore = max(0, (int)($row['vendidas'] ?? 0));
+
+        $soldThisOrder = 0;
+        if ($state === 'aprobada') {
+            foreach ($items as $item) {
+                if ((int)($item['id_producto'] ?? 0) === $principalId) {
+                    $soldThisOrder += max(0, (int)($item['cantidad'] ?? 0));
+                }
+            }
+        }
+
+        $objective = self::objectiveForSold($campaign, $soldBefore + $soldThisOrder);
+        return round(max(0.0, (float)($objective['ganancia_pendiente'] ?? 0)), 2);
+    }
+
     private static function order(PDO $db, int $id, bool $forUpdate = false): array
     {
         $row = self::fetchOne(
@@ -492,46 +556,152 @@ final class Ventas
         $id = self::nullablePositiveId($body['id_campania'] ?? null);
         $name = required_text($body, 'nombre', 'nombre', 150, true);
         $productId = self::nullablePositiveId($body['id_producto_principal'] ?? null);
-        $product = $productId !== null ? self::product($db, $productId) : null;
         $start = valid_date($body['fecha_inicio'] ?? null, 'inicio', false);
         $end = valid_date($body['fecha_fin'] ?? null, 'fin', false);
         if ($start && $end && $end < $start) api_error('La fecha de fin no puede ser anterior a la fecha de inicio.', 'VALIDATION_ERROR');
         $visibleRequested = array_key_exists('visible_menu', $body) ? self::boolValue($body['visible_menu']) : null;
+
+        // Regla opcional de objetivo por persona.
+        // Ejemplo: mínimo 3, $3.000 por unidad faltante y $10.000 si no vende ninguna.
+        $minimumQuantity = self::integer($body['cantidad_minima_persona'] ?? 0, 'cantidad mínima por persona', 0, 10000);
+        $missingUnitGain = decimal_amount($body['ganancia_unidad_faltante'] ?? 0, 'ganancia por unidad faltante', 0, self::MONEY_MAX);
+        $noSalesGain = decimal_amount($body['ganancia_total_sin_ventas'] ?? 0, 'ganancia total sin ventas', 0, self::MONEY_MAX);
+        if ($minimumQuantity === 0) {
+            $missingUnitGain = 0.0;
+            $noSalesGain = 0.0;
+        } else {
+            if ($productId === null) {
+                api_error('Para configurar un objetivo de venta por persona primero seleccioná un producto principal.', 'VENTA_OBJETIVO_PRODUCTO_REQUERIDO');
+            }
+            if ((float)$missingUnitGain <= 0 || (float)$noSalesGain <= 0) {
+                api_error('Si definís una cantidad mínima, la ganancia por unidad faltante y la ganancia total sin ventas deben ser mayores a cero.', 'VENTA_OBJETIVO_GANANCIA_REQUERIDA');
+            }
+        }
+
         // Los únicos textos que conservan la escritura natural son los que consume el bot.
         $question = optional_text($body['pregunta_persona'] ?? null, 1000, false);
         $startMessage = optional_text($body['mensaje_inicio'] ?? null, 1000, false);
         $approvedMessage = optional_text($body['mensaje_aprobado'] ?? null, 1000, false);
 
-        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $product, $start, $end, $visibleRequested, $question, $startMessage, $approvedMessage) {
+        // La suite E2E necesita poder crear su campaña aislada como inactiva para no
+        // tocar la configuración real. En uso normal, una nueva configuración siempre
+        // nace activa (regla funcional de Cooperadora).
+        $isolatedE2ECreate = $id === null
+            && function_exists('e2e_request_active')
+            && e2e_request_active($auth)
+            && array_key_exists('activo', $body)
+            && !self::boolValue($body['activo']);
+
+        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate) {
+            // Bloqueamos primero el producto solicitado y después la configuración.
+            // De esta forma una edición de una configuración activa no puede aprobar un
+            // producto que fue dado de baja concurrentemente.
+            $product = $productId !== null ? self::product($db, $productId, true) : null;
             $before = $id ? self::campaign($db, $id, true) : null;
-            // Crear/editar nunca cambia el estado: la activación se hace exclusivamente
-            // desde ventas_campania_estado, con confirmación explícita en la interfaz.
-            $active = $before ? (int)$before['activo'] : 0;
+
+            // Editar conserva el estado actual. Crear, en cambio, activa automáticamente
+            // la nueva configuración y da de baja cualquier otra que estuviera activa.
+            // Así el alta deja siempre una única venta/configuración vigente.
+            $active = $before ? (int)$before['activo'] : ($isolatedE2ECreate ? 0 : 1);
             $visible = $visibleRequested ?? ($before ? (int)$before['visible_menu'] : 1);
             if ($active && (!$product || empty($product['activo']))) {
-                api_error('Una campaña activa debe conservar un producto principal activo. Desactivala antes de cambiar este producto.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
+                api_error(
+                    $id
+                        ? 'Una campaña activa debe conservar un producto principal activo. Desactivala antes de cambiar este producto.'
+                        : 'La nueva configuración debe tener un producto principal activo para poder quedar activa.',
+                    'VENTA_CAMPANIA_PRODUCTO_REQUERIDO',
+                    409
+                );
+            }
+
+            // Una vez que la configuración tiene ventas, su producto principal y la
+            // regla económica del objetivo pasan a ser históricas. Permitir modificarlas
+            // recalcularía planillas viejas con criterios nuevos, por eso se bloquean
+            // también en backend (no sólo desde la interfaz).
+            if ($before) {
+                $orderStatement = $db->prepare(
+                    'SELECT id_orden FROM ventas_ordenes WHERE id_campania=? ORDER BY id_orden LIMIT 1 FOR UPDATE'
+                );
+                $orderStatement->execute([$id]);
+                $hasOrders = $orderStatement->fetchColumn() !== false;
+                if ($hasOrders) {
+                    $beforeProductId = self::nullablePositiveId($before['id_producto_principal'] ?? null);
+                    $objectiveChanged =
+                        (int)($before['cantidad_minima_persona'] ?? 0) !== $minimumQuantity
+                        || round((float)($before['ganancia_unidad_faltante'] ?? 0), 2) !== round((float)$missingUnitGain, 2)
+                        || round((float)($before['ganancia_total_sin_ventas'] ?? 0), 2) !== round((float)$noSalesGain, 2);
+                    if ($beforeProductId !== $productId || $objectiveChanged) {
+                        api_error(
+                            'Esta configuración ya tiene ventas registradas. El producto principal y el objetivo de venta no pueden modificarse porque forman parte del historial.',
+                            'VENTA_CAMPANIA_REGLA_HISTORICA',
+                            409
+                        );
+                    }
+                }
             }
             if ($id) {
                 $db->prepare(
                     'UPDATE ventas_campanias
                         SET nombre=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?,
-                            tipo_persona=\'comprador\', pregunta_persona=?, mensaje_inicio=?, mensaje_aprobado=?
+                            cantidad_minima_persona=?, ganancia_unidad_faltante=?, ganancia_total_sin_ventas=?,
+                            pregunta_persona=?, mensaje_inicio=?, mensaje_aprobado=?
                       WHERE id_campania=?'
-                )->execute([$name, $visible, $productId, $start, $end, $question, $startMessage, $approvedMessage, $id]);
+                )->execute([
+                    $name, $visible, $productId, $start, $end,
+                    $minimumQuantity, $missingUnitGain, $noSalesGain,
+                    $question, $startMessage, $approvedMessage, $id
+                ]);
                 $recordId = $id;
             } else {
+                if ($active) {
+                    // Bloqueamos las configuraciones en orden estable antes de cambiar estados.
+                    // Esto replica el blindaje de estadoCampania() y evita que dos altas
+                    // concurrentes puedan dejar más de una configuración activa.
+                    $db->query('SELECT id_campania FROM ventas_campanias ORDER BY id_campania FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN);
+
+                    $activeIds = array_map(
+                        'intval',
+                        $db->query('SELECT id_campania FROM ventas_campanias WHERE activo=1 ORDER BY id_campania')->fetchAll(PDO::FETCH_COLUMN) ?: []
+                    );
+                    foreach ($activeIds as $otherId) {
+                        $otherBefore = self::campaign($db, $otherId);
+                        $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_campania=?')->execute([$otherId]);
+                        $otherAfter = self::campaign($db, $otherId);
+                        audit_change(
+                            $db,
+                            $auth,
+                            'VENTAS',
+                            'DESACTIVAR_CAMPANIA_AUTOMATICA',
+                            'ventas_campanias',
+                            $otherId,
+                            'Se dio de baja automáticamente al crear una nueva configuración de venta.',
+                            $otherBefore,
+                            $otherAfter
+                        );
+                    }
+                }
+
                 $db->prepare(
                     'INSERT INTO ventas_campanias
-                        (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin, tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado)
-                     VALUES (?, 0, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
-                )->execute([$name, $visible, $productId, $start, $end, $question, $startMessage, $approvedMessage]);
+                        (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin,
+                         cantidad_minima_persona, ganancia_unidad_faltante, ganancia_total_sin_ventas,
+                         tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
+                )->execute([
+                    $name, $active, $visible, $productId, $start, $end,
+                    $minimumQuantity, $missingUnitGain, $noSalesGain,
+                    $question, $startMessage, $approvedMessage
+                ]);
                 $recordId = (int)$db->lastInsertId();
             }
             $after = self::campaign($db, $recordId);
             audit_change($db, $auth, 'VENTAS', $id ? 'EDITAR_CAMPANIA' : 'CREAR_CAMPANIA', 'ventas_campanias', $recordId, 'Campaña de ventas.', $before, $after);
             return $after;
         });
-        api_success(['item' => $result], $id ? 'Campaña actualizada.' : 'Campaña creada.');
+        api_success(
+            ['item' => $result],
+            $id ? 'Campaña actualizada.' : ((int)($result['activo'] ?? 0) === 1 ? 'Configuración creada y activada.' : 'Configuración creada.')
+        );
     }
 
     public static function estadoCampania(): never
@@ -545,15 +715,48 @@ final class Ventas
             // Al activar, bloqueamos todas las configuraciones en un orden estable.
             // Así dos activaciones concurrentes no pueden dejar más de una activa.
             if ($active) {
-                $db->query('SELECT id_campania FROM ventas_campanias ORDER BY id_campania FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN);
+                $ids = $db->query('SELECT id_campania FROM ventas_campanias ORDER BY id_campania FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN) ?: [];
+                if (!in_array((string)$id, array_map('strval', $ids), true)) {
+                    api_error('La campaña de ventas no existe.', 'VENTA_CAMPANIA_NO_ENCONTRADA', 404);
+                }
                 $before = self::campaign($db, $id);
             } else {
                 $before = self::campaign($db, $id, true);
             }
+
             if ($active && (empty($before['id_producto_principal']) || empty($before['producto_principal_activo']))) {
                 api_error('No podés activar esta configuración hasta asignarle un producto principal activo.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
             }
-            if ($active) $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_campania <> ?')->execute([$id]);
+            if ($active && (int)($before['cantidad_minima_persona'] ?? 0) > 0) {
+                if ((float)($before['ganancia_unidad_faltante'] ?? 0) <= 0 || (float)($before['ganancia_total_sin_ventas'] ?? 0) <= 0) {
+                    api_error('La configuración tiene un objetivo incompleto. Revisá la ganancia por unidad faltante y la ganancia total sin ventas.', 'VENTA_OBJETIVO_INCOMPLETO', 409);
+                }
+            }
+
+            if ($active) {
+                // Conservamos trazabilidad también de las configuraciones que se dan
+                // de baja automáticamente por la regla de "una sola activa".
+                $others = $db->prepare('SELECT id_campania FROM ventas_campanias WHERE activo=1 AND id_campania<>? ORDER BY id_campania');
+                $others->execute([$id]);
+                $otherIds = array_map('intval', $others->fetchAll(PDO::FETCH_COLUMN) ?: []);
+                foreach ($otherIds as $otherId) {
+                    $otherBefore = self::campaign($db, $otherId);
+                    $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_campania=?')->execute([$otherId]);
+                    $otherAfter = self::campaign($db, $otherId);
+                    audit_change(
+                        $db,
+                        $auth,
+                        'VENTAS',
+                        'DESACTIVAR_CAMPANIA_AUTOMATICA',
+                        'ventas_campanias',
+                        $otherId,
+                        'Se dio de baja automáticamente al activar otra configuración de venta.',
+                        $otherBefore,
+                        $otherAfter
+                    );
+                }
+            }
+
             $db->prepare('UPDATE ventas_campanias SET activo=? WHERE id_campania=?')->execute([$active, $id]);
             $after = self::campaign($db, $id);
             audit_change($db, $auth, 'VENTAS', $active ? 'ACTIVAR_CAMPANIA' : 'DESACTIVAR_CAMPANIA', 'ventas_campanias', $id, 'Cambio de estado de configuración de venta.', $before, $after);
@@ -600,7 +803,23 @@ final class Ventas
         $statement = $db->prepare(
             "SELECT p.*,
                     (SELECT COUNT(*) FROM ventas_orden_items i WHERE i.id_producto=p.id_producto) AS cantidad_usos,
-                    (SELECT COUNT(*) FROM ventas_campanias c WHERE c.id_producto_principal=p.id_producto) AS cantidad_campanias
+                    (SELECT COUNT(*) FROM ventas_campanias c WHERE c.id_producto_principal=p.id_producto) AS cantidad_campanias,
+                    (SELECT c.nombre
+                       FROM ventas_campanias c
+                      WHERE c.id_producto_principal=p.id_producto AND c.activo=1
+                      ORDER BY c.id_campania DESC LIMIT 1) AS configuracion_activa_nombre,
+                    (SELECT c.cantidad_minima_persona
+                       FROM ventas_campanias c
+                      WHERE c.id_producto_principal=p.id_producto AND c.activo=1
+                      ORDER BY c.id_campania DESC LIMIT 1) AS objetivo_cantidad_minima,
+                    (SELECT c.ganancia_unidad_faltante
+                       FROM ventas_campanias c
+                      WHERE c.id_producto_principal=p.id_producto AND c.activo=1
+                      ORDER BY c.id_campania DESC LIMIT 1) AS objetivo_ganancia_unidad,
+                    (SELECT c.ganancia_total_sin_ventas
+                       FROM ventas_campanias c
+                      WHERE c.id_producto_principal=p.id_producto AND c.activo=1
+                      ORDER BY c.id_campania DESC LIMIT 1) AS objetivo_ganancia_total
                FROM ventas_productos p WHERE {$whereSql}
               ORDER BY p.activo DESC, p.nombre
               LIMIT {$perPage} OFFSET {$offset}"
@@ -650,10 +869,38 @@ final class Ventas
         $id=positive_id($body['id_producto'] ?? $body['id'] ?? null,'producto'); $active=self::boolValue($body['activo'] ?? true);
         transaction($db,function()use($db,$auth,$id,$active){
             $before=self::product($db,$id,true);
+
+            $campaignIds = [];
+            $campaignsBefore = [];
+            if (!$active) {
+                $statement = $db->prepare('SELECT id_campania FROM ventas_campanias WHERE id_producto_principal=? AND activo=1 ORDER BY id_campania FOR UPDATE');
+                $statement->execute([$id]);
+                $campaignIds = array_map('intval', $statement->fetchAll(PDO::FETCH_COLUMN) ?: []);
+                foreach ($campaignIds as $campaignId) $campaignsBefore[$campaignId] = self::campaign($db, $campaignId);
+            }
+
             $db->prepare('UPDATE ventas_productos SET activo=? WHERE id_producto=?')->execute([$active,$id]);
-            // Dar de baja el producto baja cualquier configuración que dependa de él,
-            // pero conserva visible_menu para no perder la preferencia del usuario.
-            if (!$active) $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_producto_principal=?')->execute([$id]);
+
+            // Dar de baja el producto baja cualquier configuración activa que dependa
+            // de él, pero conserva visible_menu para no perder esa preferencia.
+            if (!$active && $campaignIds) {
+                $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_producto_principal=? AND activo=1')->execute([$id]);
+                foreach ($campaignIds as $campaignId) {
+                    $campaignAfter = self::campaign($db, $campaignId);
+                    audit_change(
+                        $db,
+                        $auth,
+                        'VENTAS',
+                        'DESACTIVAR_CAMPANIA_POR_PRODUCTO',
+                        'ventas_campanias',
+                        $campaignId,
+                        'La configuración se dio de baja automáticamente porque su producto principal fue dado de baja.',
+                        $campaignsBefore[$campaignId] ?? null,
+                        $campaignAfter
+                    );
+                }
+            }
+
             $after=self::product($db,$id);
             audit_change($db,$auth,'VENTAS',$active?'ACTIVAR_PRODUCTO':'DESACTIVAR_PRODUCTO','ventas_productos',$id,'Cambio de estado de producto.',$before,$after);
         });
@@ -667,8 +914,25 @@ final class Ventas
             $before=self::product($db,$id,true);
             $uses=(int)self::fetchOne($db,'SELECT (SELECT COUNT(*) FROM ventas_orden_items WHERE id_producto=?)+(SELECT COUNT(*) FROM ventas_campanias WHERE id_producto_principal=?) AS n',[$id,$id])['n'];
             if($uses>0){
+                $campaignStatement = $db->prepare('SELECT id_campania FROM ventas_campanias WHERE id_producto_principal=? AND activo=1 ORDER BY id_campania FOR UPDATE');
+                $campaignStatement->execute([$id]);
+                $campaignIds = array_map('intval', $campaignStatement->fetchAll(PDO::FETCH_COLUMN) ?: []);
+                $campaignsBefore = [];
+                foreach ($campaignIds as $campaignId) $campaignsBefore[$campaignId] = self::campaign($db, $campaignId);
+
                 $db->prepare('UPDATE ventas_productos SET activo=0 WHERE id_producto=?')->execute([$id]);
-                $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_producto_principal=?')->execute([$id]);
+                if ($campaignIds) {
+                    $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_producto_principal=? AND activo=1')->execute([$id]);
+                    foreach ($campaignIds as $campaignId) {
+                        $campaignAfter = self::campaign($db, $campaignId);
+                        audit_change(
+                            $db, $auth, 'VENTAS', 'DESACTIVAR_CAMPANIA_POR_PRODUCTO',
+                            'ventas_campanias', $campaignId,
+                            'La configuración se dio de baja automáticamente al archivar su producto principal.',
+                            $campaignsBefore[$campaignId] ?? null, $campaignAfter
+                        );
+                    }
+                }
                 $after=self::product($db,$id);
                 audit_change($db,$auth,'VENTAS','ARCHIVAR_PRODUCTO','ventas_productos',$id,'Producto utilizado: se archivó.',$before,$after);
                 return 'archivado';
@@ -691,9 +955,20 @@ final class Ventas
     {
         $db=self::db();
         $products=$db->query('SELECT id_producto,nombre,descripcion,precio,precio_anticipada,precio_puerta,stock,activo FROM ventas_productos ORDER BY activo DESC,nombre')->fetchAll(PDO::FETCH_ASSOC)?:[];
-        $campaigns=$db->query('SELECT id_campania,nombre,activo,id_producto_principal FROM ventas_campanias ORDER BY activo DESC,id_campania DESC')->fetchAll(PDO::FETCH_ASSOC)?:[];
+        $campaigns=$db->query("SELECT c.id_campania,c.nombre,c.activo,c.id_producto_principal,
+                                      c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
+                                      p.nombre AS producto_principal_nombre
+                                 FROM ventas_campanias c
+                                 LEFT JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
+                                ORDER BY c.activo DESC,c.id_campania DESC")->fetchAll(PDO::FETCH_ASSOC)?:[];
         $payment=$db->query('SELECT id_medio_pago,medio_pago FROM medio_pago ORDER BY medio_pago')->fetchAll(PDO::FETCH_ASSOC)?:[];
-        api_success(['productos'=>$products,'campanias'=>$campaigns,'medios_pago'=>$payment,'estados'=>self::ORDER_STATES]);
+        $months=$db->query("SELECT DISTINCT DATE_FORMAT(COALESCE(o.aprobado_en,o.creado_en),'%Y-%m') AS mes
+                              FROM ventas_ordenes o
+                             WHERE COALESCE(o.aprobado_en,o.creado_en) IS NOT NULL
+                             ORDER BY mes DESC")->fetchAll(PDO::FETCH_COLUMN)?:[];
+        $currentMonth=date('Y-m');
+        if(!in_array($currentMonth,$months,true)) array_unshift($months,$currentMonth);
+        api_success(['productos'=>$products,'campanias'=>$campaigns,'medios_pago'=>$payment,'estados'=>self::ORDER_STATES,'meses_ventas'=>$months]);
     }
 
     public static function buscarPersonas(): never
@@ -736,6 +1011,42 @@ final class Ventas
         api_success(['id_persona'=>$id]);
     }
 
+    public static function objetivoPersona(): never
+    {
+        $db=self::db();
+        $campaignId=positive_id($_GET['id_campania'] ?? null,'campaña');
+        $campaign=self::campaign($db,$campaignId);
+        $excludeOrder=self::nullablePositiveId($_GET['id_orden_excluir'] ?? null);
+        $personId=self::nullablePositiveId($_GET['id_venta_persona'] ?? null);
+        $dni=preg_replace('/\D+/', '', (string)($_GET['dni'] ?? ''));
+
+        if(!$personId && $dni!==''){
+            $person=self::fetchOne($db,'SELECT id_persona FROM ventas_personas WHERE dni=? ORDER BY id_persona LIMIT 1',[$dni]);
+            $personId=$person ? (int)$person['id_persona'] : null;
+        }
+
+        $sold=0;
+        $principalId=(int)($campaign['id_producto_principal'] ?? 0);
+        if($personId && $principalId>0){
+            $sql="SELECT COALESCE(SUM(oi.cantidad),0) AS vendidas
+                    FROM ventas_ordenes o
+                    INNER JOIN ventas_orden_items oi ON oi.id_orden=o.id_orden
+                   WHERE o.id_venta_persona=? AND o.id_campania=? AND o.estado='aprobada' AND oi.id_producto=?";
+            $params=[$personId,$campaignId,$principalId];
+            if($excludeOrder){$sql.=' AND o.id_orden<>?';$params[]=$excludeOrder;}
+            $row=self::fetchOne($db,$sql,$params);
+            $sold=(int)($row['vendidas'] ?? 0);
+        }
+
+        $objective=self::objectiveForSold($campaign,$sold);
+        api_success([
+            'id_venta_persona'=>$personId,
+            'persona_encontrada'=>$personId ? 1 : 0,
+            'vendidas_previas'=>$sold,
+            'objetivo'=>$objective,
+        ]);
+    }
+
     public static function ordenes(): never
     {
         $db=self::db(); [$page,$perPage,$offset]=self::pagination();
@@ -743,12 +1054,18 @@ final class Ventas
         $state=strtolower(trim((string)($_GET['estado'] ?? 'aprobada')));
         $retreat=strtolower(trim((string)($_GET['retiro'] ?? '')));
         $origin=strtolower(trim((string)($_GET['origen'] ?? '')));
+        $month=trim((string)($_GET['mes'] ?? ''));
         $search=trim((string)($_GET['buscar'] ?? $_GET['q'] ?? ''));
         $where=['1=1']; $params=[];
         if($campaign){$where[]='o.id_campania=?';$params[]=$campaign;}
         if($state!==''){ if(!in_array($state,self::ORDER_STATES,true)) api_error('Filtro de estado inválido.','VALIDATION_ERROR'); $where[]='o.estado=?';$params[]=$state;}
         if($retreat==='pendiente')$where[]="o.estado='aprobada' AND o.retirado=0"; elseif($retreat==='retirado')$where[]="o.estado='aprobada' AND o.retirado=1";
-        if(in_array($origin,['manual','bot_whatsapp','importado'],true)){$where[]='o.origen=?';$params[]=$origin;}
+        if($origin!=='' && !in_array($origin,['manual','bot_whatsapp','importado'],true)) api_error('Filtro de origen inválido.','VALIDATION_ERROR');
+        if($origin!==''){$where[]='o.origen=?';$params[]=$origin;}
+        if($month!==''){
+            if(!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/',$month)) api_error('Filtro de mes inválido.','VALIDATION_ERROR');
+            $where[]="DATE_FORMAT(COALESCE(o.aprobado_en,o.creado_en),'%Y-%m')=?";$params[]=$month;
+        }
         if($search!==''){
             $filter=build_search_filter($search,['o.codigo_orden LIKE {param}','vp.dni LIKE {param}','vp.nombre_apellido LIKE {param}','c.nombre LIKE {param}','o.referencia_pago LIKE {param}','o.observacion LIKE {param}'],160,null);
             $where[]=$filter['sql'];$params=array_merge($params,$filter['params']);
@@ -793,10 +1110,10 @@ final class Ventas
         $saleDate=valid_date($body['fecha_venta'] ?? date('Y-m-d'),'venta',true);
         $observation=optional_text($body['observacion'] ?? null,3000);
         $reference=optional_text($body['referencia_pago'] ?? null,180);
-        [$items,$total]=self::normalizeItems($db,$body['items'] ?? []);
+        [$items,$itemsTotal]=self::normalizeItems($db,$body['items'] ?? []);
         $allDoor=self::allDoorPrice($items);
 
-        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$total,$allDoor){
+        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor){
             $campaign=self::campaign($db,$campaignId,true);
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
@@ -807,8 +1124,16 @@ final class Ventas
             $personId=self::resolvePerson($db,$body);
             if(!$personId && !$allDoor) api_error('Las ventas anticipadas deben estar asociadas a una persona o alumno.','VALIDATION_ERROR');
 
+            // La ganancia por objetivo forma parte del importe final de la venta.
+            // Se calcula siempre en backend para que no pueda alterarse desde el navegador.
+            $objectiveGain=self::objectiveChargeForOrder($db,$campaign,$personId,$id,$items,$state);
+            $finalTotal=round((float)$itemsTotal+$objectiveGain,2);
+            if($finalTotal<=0 || $finalTotal>self::MONEY_MAX) api_error('El total final de la venta no es válido.','VALIDATION_ERROR');
+            $total=number_format($finalTotal,2,'.','');
+            $objectiveGainDb=number_format($objectiveGain,2,'.','');
+
             $nowApproved=$state==='aprobada';
-            // Sin columnas nuevas: las ventas creadas por V2 se distinguen por su código V2V-.
+            // Las ventas creadas por V2 se distinguen por su código V2V-.
             // Las históricas conservan el comportamiento anterior y no alteran stock retroactivamente.
             $trackStock=$before===null || self::isStockManagedOrder($before);
             if($nowApproved && $trackStock) self::adjustStock($db,$items,-1);
@@ -818,14 +1143,14 @@ final class Ventas
                 $keepRetreat=$nowApproved && $before && $before['estado']==='aprobada';
                 $retired=$keepRetreat ? (int)$before['retirado'] : 0;
                 $retiredAt=$keepRetreat && $retired ? $before['retirado_en'] : null;
-                $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,id_medio_pago=?,referencia_pago=?,observacion=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=? WHERE id_orden=?')
-                    ->execute([$campaignId,$personId,$state,$total,$paymentId,$reference,$observation,$approvedAt,$cancelledAt,$retired,$retiredAt,$id]);
+                $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,ganancia_objetivo=?,id_medio_pago=?,referencia_pago=?,observacion=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=? WHERE id_orden=?')
+                    ->execute([$campaignId,$personId,$state,$total,$objectiveGainDb,$paymentId,$reference,$observation,$approvedAt,$cancelledAt,$retired,$retiredAt,$id]);
                 $db->prepare('DELETE FROM ventas_orden_items WHERE id_orden=?')->execute([$id]);
                 $orderId=$id;
             }else{
                 $code=self::generateOrderCode($db);
-                $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,id_medio_pago,origen,referencia_pago,observacion,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,\'manual\',?,?,?,?)')
-                    ->execute([$code,$campaignId,$personId,$state,$total,$paymentId,$reference,$observation,$approvedAt,$cancelledAt]);
+                $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,id_medio_pago,origen,referencia_pago,observacion,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,?,\'manual\',?,?,?,?)')
+                    ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$paymentId,$reference,$observation,$approvedAt,$cancelledAt]);
                 $orderId=(int)$db->lastInsertId();
             }
             $insert=$db->prepare('INSERT INTO ventas_orden_items (id_orden,id_producto,producto_nombre,cantidad,precio_unitario,subtotal,tipo_precio) VALUES (?,?,?,?,?,?,?)');
@@ -874,15 +1199,64 @@ final class Ventas
 
     public static function datosPlanillas(): never
     {
-        $db=self::db();$type=strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));$campaignId=positive_id($_GET['id_campania'] ?? null,'campaña');$campaign=self::campaign($db,$campaignId);
+        $db=self::db();
+        $type=strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));
+        if (!in_array($type, ['cursos', 'docentes'], true)) {
+            api_error('El tipo de planilla no es válido.', 'VALIDATION_ERROR');
+        }
+
+        $campaignId=positive_id($_GET['id_campania'] ?? null,'campaña');
+        $campaign=self::campaign($db,$campaignId);
+
+        // Metadatos históricos de impresión. El año sale de la propia campaña y
+        // el precio usa las ventas aprobadas cuando existe un único valor real.
+        // Si hubo más de un precio se informa como múltiple en vez de mostrar el
+        // precio actual del producto como si fuera histórico.
+        $yearSource = $campaign['fecha_inicio'] ?: ($campaign['fecha_fin'] ?: ($campaign['creado_en'] ?? null));
+        $sheetYear = $yearSource ? (int)substr((string)$yearSource, 0, 4) : (int)date('Y');
+        $principalId=(int)($campaign['id_producto_principal'] ?? 0);
+        $priceMeta = ['precios_distintos'=>0, 'precio_min'=>null, 'precio_max'=>null];
+        if ($principalId > 0) {
+            $priceMeta = self::fetchOne(
+                $db,
+                "SELECT COUNT(DISTINCT oi.precio_unitario) AS precios_distintos,
+                        MIN(oi.precio_unitario) AS precio_min,
+                        MAX(oi.precio_unitario) AS precio_max
+                   FROM ventas_ordenes o
+                   INNER JOIN ventas_orden_items oi ON oi.id_orden=o.id_orden
+                  WHERE o.id_campania=? AND o.estado='aprobada' AND oi.id_producto=?",
+                [$campaignId, $principalId]
+            ) ?: $priceMeta;
+        }
+        $distinctPrices = (int)($priceMeta['precios_distintos'] ?? 0);
+        $sheetPrice = $distinctPrices === 1
+            ? $priceMeta['precio_min']
+            : ($distinctPrices === 0 ? ($campaign['producto_principal_precio_anticipada'] ?? null) : null);
+        $meta = [
+            'anio_planilla'=>$sheetYear,
+            'precio_unitario_referencia'=>$sheetPrice,
+            'precio_unitario_multiple'=>$distinctPrices > 1,
+        ];
+
         if($type==='docentes'){
             $sql='SELECT id_docente, docente AS nombre_completo, dni, email, activo FROM docentes WHERE activo=1 ORDER BY docente';
             $rows=$db->query($sql)->fetchAll(PDO::FETCH_ASSOC)?:[];
-            api_success(['tipo'=>'docentes','campania'=>$campaign,'items'=>$rows]);
+            api_success(['tipo'=>'docentes','campania'=>$campaign,'meta'=>$meta,'items'=>$rows]);
         }
-        $year=self::nullablePositiveId($_GET['id_anio'] ?? null);$division=self::nullablePositiveId($_GET['id_division'] ?? null);
-        $principalId=(int)($campaign['id_producto_principal'] ?? 0);
-        $where=['a.eliminado=0','a.activo=1','a.ingreso<=CURDATE()'];$params=[];if($year){$where[]='a.id_anio=?';$params[]=$year;}if($division){$where[]='a.id_division=?';$params[]=$division;}
+
+        $year=self::nullablePositiveId($_GET['id_anio'] ?? null);
+        $division=self::nullablePositiveId($_GET['id_division'] ?? null);
+        if ($year !== null && !self::fetchOne($db, 'SELECT id_anio FROM anio WHERE id_anio=? LIMIT 1', [$year])) {
+            api_error('El año seleccionado no existe.', 'VALIDATION_ERROR');
+        }
+        if ($division !== null && !self::fetchOne($db, 'SELECT id_division FROM division WHERE id_division=? LIMIT 1', [$division])) {
+            api_error('La división seleccionada no existe.', 'VALIDATION_ERROR');
+        }
+
+        $where=['a.eliminado=0','a.activo=1','a.ingreso<=CURDATE()'];
+        $params=[];
+        if($year){$where[]='a.id_anio=?';$params[]=$year;}
+        if($division){$where[]='a.id_division=?';$params[]=$division;}
         $sql="SELECT a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division,
                     COALESCE(SUM(CASE WHEN o.estado='aprobada' AND oi.id_producto={$principalId} THEN oi.cantidad ELSE 0 END),0) AS cantidad_ven,
                     COALESCE(SUM(CASE WHEN o.estado='aprobada' AND (oi.id_producto IS NULL OR oi.id_producto<>{$principalId}) THEN oi.cantidad ELSE 0 END),0) AS cantidad_gan,
@@ -897,13 +1271,22 @@ final class Ventas
               GROUP BY a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division
               ORDER BY a.id_anio,a.id_division,a.apellido,a.nombre";
         $statement=$db->prepare($sql);$statement->execute(array_merge([$campaignId],$params));
-        api_success(['tipo'=>'cursos','campania'=>$campaign,'items'=>$statement->fetchAll(PDO::FETCH_ASSOC)?:[]]);
+        $rows=$statement->fetchAll(PDO::FETCH_ASSOC)?:[];
+
+        foreach ($rows as &$row) {
+            $objective=self::objectiveForSold($campaign,(int)($row['cantidad_ven'] ?? 0));
+            $row=array_merge($row,$objective);
+        }
+        unset($row);
+
+        api_success(['tipo'=>'cursos','campania'=>$campaign,'meta'=>$meta,'items'=>$rows]);
     }
 
     public static function menuActivo(): never
     {
         $db=app_db();
         $row=self::fetchOne($db,"SELECT c.id_campania,c.nombre,c.pregunta_persona,c.mensaje_inicio,c.mensaje_aprobado,c.fecha_inicio,c.fecha_fin,
+                   c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
                    p.id_producto,p.nombre AS producto_nombre,p.descripcion AS producto_descripcion,p.precio_anticipada,p.precio_puerta,p.stock
               FROM ventas_campanias c INNER JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
              WHERE c.activo=1 AND c.visible_menu=1 AND p.activo=1
@@ -913,6 +1296,11 @@ final class Ventas
         $campaign=[
             'id_campania'=>(int)$row['id_campania'],'nombre'=>$row['nombre'],'tipo_persona'=>'vendedor','tipo_flujo'=>'dni_persona','dato_requerido'=>'dni',
             'pregunta_persona'=>$row['pregunta_persona'],'mensaje_inicio'=>$row['mensaje_inicio'],'mensaje_aprobado'=>$row['mensaje_aprobado'],'fecha_inicio'=>$row['fecha_inicio'],'fecha_fin'=>$row['fecha_fin'],
+            'objetivo_venta'=>[
+                'cantidad_minima'=>(int)($row['cantidad_minima_persona'] ?? 0),
+                'ganancia_unidad_faltante'=>(float)($row['ganancia_unidad_faltante'] ?? 0),
+                'ganancia_total_sin_ventas'=>(float)($row['ganancia_total_sin_ventas'] ?? 0),
+            ],
             'producto_principal'=>['id_producto'=>(int)$row['id_producto'],'id_campania'=>(int)$row['id_campania'],'nombre'=>$row['producto_nombre'],'descripcion'=>$row['producto_descripcion'],'precio'=>$row['precio_anticipada'],'precio_anticipada'=>$row['precio_anticipada'],'precio_puerta'=>$row['precio_puerta'],'stock'=>$row['stock']],
         ];
         $campaign['productos']=[$campaign['producto_principal']];

@@ -57,6 +57,7 @@ export default function ProductoModal({ open, initial, saving, onClose, onSave }
           <input type="number" min="0" step="1" placeholder="Ej.: 100 · vacío = sin control" value={form.stock ?? ""} onChange={(e) => setForm((v) => ({ ...v, stock: e.target.value }))} />
         </FloatingField>
       </div>
+      <div className="ventas-note">El objetivo mínimo y las ganancias por faltantes se configuran en CONFIGURACIÓN DE VENTAS, porque pueden cambiar entre una campaña y otra aunque utilicen el mismo producto.</div>
     </CrudModal>
   );
 }

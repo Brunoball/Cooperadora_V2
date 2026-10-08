@@ -5,7 +5,7 @@ import { FloatingField } from "../../Global/Formularios/TabbedForm";
 import { ActionButton } from "../VentasUI";
 import { blankItem, money, upper, yes } from "../ventasUtils";
 
-export default function VentaItemsModal({ open, items, products, initialId, onClose, onApply }) {
+export default function VentaItemsModal({ open, items, products, campaign, initialId, onClose, onApply }) {
   const [draft, setDraft] = useState([blankItem()]);
 
   useEffect(() => {
@@ -109,18 +109,28 @@ export default function VentaItemsModal({ open, items, products, initialId, onCl
                 <select value={item.id_producto || ""} onChange={(e) => chooseDraftProduct(index, e.target.value)}>
                   <option value="">CONCEPTO MANUAL</option>
                   {products
-                    .filter((product) => yes(product.activo) || (initialId && String(product.id_producto) === String(item.id_producto)))
+                    .filter((product) => {
+                      const productId = String(product.id_producto || "");
+                      const principalId = String(campaign?.id_producto_principal || "");
+                      const historicalCurrent = initialId && productId === String(item.id_producto || "");
+                      return (principalId && productId === principalId) || historicalCurrent;
+                    })
                     .map((product) => (
                       <option key={product.id_producto} value={product.id_producto}>
-                        {upper(product.nombre, 150)}{yes(product.activo) ? "" : " · INACTIVO HISTÓRICO"}{product.stock == null ? "" : ` · STOCK ${product.stock}`}
+                        {upper(product.nombre, 150)}
+                        {String(product.id_producto) === String(campaign?.id_producto_principal || "")
+                          ? ""
+                          : " · HISTÓRICO"}
+                        {yes(product.activo) ? "" : " · INACTIVO"}
+                        {product.stock == null ? "" : ` · STOCK ${product.stock}`}
                       </option>
                     ))}
                 </select>
               </FloatingField>
-              <FloatingField label="Concepto" className="ventas-item-field">
+              <FloatingField label="Concepto manual" className="ventas-item-field">
                 <input
                   required
-                  placeholder="Ej.: Entrada anticipada"
+                  placeholder="Ej.: VENTA ESPECIAL O ADICIONAL"
                   maxLength={150}
                   value={item.producto_nombre || ""}
                   onChange={(e) => setDraftItem(index, { producto_nombre: upper(e.target.value, 150) })}
@@ -174,7 +184,7 @@ export default function VentaItemsModal({ open, items, products, initialId, onCl
         </div>
 
         <div className="ventas-order-total ventas-order-total--concepts">
-          <span>Total calculado</span>
+          <span>Subtotal productos</span>
           <strong>{money(draftTotal)}</strong>
         </div>
       </div>
