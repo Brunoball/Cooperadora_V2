@@ -1248,7 +1248,8 @@
   display: flex;
   align-items: flex-end;
   gap: 18px;
-  margin-top: 0;
+  /* Separación única del título a las pestañas para todas las secciones. */
+  margin-top: 5px;
   padding: 0;
   overflow-x: auto;
   overflow-y: hidden;

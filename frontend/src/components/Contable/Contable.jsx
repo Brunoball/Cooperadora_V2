@@ -1154,7 +1154,7 @@ export default function ContableModule({ view = "summary" }) {
           )
         }
         description={
-          view === "expense" ? "Administración de gastos" : undefined
+          view === "expense" ? "Consultá y registrá los egresos de la Cooperadora." : undefined
         }
         filters={pageFilters}
         tabsInTitle={view === "summary" || view === "income"}

@@ -145,9 +145,9 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI o referencia...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
     { key: "campania", type: "select", label: "Campaña", value: campaign, placeholder: "TODAS", options: (catalogs.campanias || []).map((c) => ({ value: c.id_campania, label: upper(c.nombre, 150) })), onChange: (v) => { setPage(1); setCampaign(v); } },
     { key: "mes", type: "select", label: "Mes de ventas", value: month, placeholder: "TODOS", options: monthOptions, onChange: (v) => { setPage(1); setMonth(v); } },
-    { key: "estado", type: "select", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
-    { key: "retiro", type: "select", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
-    { key: "origen", type: "select", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
+    { key: "estado", type: "select", className: "ventas-orders-filter--pago", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
+    { key: "retiro", type: "select", className: "ventas-orders-filter--retiro", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
+    { key: "origen", type: "select", className: "ventas-orders-filter--origen", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
   ];
 
   const exportSections = useMemo(() => [{
@@ -194,6 +194,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     <ModulePage
       className="ventas-page ventas-page--orders"
       title="Ventas registradas"
+      description="Consultá y administrá las ventas realizadas."
       filters={filters}
       canCreate={writable}
       primaryActionLabel="Nueva venta"

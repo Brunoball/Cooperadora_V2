@@ -297,6 +297,7 @@ export default function UsuariosConfiguracion({ onBack }) {
     <>
       <ModulePage
         title="Configuración de usuarios"
+        description="Administrá los usuarios, roles y accesos del sistema."
         filters={[
           {
             key: "usuarios-search",

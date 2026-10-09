@@ -18,7 +18,8 @@
 .ventas-page .module-titleBox {
   min-height: 44px;
   display: flex;
-  align-items: center;
+  /* Subtítulo siempre alineado al comienzo del título. */
+  align-items: flex-start;
   justify-content: center;
 }
 
@@ -1061,9 +1062,17 @@
   flex-direction: column;
   margin-top: 0;
   border: 1px solid var(--mov-border);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface-color, #fff);
   overflow: hidden;
+}
+
+/* Planillas utiliza los mismos bordes rectos que el resto de tablas.
+   El cambio es local y no afecta modales ni controles interiores. */
+.ventas-page--planillas .ventas-planillas-divTable,
+.ventas-page--planillas .ventas-planillas-divTable > .global-divTable__head,
+.ventas-page--planillas .ventas-planillas-divTable > .global-divTable__wrap {
+  border-radius: 0;
 }
 
 /* Paginación global en el pie de la tabla, sin duplicar sus bordes. */
@@ -1122,6 +1131,24 @@
   padding: 22px;
   color: var(--mov-muted);
   text-align: center;
+}
+
+/* Sin campaña seleccionada: aprovechar todo el cuerpo para centrar
+   el mensaje. El resumen/paginación no se monta en este estado. */
+.ventas-page--planillas .ventas-planillas-panel--empty {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ventas-page--planillas .ventas-planillas-panel--empty .ventas-planillas-tableCard,
+.ventas-page--planillas .ventas-planillas-panel--empty .ventas-planillas-tableWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ventas-page--planillas .ventas-planillas-panel--empty .ventas-planillas-empty {
+  flex: 1 1 auto;
+  min-height: 230px;
 }
 
 .ventas-planillas-empty svg {
@@ -1490,60 +1517,256 @@
   flex-basis: 124px;
 }
 
+/* Objetivo del modal Nueva / Editar venta: datos compactos y total destacado. */
 .ventas-order-objective {
+  --ventas-obj-surface: var(--mov-card, #fff);
+  --ventas-obj-soft: color-mix(in srgb, var(--primary-500, #1d428a) 4%, var(--ventas-obj-surface));
+  --ventas-obj-border: var(--mov-border, #e2e8f0);
+  --ventas-obj-accent: var(--primary-500, #1d428a);
   margin-top: 0;
-  background: color-mix(in srgb, var(--primary-50, #eff6ff) 76%, #fff);
-  border-color: color-mix(in srgb, var(--primary-500, #3b82f6) 22%, #dbe4ef);
+  padding: 16px;
+  gap: 14px;
+  border: 1px solid var(--ventas-obj-border);
+  border-radius: 12px;
+  background: var(--ventas-obj-surface);
 }
 
-.ventas-order-objective .ventas-objective-card__head strong,
-.ventas-order-objective .ventas-objective-card__rule > strong {
-  color: var(--primary-700, #1d4ed8);
+.ventas-order-objective .ventas-objective-card__head {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ventas-order-objective .ventas-objective-card__head strong {
+  font-size: 13px;
+  font-weight: 660;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--balto-ink);
+}
+
+.ventas-order-objective .ventas-objective-card__head span:not(.ventas-pill) {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.ventas-order-objective .ventas-objective-card__head .ventas-pill {
+  flex: 0 0 auto;
+  font-weight: 620;
+  letter-spacing: .01em;
+}
+
+.ventas-order-objective__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(205px, .48fr);
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ventas-order-objective__overview {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ventas-order-objective__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ventas-order-objective__progress-labels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--mov-muted);
+}
+
+.ventas-order-objective__progress-labels strong {
+  color: var(--balto-ink);
+  font-size: 11px;
+  font-weight: 630;
+  white-space: nowrap;
+}
+
+.ventas-order-objective__progress-track {
+  height: 6px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ventas-obj-accent) 13%, var(--ventas-obj-surface));
+}
+
+.ventas-order-objective__progress-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ventas-obj-accent);
+  transition: width 160ms ease;
 }
 
 .ventas-order-objective__grid {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
 }
 
 .ventas-order-objective .ventas-objective-cell {
-  min-width: 0;
   display: flex;
+  min-width: 0;
+  min-height: 72px;
   flex-direction: column;
-  gap: 5px;
-  padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--primary-500, #3b82f6) 14%, #e5e7eb);
-  border-radius: 10px;
-  background: #fff;
+  justify-content: space-between;
+  gap: 9px;
+  padding: 11px 9px;
+  border: 1px solid var(--ventas-obj-border);
+  border-radius: 9px;
+  background: var(--ventas-obj-soft);
 }
 
 .ventas-order-objective .ventas-objective-cell small {
   color: var(--mov-muted);
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: .045em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 550;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .ventas-order-objective .ventas-objective-cell strong {
   color: var(--balto-ink);
-  font-size: 14px;
-  font-weight: 760;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-.ventas-order-objective .ventas-objective-cell--due strong {
-  color: var(--primary-700, #1d4ed8);
+.ventas-order-objective .ventas-objective-cell strong span {
+  color: var(--mov-muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 
-@media (max-width: 1180px) {
+.ventas-order-objective .ventas-objective-cell--missing strong {
+  color: var(--ventas-obj-accent);
+}
+
+.ventas-order-objective__payable {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 17px;
+  border: 1px solid color-mix(in srgb, var(--ventas-obj-accent) 20%, var(--ventas-obj-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ventas-obj-accent) 8%, var(--ventas-obj-surface));
+}
+
+.ventas-order-objective__payable > span {
+  color: var(--balto-text);
+  font-size: 11px;
+  font-weight: 590;
+}
+
+.ventas-order-objective__payable > strong {
+  max-width: 100%;
+  color: var(--ventas-obj-accent);
+  font-size: 26px;
+  font-weight: 680;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.ventas-order-objective__payable > small {
+  color: var(--mov-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.ventas-order-objective .ventas-objective-card__rule {
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--ventas-obj-border);
+  border-radius: 9px;
+  background: var(--ventas-obj-soft);
+  font-size: 11px;
+}
+
+.ventas-order-objective .ventas-objective-card__rule > strong {
+  color: var(--balto-ink);
+  font-size: 11px;
+  font-weight: 640;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* Evitar que las tarjetas se estrechen o desborden en responsive. */
+@media (max-width: 850px) {
+  .ventas-order-objective__summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ventas-order-objective__payable {
+    padding: 13px 15px;
+  }
+
+  .ventas-order-objective__payable > strong {
+    font-size: 23px;
+  }
+}
+
+@media (max-width: 620px) {
+  .ventas-order-objective {
+    padding: 12px;
+  }
+
   .ventas-order-objective__grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .ventas-order-objective .ventas-objective-cell {
+    min-height: 68px;
+  }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 390px) {
   .ventas-order-objective__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* Mantener el contraste del resumen cuando se activa el tema oscuro. */
+html[data-theme="oscuro"] .ventas-order-objective {
+  --ventas-obj-surface: #1d2a3b;
+  --ventas-obj-soft: #26374a;
+  --ventas-obj-border: #3a4b61;
+  --ventas-obj-accent: #91b9ff;
+}
+
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__head strong,
+html[data-theme="oscuro"] .ventas-order-objective__progress-labels strong,
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-cell strong,
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule > strong {
+  color: #eef4ff;
+}
+
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-cell--missing strong,
+html[data-theme="oscuro"] .ventas-order-objective__payable > strong {
+  color: var(--ventas-obj-accent);
+}
+
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__head span:not(.ventas-pill),
+html[data-theme="oscuro"] .ventas-order-objective__progress-labels,
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-cell small,
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-cell strong span,
+html[data-theme="oscuro"] .ventas-order-objective__payable > span,
+html[data-theme="oscuro"] .ventas-order-objective__payable > small,
+html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
+  color: #b8c8dd;
 }
 
 /* Productos y Configuración de ventas comparten las pestañas globales
@@ -1562,20 +1785,84 @@
   text-align: left;
 }
 
-/* Los filtros de Planillas ahora usan ModuleFilter y su floating label global. */
-.ventas-page--planillas .module-card__headLeft { flex: 1 1 auto; min-width: 0; }
-.ventas-page--planillas .module-headFilters {
-  justify-content: flex-end;
-  align-items: center;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
+/* PLANILLAS: los cuatro selects comparten SIEMPRE una misma fila.
+   No dependen de anchos fijos: se ajustan al espacio disponible cuando
+   se abre/cierra la barra lateral, sin afectar los filtros de otras vistas. */
+.ventas-page--planillas .module-card {
+  /* Mide el ancho REAL del módulo (incluye el efecto de la barra lateral). */
+  container-type: inline-size;
 }
-.ventas-page--planillas .module-filter--select { width: 128px; min-width: 0; max-width: 128px; flex: 0 1 128px; }
-.ventas-page--planillas .module-filter--select:first-child { width: 225px; max-width: 225px; flex-basis: 225px; }
-.ventas-page--planillas .module-filter--select:nth-child(2) { width: 175px; max-width: 175px; flex-basis: 175px; }
-.ventas-page--planillas .module-filter--year { max-width: 90px; flex-basis: 90px; }
+
+.ventas-page--planillas .module-card__headLeft {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.ventas-page--planillas .module-headFilters {
+  display: flex;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.ventas-page--planillas .module-headFilters > .module-filter--select {
+  /* Base cero: todos ceden ancho sin saltar a una segunda línea. */
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  max-width: 128px;
+}
+
+.ventas-page--planillas .module-headFilters > .module-filter--select:first-child {
+  /* Venta/campaña suele tener nombres más largos. */
+  flex-grow: 2.4;
+  max-width: 225px;
+}
+
+.ventas-page--planillas .module-headFilters > .module-filter--select:nth-child(2) {
+  flex-grow: 1.7;
+  max-width: 175px;
+}
+
+.ventas-page--planillas .module-headFilters > .module-filter--select.module-filter--year {
+  /* Sobrescribe sólo aquí el flex fijo global de Año. */
+  flex: .85 1 0 !important;
+  width: 0 !important;
+  max-width: 90px !important;
+}
+
+.ventas-page--planillas .module-headFilters > .module-filter--select .module-filterControl {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding-left: 8px;
+  padding-right: 4px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ventas-page--planillas .module-headFilters > .module-filter--select .module-floatingLabel {
+  max-width: calc(100% - 12px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .ventas-page--planillas .module-card__head { gap: 12px; }
 .ventas-page--planillas .ventas-planillas-panel { border-top: 1px solid var(--mov-border); }
+
+/* Cuando la barra lateral reduce realmente el módulo, el título ocupa
+   otra línea y los SELECTS SIGUEN JUNTOS en su propia fila. */
+@container (max-width: 990px) {
+  .ventas-page--planillas .module-card__headLeft {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 @media (max-width: 1499px) {
   .ventas-page--orders .module-card__actions .ventas-headAction--export { display: none; }
@@ -1588,10 +1875,405 @@
     font-weight: 700;
     box-shadow: none;
   }
-  .ventas-page--planillas .module-card__headLeft { flex-wrap: wrap; }
 }
-@media (max-width: 700px) {
-  .ventas-page--planillas .module-headFilters { width: 100%; }
-  .ventas-page--planillas .module-filter--select:first-child,
-  .ventas-page--planillas .module-filter--select:nth-child(2) { flex: 1 1 170px; max-width: none; }
+
+/* VENTAS REGISTRADAS — filtros compactos, sin afectar Planillas ni otras vistas. */
+.ventas-page--orders .module-headFilters > .module-filter--select .module-filterControl {
+  padding-right: 0;
+  padding-left: 8px;
+}
+
+/* El floating label conserva la misma alineación que el texto del select. */
+.ventas-page--orders .module-headFilters > .module-filter--select .module-floatingLabel {
+  left: 8px;
+}
+
+/* VENTAS REGISTRADAS: estos filtros ocupan solo el espacio que necesita
+   el valor visible, en lugar de reservar permanentemente todo su ancho máximo.
+   La regla incluye al contenedor Y al select para evitar el espacio sobrante. */
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--pago,
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--retiro,
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--origen {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: fit-content;
+  min-width: 0;
+}
+
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--pago,
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--origen {
+  max-width: 110px;
+}
+
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--retiro {
+  max-width: 120px;
+}
+
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--pago .module-filterControl,
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--retiro .module-filterControl,
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--origen .module-filterControl {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  field-sizing: content;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Modales extensos de Ventas: pestañas globales y contenidos independientes. */
+.ventas-modal .ventas-modal-tabs {
+  position: sticky;
+  top: -1px;
+  z-index: 3;
+  margin: 0 0 16px;
+  padding: 0 2px;
+  background: var(--entity-modal-bg, #fff);
+}
+
+.ventas-modal-validation {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--entity-modal-danger, #c33) 30%, transparent);
+  border-radius: 9px;
+  color: var(--entity-modal-danger, #a33);
+  background: color-mix(in srgb, var(--entity-modal-danger, #c33) 6%, var(--entity-modal-bg, #fff));
+  font-size: 12px;
+}
+
+.ventas-modal .entity-tab-pane {
+  min-width: 0;
+}
+
+.ventas-modal .entity-tab-pane__fieldset {
+  display: block;
+  min-width: 0;
+}
+
+.ventas-modal .entity-tab-pane .ventas-modal-section:first-child {
+  margin-top: 0;
+}
+
+.ventas-modal .entity-tab-pane .ventas-objective-card:first-child {
+  margin-top: 0;
+}
+
+/* Editor de conceptos: ya no requiere la grilla ancha con scroll horizontal. */
+.ventas-concepts-modal .ventas-items-editor {
+  overflow-x: hidden;
+}
+
+.ventas-concepts-modal .ventas-item-row--identity,
+.ventas-concepts-modal .ventas-item-row--pricing {
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--mov-border);
+}
+
+.ventas-concepts-modal .ventas-item-row--identity {
+  grid-template-columns: 100px minmax(0, 1fr) minmax(0, 1.3fr) 38px;
+}
+
+.ventas-concepts-modal .ventas-item-row--pricing {
+  grid-template-columns: minmax(130px, 1.4fr) minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 0.6fr) minmax(105px, 0.8fr);
+}
+
+.ventas-item-number,
+.ventas-item-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--balto-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ventas-concepts-description {
+  margin: 0 0 15px;
+  color: var(--mov-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .ventas-concepts-modal .ventas-item-row--identity,
+  .ventas-concepts-modal .ventas-item-row--pricing {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .ventas-concepts-modal .ventas-item-number,
+  .ventas-concepts-modal .ventas-item-name {
+    grid-column: 1 / -1;
+  }
+
+  .ventas-concepts-modal .ventas-item-row--identity .ventas-item-action {
+    justify-self: end;
+  }
+
+  .ventas-concepts-modal .ventas-item-row--identity .ventas-item-field:nth-of-type(2),
+  .ventas-concepts-modal .ventas-item-row--pricing .ventas-item-total {
+    grid-column: 1 / -1;
+  }
+
+  .ventas-concepts-modal .ventas-item-row--pricing .ventas-item-name,
+  .ventas-concepts-modal .ventas-item-row--identity .ventas-item-number {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .ventas-modal .ventas-modal-tabs {
+    gap: 12px;
+  }
+}
+
+/* =========================================================
+   VENTAS · ENCABEZADOS FLEX (sin grid)
+   Flexibilidad por ancho real de la tarjeta, incluso cuando
+   el panel lateral se abre. No modificar grids de las tablas.
+   ========================================================= */
+.ventas-page .module-card {
+  container-type: inline-size;
+}
+
+.ventas-page--orders .module-card__head,
+.ventas-page--products .module-card__head,
+.ventas-page--campaigns .module-card__head {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ventas-page--orders .module-card__headLeft,
+.ventas-page--products .module-card__headLeft,
+.ventas-page--campaigns .module-card__headLeft {
+  display: flex;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ventas-page--orders .module-card__actions,
+.ventas-page--products .module-card__actions,
+.ventas-page--campaigns .module-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: 0;
+}
+
+.ventas-page--orders .module-titleBox,
+.ventas-page--products .module-titleBox,
+.ventas-page--campaigns .module-titleBox {
+  width: auto;
+  max-width: 100%;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* La descripción cede algo de ancho antes que los filtros. */
+.ventas-page--orders .module-titleBox {
+  flex: 0 1 250px;
+  min-width: 168px;
+}
+
+.ventas-page--products .module-titleBox {
+  flex: 0 0 auto;
+  min-width: 190px;
+}
+
+.ventas-page--campaigns .module-titleBox {
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
+.ventas-page--orders .module-headFilters,
+.ventas-page--products .module-headFilters {
+  display: flex;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Todos los filtros de Ventas registradas pueden encogerse
+   proporcionalmente; los tres compactos conservan sus máximos. */
+.ventas-page--orders .module-headFilters > .module-filter--search {
+  flex: 2 1 175px;
+  width: auto;
+  min-width: 90px;
+  max-width: 205px;
+  margin-left: 0;
+}
+
+.ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen) {
+  flex: 1.2 1 120px;
+  width: auto;
+  min-width: 76px;
+  max-width: 155px;
+}
+
+.ventas-page--orders .module-headFilters .module-filterControl,
+.ventas-page--products .module-headFilters .module-filterControl {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ventas-page--products .module-filter--search {
+  flex: 1 1 185px;
+  width: 100%;
+  min-width: 100px;
+  max-width: 240px;
+  margin-left: 0;
+}
+
+/* En menos espacio el bloque de título y filtros usa flex-wrap.
+   Se mantienen los contenedores reales (sin display:contents)
+   para evitar alineaciones inconsistentes con el panel abierto. */
+@container (max-width: 1000px) {
+  .ventas-page--orders .module-card__headLeft {
+    flex-flow: row wrap;
+    justify-content: flex-start;
+  }
+  .ventas-page--orders .module-titleBox {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
+  .ventas-page--orders .module-headFilters {
+    flex: 0 0 100%;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .ventas-page--orders .module-card__actions {
+    align-self: flex-start;
+    width: auto;
+    margin-left: auto;
+  }
+}
+
+@container (max-width: 700px) {
+  .ventas-page--products .module-card__headLeft {
+    flex-flow: row wrap;
+    justify-content: flex-start;
+  }
+  .ventas-page--products .module-titleBox {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+  }
+  .ventas-page--products .module-headFilters {
+    flex: 0 0 100%;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .ventas-page--products .module-filter--search {
+    width: 100%;
+    max-width: 280px;
+  }
+  .ventas-page--products .module-card__actions {
+    align-self: flex-start;
+    width: auto;
+    margin-left: auto;
+  }
+}
+
+@container (max-width: 660px) {
+  .ventas-page--orders .module-headFilters {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .ventas-page--orders .module-headFilters > .module-filter--search {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+  .ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen) {
+    flex: 1 1 110px;
+    max-width: 155px;
+  }
+}
+
+@container (max-width: 440px) {
+  .ventas-page--orders .module-card__actions .mov-btn,
+  .ventas-page--products .module-card__actions .mov-btn,
+  .ventas-page--campaigns .module-card__actions .mov-btn {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding-inline: 10px;
+  }
+}
+
+/* Planillas mantiene siempre los selects en la misma línea,
+   pero su contenedor de encabezado también es Flexbox. */
+.ventas-page--planillas .module-card__headLeft {
+  display: flex;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+.ventas-page--planillas .module-titleBox {
+  flex: 0 1 230px;
+  min-width: 170px;
+}
+.ventas-page--planillas .module-headFilters {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+@container (max-width: 990px) {
+  .ventas-page--planillas .module-card__headLeft {
+    flex-flow: row wrap;
+    justify-content: flex-start;
+  }
+  .ventas-page--planillas .module-card__actions {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    width: auto;
+    margin-left: auto;
+  }
+  .ventas-page--planillas .module-titleBox {
+    flex: 0 0 100%;
+    min-width: 0;
+  }
+  .ventas-page--planillas .module-headFilters {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+}
+
+/* Configuración: botón de alta a continuación del título si el
+   panel llega a un ancho muy pequeño, sin cruzarse con pestañas. */
+@container (max-width: 430px) {
+  .ventas-page--campaigns .module-card__head {
+    flex-flow: row wrap;
+  }
+  .ventas-page--campaigns .module-card__headLeft {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+  .ventas-page--campaigns .module-card__actions {
+    flex: 0 0 auto;
+    width: auto;
+    margin-left: auto;
+  }
 }

@@ -393,7 +393,7 @@ function CatalogsPanel() {
       <ModulePage
         className="config-sectionPage"
         title="Tablas auxiliares"
-        description=""
+        description={meta.description}
         filters={[{
           key: "catalog-search",
           type: "search",

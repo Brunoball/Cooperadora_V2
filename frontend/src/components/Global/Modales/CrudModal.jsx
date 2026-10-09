@@ -43,6 +43,7 @@ export default function CrudModal({
   wide = false,
   hideSubmit = false,
   submitDisabled = false,
+  noValidate = false,
   hideCancel = false,
   cancelLabel = "Cancelar",
   footerStart = null,
@@ -111,6 +112,7 @@ export default function CrudModal({
         </header>
         <form
           onSubmit={onSubmit}
+          noValidate={noValidate}
           onClick={openNativePicker}
           onInputCapture={autoUppercaseInputs ? uppercaseModalTextField : undefined}
         >

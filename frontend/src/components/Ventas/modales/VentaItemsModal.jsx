@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { FloatingField } from "../../Global/Formularios/TabbedForm";
+import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import { ActionButton } from "../VentasUI";
 import { blankItem, money, upper, yes } from "../ventasUtils";
 
 export default function VentaItemsModal({ open, items, products, campaign, initialId, onClose, onApply }) {
   const [draft, setDraft] = useState([blankItem()]);
+  const [activeTab, setActiveTab] = useState("conceptos");
 
   useEffect(() => {
     if (!open) return;
+    setActiveTab("conceptos");
     const source = Array.isArray(items) && items.length ? items : [blankItem()];
     setDraft(source.map((item) => ({ ...item })));
   }, [open, items]);
@@ -87,6 +89,14 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
       modalClassName="ventas-modal ventas-concepts-modal"
       closeOnBackdrop={false}
     >
+      <EntityTabs
+        tabs={[{ value: "conceptos", label: "Productos y conceptos", badge: draft.length }, { value: "precios", label: "Precios y cantidades" }]}
+        value={activeTab}
+        onChange={setActiveTab}
+        idPrefix="ventas-concepts-modal-tab"
+        className="ventas-modal-tabs"
+      />
+      <EntityTabPane active={activeTab === "conceptos"} disableWhenInactive>
       <div className="ventas-concepts-editor">
         <div className="ventas-concepts-editor__top">
           <div>
@@ -104,7 +114,8 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
 
         <div className="ventas-items-editor">
           {draft.map((item, index) => (
-            <div className="ventas-item-row" key={`draft-item-${index}`}>
+            <div className="ventas-item-row ventas-item-row--identity" key={`draft-identity-${index}`}>
+              <span className="ventas-item-number">Concepto {index + 1}</span>
               <FloatingField label="Producto" className="ventas-item-field">
                 <select value={item.id_producto || ""} onChange={(e) => chooseDraftProduct(index, e.target.value)}>
                   <option value="">CONCEPTO MANUAL</option>
@@ -136,6 +147,29 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
                   onChange={(e) => setDraftItem(index, { producto_nombre: upper(e.target.value, 150) })}
                 />
               </FloatingField>
+              <div className="ventas-item-action">
+                <ActionButton
+                  icon={faTrashCan}
+                  title="Quitar concepto"
+                  tone="danger"
+                  disabled={draft.length <= 1}
+                  onClick={() => setDraft((current) => current.filter((_, i) => i !== index))}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      </EntityTabPane>
+      <EntityTabPane active={activeTab === "precios"} disableWhenInactive>
+      <div className="ventas-concepts-editor">
+        <p className="ventas-concepts-description">Definí los precios y cantidades de cada concepto agregado.</p>
+        <div className="ventas-items-editor">
+          {draft.map((item, index) => (
+            <div className="ventas-item-row ventas-item-row--pricing" key={`draft-pricing-${index}`}>
+              <span className="ventas-item-name" title={item.producto_nombre || "Concepto sin nombre"}>
+                {index + 1}. {item.producto_nombre || "Concepto sin nombre"}
+              </span>
               <FloatingField label="Tipo de precio" className="ventas-item-field">
                 <select value={item.tipo_precio || "personalizado"} onChange={(e) => chooseDraftPriceType(index, e.target.value)}>
                   <option value="anticipada">ANTICIPADA</option>
@@ -170,24 +204,15 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
                 <span>Subtotal</span>
                 <strong>{money(Number(item.precio_unitario || 0) * Number(item.cantidad || 0))}</strong>
               </div>
-              <div className="ventas-item-action">
-                <ActionButton
-                  icon={faTrashCan}
-                  title="Quitar concepto"
-                  tone="danger"
-                  disabled={draft.length <= 1}
-                  onClick={() => setDraft((current) => current.filter((_, i) => i !== index))}
-                />
-              </div>
             </div>
           ))}
         </div>
-
         <div className="ventas-order-total ventas-order-total--concepts">
           <span>Subtotal productos</span>
           <strong>{money(draftTotal)}</strong>
         </div>
       </div>
+      </EntityTabPane>
     </CrudModal>
   );
 }

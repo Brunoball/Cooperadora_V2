@@ -21,7 +21,9 @@ export default function Planillas({ feedback, showFeedback }) {
   const [exportData, setExportData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewData, setPreviewData] = useState(null);
+  // Vincular los datos al filtro con el que fueron consultados evita mostrar
+  // filas viejas mientras React inicia la siguiente petición.
+  const [previewResult, setPreviewResult] = useState({ key: "", data: null });
   const [page, setPage] = useState(1);
   const previewBodyRef = useRef(null);
 
@@ -40,6 +42,11 @@ export default function Planillas({ feedback, showFeedback }) {
     id_anio: type === "cursos" ? year : "",
     id_division: type === "cursos" ? division : "",
   }), [type, campaign, year, division]);
+  const requestKey = useMemo(() => JSON.stringify(requestParams), [requestParams]);
+  const currentRequestKeyRef = useRef(requestKey);
+  currentRequestKeyRef.current = requestKey;
+  const previewData = previewResult.key === requestKey ? previewResult.data : null;
+  const isPreviewPending = loading || previewLoading || (Boolean(campaign) && previewResult.key !== requestKey);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -60,7 +67,12 @@ export default function Planillas({ feedback, showFeedback }) {
     load({ silent: true });
     if (campaign) {
       ventasApi.planillasDatos(requestParams)
-        .then((data) => setPreviewData(data))
+        .then((data) => {
+          // Un refresco anterior no debe reemplazar una planilla más reciente.
+          if (currentRequestKeyRef.current === requestKey) {
+            setPreviewResult({ key: requestKey, data });
+          }
+        })
         .catch(() => {});
     }
   }, 60000);
@@ -68,7 +80,7 @@ export default function Planillas({ feedback, showFeedback }) {
   useEffect(() => {
     let cancelled = false;
     if (!campaign) {
-      setPreviewData(null);
+      setPreviewResult({ key: "", data: null });
       setPreviewLoading(false);
       return () => { cancelled = true; };
     }
@@ -76,11 +88,11 @@ export default function Planillas({ feedback, showFeedback }) {
     setPreviewLoading(true);
     ventasApi.planillasDatos(requestParams)
       .then((data) => {
-        if (!cancelled) setPreviewData(data);
+        if (!cancelled) setPreviewResult({ key: requestKey, data });
       })
       .catch((err) => {
         if (!cancelled) {
-          setPreviewData(null);
+          setPreviewResult({ key: requestKey, data: null });
           showFeedback("error", err.message);
         }
       })
@@ -89,7 +101,7 @@ export default function Planillas({ feedback, showFeedback }) {
       });
 
     return () => { cancelled = true; };
-  }, [campaign, requestParams, showFeedback]);
+  }, [campaign, requestKey, requestParams, showFeedback]);
 
   const fetchCurrentData = async () => {
     if (!campaign) {
@@ -106,7 +118,7 @@ export default function Planillas({ feedback, showFeedback }) {
       if (!data) return;
       // La exportación se abre con un snapshot recién consultado. Así Excel/PDF,
       // vista previa e impresión parten de la misma información.
-      setPreviewData(data);
+      setPreviewResult({ key: requestKey, data });
       if (!(data.items || []).length) {
         showFeedback("warning", "No hay registros para exportar con los filtros seleccionados.");
         return;
@@ -129,7 +141,7 @@ export default function Planillas({ feedback, showFeedback }) {
     try {
       const data = await fetchCurrentData();
       if (!data) return;
-      setPreviewData(data);
+      setPreviewResult({ key: requestKey, data });
       if (!(data.items || []).length) {
         showFeedback("warning", "No hay registros para imprimir con los filtros seleccionados.");
         return;
@@ -308,6 +320,7 @@ export default function Planillas({ feedback, showFeedback }) {
     <ModulePage
       className="ventas-page ventas-page--planillas"
       title="Planillas de ventas"
+      description="Consultá e imprimí planillas por curso o por docente."
       filters={[
         { key: "campania", type: "select", label: "Venta / campaña", value: campaign, onChange: resetPage(setCampaign), includeEmptyOption: false,
           options: [{ value: "", label: "SELECCIONAR..." }, ...(options.campanias || []).map((item) => ({ value: String(item.id_campania), label: `${upper(item.nombre, 150)}${yes(item.activo) ? " · ACTIVA" : " · DADA DE BAJA"}` }))] },
@@ -335,21 +348,16 @@ export default function Planillas({ feedback, showFeedback }) {
       <style>{`.ventas-planillas-divTable .ventas-planillas-columns--alumnos {
         grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, .65fr) minmax(0, .65fr);
       }`}</style>
-      <div className="ventas-planillas-panel">
+      <div className={`ventas-planillas-panel${!campaign && !isPreviewPending ? " ventas-planillas-panel--empty" : ""}`}>
         <section className="ventas-planillas-tableCard" aria-label="Planilla de ventas">
           <div className="ventas-planillas-tableWrap">
-            {previewLoading ? (
-              <div className="ventas-planillas-empty">
-                <FontAwesomeIcon icon={faFileLines} />
-                <strong>Cargando planilla...</strong>
-              </div>
-            ) : !campaign ? (
+            {!isPreviewPending && !campaign ? (
               <div className="ventas-planillas-empty">
                 <FontAwesomeIcon icon={faFileLines} />
                 <strong>Seleccioná una venta / campaña</strong>
                 <span>La planilla aparecerá acá antes de imprimirla o exportarla.</span>
               </div>
-            ) : !previewItems.length ? (
+            ) : !isPreviewPending && !previewItems.length ? (
               <div className="ventas-planillas-empty">
                 <FontAwesomeIcon icon={faFileLines} />
                 <strong>Sin registros para estos filtros</strong>
@@ -368,6 +376,9 @@ export default function Planillas({ feedback, showFeedback }) {
                 ]}
                 ariaLabel="Planilla de ventas"
                 skeletonActionColumn={false}
+                skeletonRows={8}
+                loading={isPreviewPending}
+                loadingLabel="Actualizando vista previa de la planilla"
                 bodyRef={previewBodyRef}
               >
                 {visiblePreviewItems.map((row, index) => type === "docentes" ? (
@@ -390,30 +401,31 @@ export default function Planillas({ feedback, showFeedback }) {
               </GlobalDivTable>
             )}
           </div>
-          <GlobalPagination
+          {campaign ? <GlobalPagination
             currentPage={previewPage}
             totalPages={previewTotalPages}
-            totalRecords={previewItems.length}
-            from={previewItems.length ? previewStart + 1 : 0}
-            to={Math.min(previewStart + previewPageSize, previewItems.length)}
+            totalRecords={isPreviewPending ? 0 : previewItems.length}
+            from={!isPreviewPending && previewItems.length ? previewStart + 1 : 0}
+            to={isPreviewPending ? 0 : Math.min(previewStart + previewPageSize, previewItems.length)}
             onPageChange={setPage}
-            loading={previewLoading}
+            loading={isPreviewPending}
+            showSummary={!isPreviewPending}
             itemLabel={type === "docentes" ? "docentes" : "alumnos"}
             ariaLabel="Paginación de planillas de ventas"
             compactPageItems
             className="ventas-tableFooter ventas-planillas-pagination"
-            leftContent={(
+            leftContent={isPreviewPending ? null : (
               <div className="ventas-planillas-preview">
                 <span className="ventas-planillas-preview__icon" aria-hidden="true">
                   <FontAwesomeIcon icon={type === "docentes" ? faUsers : faFileLines} />
                 </span>
                 <div>
-                  <strong>{previewLoading ? "Cargando planilla..." : `${previewItems.length} ${type === "docentes" ? "docentes" : "alumnos"} en la planilla`}</strong>
+                  <strong>{`${previewItems.length} ${type === "docentes" ? "docentes" : "alumnos"} en la planilla`}</strong>
                   <span>{previewCampaignName ? `${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""}` : "Seleccioná una venta para visualizar la planilla."}</span>
                 </div>
               </div>
             )}
-          />
+          /> : null}
         </section>
       </div>
 

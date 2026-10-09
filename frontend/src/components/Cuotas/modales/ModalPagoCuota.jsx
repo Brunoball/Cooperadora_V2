@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCalendarDays,
-  faCheck,
   faCoins,
   faIdCard,
   faPenToSquare,
@@ -11,6 +10,7 @@ import {
 import CrudModal from "../../Global/Modales/CrudModal";
 import { EntityTabs } from "../../Global/Formularios/TabbedForm";
 import "./CuotasModal.css";
+import "./ModalPagoCuota.css";
 
 const PERIODOS_MENSUALES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 const ANUAL = 13;
@@ -171,6 +171,7 @@ export default function ModalPagoCuota({
 
   const availableMonthly = monthly.filter((item) => canSelect(item) && !monthBlockedBySelection(item.id_mes)).map((item) => Number(item.id_mes));
   const allMonthlySelected = availableMonthly.length > 0 && availableMonthly.every((id) => selectedSet.has(id));
+  const selectedMonthly = monthly.filter((period) => selectedSet.has(Number(period.id_mes)));
   const toggleAllMonthly = () => {
     if (allMonthlySelected) {
       setSelected((current) => current.filter((id) => !availableMonthly.includes(Number(id))));
@@ -286,7 +287,7 @@ export default function ModalPagoCuota({
     const disabled = !canSelect(period) || blockedBySpecial || blockedByFreeMode;
     return (
       <article
-        className={`cuotas-v2-period ${active ? "is-selected" : ""} ${disabled ? "is-disabled" : ""} ${extraClass}`.trim()}
+        className={`cuotas-v2-period ${active ? "is-selected" : ""} ${disabled ? "is-disabled" : ""} ${period.pagado ? "is-paid" : ""} ${extraClass}`.trim()}
         key={id}
       >
         <button
@@ -294,16 +295,15 @@ export default function ModalPagoCuota({
           className="cuotas-v2-period__select"
           onClick={() => toggle(id)}
           disabled={disabled}
+          aria-pressed={active}
         >
-          <span className="cuotas-v2-period__check">
-            {active ? <FontAwesomeIcon icon={faCheck} /> : null}
-          </span>
-          <span className="cuotas-v2-period__title">{period.nombre}</span>
+          <strong className="cuotas-v2-period__title">{period.nombre}</strong>
+          <small className="cuotas-v2-period__year">{anio}</small>
           <small className={`cuotas-v2-period__status ${disabled ? "is-resolved" : ""}`}>
-            {statusLabel(period)}
+            {blockedBySpecial || blockedByFreeMode ? "Modalidad exclusiva" : active && !disabled ? "Seleccionado" : statusLabel(period)}
           </small>
         </button>
-        {!condoning && !disabled ? (
+        {!condoning && !disabled && !PERIODOS_MENSUALES.has(id) ? (
           <label className="cuotas-v2-amount-field">
             <span>Monto</span>
             <input
@@ -324,8 +324,78 @@ export default function ModalPagoCuota({
     );
   };
 
+  // La selección de meses y la edición de sus importes ocupan pestañas diferentes.
+  // Ambos paneles comparten el estado para conservar los cambios al navegar.
+  const renderMonthlyAmounts = () => condoning ? null : (
+    <section className="cuotas-payment-date-card is-amounts-only cuotas-v2-monthly-amounts" aria-labelledby="cuotas-month-amounts-heading">
+      <div className="cuotas-month-amount-editor">
+        <div className="cuotas-month-amount-editor__title">
+          <span id="cuotas-month-amounts-heading">Montos de las cuotas</span>
+          <small>Modificá el importe de los meses seleccionados en la pestaña Cuotas.</small>
+        </div>
+        <div className={`cuotas-v2-free-amount ${freeMode ? "is-active" : ""}`}>
+          <label>
+            <input type="checkbox" checked={freeMode} onChange={(event) => toggleFreeMode(event.target.checked)} />
+            <span>Usar <strong>monto libre por mes</strong></span>
+          </label>
+          <input
+            type="text"
+            inputMode="decimal"
+            aria-label="Monto libre por mes"
+            placeholder="Monto libre"
+            value={freeAmount}
+            disabled={!freeMode}
+            onChange={(event) => applyFreeAmount(event.target.value)}
+          />
+          <small>Aplica el mismo importe a los meses y deshabilita la modalidad anual o por mitades.</small>
+        </div>
+        {selectedMonthly.length > 0 ? (
+          <div className="cuotas-month-amount-editor__list">
+            {selectedMonthly.map((period) => {
+              const id = String(period.id_mes);
+              return (
+                <div className="cuotas-month-amount-row cuotas-v2-monthly-amount-row" key={id}>
+                  <div className="cuotas-month-amount-row__head">
+                    <strong>{period.nombre} <small>{anio}</small></strong>
+                    <span>{money(amounts[id])}</span>
+                  </div>
+                  <label className="cuotas-v2-monthly-amount-field">
+                    <span>Monto a pagar</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      aria-label={`Monto a pagar de ${period.nombre}`}
+                      value={amounts[id] ?? ""}
+                      onChange={(event) => setAmounts((current) => ({
+                        ...current,
+                        [id]: amountInput(event.target.value),
+                      }))}
+                    />
+                  </label>
+                  <small className="cuotas-v2-monthly-amount-suggested">Sugerido: {money(period.monto_sugerido)}</small>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="cuotas-v2-monthly-amounts__empty">
+            <p>Seleccioná al menos un mes en la pestaña Cuotas para modificar su monto.</p>
+            <button type="button" className="mov-btn mov-btn--ghost" onClick={() => setActivePaymentTab("monthly")}>
+              Ir a Cuotas
+            </button>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+
   const renderPaymentToolbar = () => (
-    <section className="cuotas-v2-payment-toolbar cuotas-v2-payment-toolbar--inside-tab">
+    <section className="cuotas-payment-date-card">
+      <div className="cuotas-payment-date-card__header">
+        <span>Datos del pago</span>
+        <small>Completá la fecha y el medio de pago.</small>
+      </div>
+      <div className="cuotas-v2-payment-toolbar cuotas-v2-payment-toolbar--inside-tab">
       <label>
         <span><FontAwesomeIcon icon={faCalendarDays} /> Fecha</span>
         <input
@@ -356,6 +426,7 @@ export default function ModalPagoCuota({
           La condonación se guarda con importe $0 y sin medio de pago.
         </div>
       )}
+      </div>
     </section>
   );
 
@@ -365,13 +436,12 @@ export default function ModalPagoCuota({
   const alumnoCategoria = alumno?.categoria || "Sin categoría";
   const alumnoInterno = String(alumnoCategoria).trim().toUpperCase() === "INTERNO";
   const alumnoFamilia = alumno?.familia || context?.familia?.nombre_familia || "Sin grupo familiar";
-  const subtitle = `${alumnoNombre} · DNI ${alumnoDocumento} · ${alumnoCurso} · ${alumnoCategoria} · ${alumnoFamilia}`;
 
   return (
     <CrudModal
       open={open}
-      title={condoning ? "Condonar cuota" : "Registrar pago"}
-      subtitle={subtitle}
+      title={condoning ? "Condonar cuota" : alumnoNombre}
+      subtitle={<span className="cuotas-payment-header-meta"><span>DNI {alumnoDocumento}</span><span>{alumnoCurso}</span><span>Categoría {alumnoCategoria}</span><span>{alumnoFamilia}</span></span>}
       onClose={onClose}
       onSubmit={handleSubmit}
       saving={saving}
@@ -383,8 +453,9 @@ export default function ModalPagoCuota({
       wide
       modalClassName="cuotas-v2-payment-modal cuotas-modal--payment"
       footerStart={
-        <div className="cuotas-v2-footer-total">
-          <small>{condoning ? "Importe condonado" : "Total operación"}</small>
+        <div className="cuotas-payment-footer-total">
+          <span>{condoning ? "Importe condonado" : "Total operación"}</span>
+          <small>{selected.length} período(s) seleccionado(s)</small>
           <strong>{money(operationTotal)}</strong>
         </div>
       }
@@ -400,6 +471,12 @@ export default function ModalPagoCuota({
               icon: faCalendarDays,
               badge: selected.filter((id) => PERIODOS_MENSUALES.has(Number(id))).length || null,
             },
+            ...(!condoning ? [{
+              value: "amounts",
+              label: "Montos de las cuotas",
+              icon: faPenToSquare,
+              badge: selectedMonthly.length || null,
+            }] : []),
             {
               value: "special",
               label: "Anual / especiales",
@@ -429,45 +506,37 @@ export default function ModalPagoCuota({
           {activePaymentTab === "monthly" ? (
             <section className="cuotas-v2-section cuotas-v2-section--monthly">
               {renderPaymentToolbar()}
+              <div className="cuotas-period-group cuotas-period-selector">
               <header className="cuotas-v2-section__head">
                 <div>
                   <h3>Cuotas mensuales</h3>
-                  <p>{alumnoInterno ? "Marzo a noviembre. Los alumnos internos no abonan diciembre." : "Marzo a diciembre. Podés seleccionar varios meses en una sola operación."}</p>
+                  <p>{alumnoInterno ? "Marzo a noviembre. Los alumnos internos no abonan diciembre." : "Marzo a diciembre. Podés seleccionar varios meses en una sola operación."} {!condoning ? "Editá los importes desde la pestaña Montos de las cuotas." : ""}</p>
                 </div>
                 <button type="button" className="mov-btn mov-btn--ghost" onClick={toggleAllMonthly} disabled={!availableMonthly.length}>
                   {allMonthlySelected ? "Quitar disponibles" : "Seleccionar disponibles"}
                 </button>
               </header>
-              {!condoning ? (
-                <div className={`cuotas-v2-free-amount ${freeMode ? "is-active" : ""}`}>
-                  <label>
-                    <input type="checkbox" checked={freeMode} onChange={(event) => toggleFreeMode(event.target.checked)} />
-                    <span>Usar <strong>monto libre por mes</strong></span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="Monto libre"
-                    value={freeAmount}
-                    disabled={!freeMode}
-                    onChange={(event) => applyFreeAmount(event.target.value)}
-                  />
-                  <small>Al activarlo, el mismo importe se aplica a los meses seleccionados y se deshabilita el anual/mitades.</small>
-                </div>
-              ) : null}
               <div className="cuotas-v2-period-grid">
                 {monthly.map((period) => renderPeriodCard(period))}
               </div>
+              </div>
+            </section>
+          ) : null}
+
+          {activePaymentTab === "amounts" && !condoning ? (
+            <section className="cuotas-v2-section cuotas-v2-section--amounts">
+              {renderMonthlyAmounts()}
             </section>
           ) : null}
 
           {activePaymentTab === "special" ? (
             <section className="cuotas-v2-section cuotas-v2-section--special">
               {renderPaymentToolbar()}
+              <div className="cuotas-period-group cuotas-period-selector">
               <header className="cuotas-v2-section__head">
                 <div>
                   <h3>Pagos especiales</h3>
-                  <p>Contado anual, mitades y matrícula mantienen exactamente la cobertura del sistema anterior.</p>
+                  <p>Seleccioná contado anual, mitades o matrícula.</p>
                 </div>
               </header>
               <div className="cuotas-v2-special-grid">
@@ -502,6 +571,7 @@ export default function ModalPagoCuota({
                     </div>
                   ) : null}
                 </div>
+              </div>
               </div>
             </section>
           ) : null}

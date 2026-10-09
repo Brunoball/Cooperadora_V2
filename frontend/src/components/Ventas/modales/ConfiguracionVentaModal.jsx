@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { FloatingField } from "../../Global/Formularios/TabbedForm";
+import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import { VentasCheckbox } from "../VentasUI";
 import { asId, money, upper, yes } from "../ventasUtils";
 
@@ -27,9 +27,13 @@ const numericValue = (value) => {
 
 export default function ConfiguracionVentaModal({ open, initial, products, saving, onClose, onSave }) {
   const [form, setForm] = useState(emptyCampaign);
+  const [activeTab, setActiveTab] = useState("general");
+  const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setActiveTab("general");
+    setValidationError("");
     setForm({
       ...emptyCampaign,
       ...initial,
@@ -73,6 +77,18 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
   const submit = (event) => {
     event.preventDefault();
     const minimum = Math.max(0, Math.trunc(Number(form.cantidad_minima_persona || 0)));
+    const invalidRules = !Number.isFinite(Number(form.cantidad_minima_persona))
+      || !Number.isInteger(Number(form.cantidad_minima_persona))
+      || Number(form.cantidad_minima_persona) < 0
+      || Number(form.cantidad_minima_persona) > 10000
+      || (minimum > 0 && [form.ganancia_unidad_faltante, form.ganancia_total_sin_ventas]
+        .some((value) => value === "" || !Number.isFinite(Number(value)) || Number(value) < 0));
+    if (!form.nombre.trim() || (productRequired && !hasSales && !form.id_producto_principal) || (!hasSales && invalidRules)) {
+      setActiveTab("general");
+      setValidationError("Completá el nombre, el producto y los valores del objetivo antes de guardar.");
+      return;
+    }
+    setValidationError("");
     onSave({
       ...form,
       nombre: upper(form.nombre, 150),
@@ -89,11 +105,21 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
       subtitle="Define el producto, el objetivo mínimo por persona y los mensajes que consume el bot."
       onClose={onClose}
       onSubmit={submit}
+      noValidate
       saving={saving}
       showSavingEffect={false}
       wide
       modalClassName="ventas-modal ventas-campaign-modal"
     >
+      <EntityTabs
+        tabs={[{ value: "general", label: "Datos y objetivos" }, { value: "mensajes", label: "Vigencia y mensajes" }]}
+        value={activeTab}
+        onChange={(value) => { setActiveTab(value); setValidationError(""); }}
+        idPrefix="ventas-campaign-modal-tab"
+        className="ventas-modal-tabs"
+      />
+      {validationError ? <div className="ventas-modal-validation" role="alert">{validationError}</div> : null}
+      <EntityTabPane active={activeTab === "general"} disableWhenInactive>
       <div className="ventas-form-grid ventas-form-grid--campaign">
         <FloatingField label="Nombre de la venta" className="ventas-modal-field">
           <input required maxLength={150} placeholder="Ej.: Venta de talitas" value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} />
@@ -188,6 +214,10 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
           </div>
         </section>
 
+      </div>
+      </EntityTabPane>
+      <EntityTabPane active={activeTab === "mensajes"} disableWhenInactive>
+      <div className="ventas-form-grid ventas-form-grid--campaign">
         <FloatingField label="Fecha inicio" className="ventas-modal-field">
           <input type="date" value={form.fecha_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_inicio: e.target.value }))} />
         </FloatingField>
@@ -216,6 +246,7 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
             ? "Esta configuración ya tiene ventas: podés editar nombre, vigencia y mensajes, pero el producto principal y la regla económica quedan bloqueados para preservar el historial."
             : "El estado se administra desde las pestañas ACTIVAS / DADAS DE BAJA. La visibilidad en WhatsApp se aplica únicamente cuando la configuración está activa."}
       </div>
+      </EntityTabPane>
     </CrudModal>
   );
 }

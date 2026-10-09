@@ -2255,6 +2255,7 @@ const BotPanel = () => {
           <div className="wp-brand">
             <div className="wp-brand-txt">
               <div className="wp-brand-title">Panel Bot WhatsApp</div>
+              <div className="wp-brand-sub">Gestión de chats y mensajes</div>
             </div>
           </div>
 

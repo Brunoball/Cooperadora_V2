@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { FloatingField } from "../../Global/Formularios/TabbedForm";
+import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import ventasApi from "../api/ventasApi";
 import VentaItemsModal from "./VentaItemsModal";
 import { asId, blankItem, money, stateLabel, today, upper, yes } from "../ventasUtils";
@@ -27,6 +27,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
   const [conceptsOpen, setConceptsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("venta");
+  const [validationError, setValidationError] = useState("");
   const [objectiveBase, setObjectiveBase] = useState({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
   const searchTimer = useRef(null);
   const personSearchSeq = useRef(0);
@@ -50,6 +52,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setPersonSearch("");
     setPeople([]);
     setConceptsOpen(false);
+    setActiveTab("venta");
+    setValidationError("");
     setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
@@ -184,6 +188,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const currentCountedQuantity = form.estado === "aprobada" ? principalQuantity : 0;
   const objectiveSold = previousQuantity + currentCountedQuantity;
   const objectiveMissing = Math.max(0, objectiveMinimum - objectiveSold);
+  const objectiveProgress = objectiveMinimum > 0 ? Math.min(100, (objectiveSold / objectiveMinimum) * 100) : 0;
   const objectiveRuleDue = objectiveMissing <= 0
     ? 0
     : objectiveSold === 0
@@ -201,6 +206,11 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   const submit = (event) => {
     event.preventDefault();
+    if (!form.id_campania || !form.id_medio_pago || !/^\d{4}-\d{2}-\d{2}$/.test(form.fecha_venta || "")) {
+      setActiveTab("venta");
+      setValidationError("Completá la campaña, el medio de pago y la fecha de venta para continuar.");
+      return;
+    }
     if (!canSave) {
       if (!objectiveReady && objectiveEnabled && hasPersonReference) {
         onFeedback("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
@@ -210,6 +220,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       }
       return;
     }
+    setValidationError("");
     onSave({
       ...form,
       id_orden: form.id_orden || null,
@@ -224,7 +235,16 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   return (
     <>
-      <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
+      <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
+      <EntityTabs
+        tabs={[{ value: "venta", label: "Datos de la venta" }, { value: "comprador", label: "Comprador y objetivo" }]}
+        value={activeTab}
+        onChange={(value) => { setActiveTab(value); setValidationError(""); }}
+        idPrefix="ventas-order-modal-tab"
+        className="ventas-modal-tabs"
+      />
+      {validationError ? <div className="ventas-modal-validation" role="alert">{validationError}</div> : null}
+      <EntityTabPane active={activeTab === "venta"} disableWhenInactive>
       <div className="ventas-form-grid ventas-form-grid--order-head">
         <FloatingField label="Venta / campaña" className="ventas-modal-field">
           <select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
@@ -269,6 +289,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         </div>
       </section>
 
+      </EntityTabPane>
+      <EntityTabPane active={activeTab === "comprador"} disableWhenInactive>
       <section className="ventas-modal-section ventas-person-section">
         <header><div><strong>Comprador o alumno</strong><small>{allDoor ? "Opcional porque todos los conceptos son precio en puerta." : "Obligatorio para ventas anticipadas."}</small></div></header>
         <div className="ventas-person-search">
@@ -296,24 +318,50 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       </section>
 
       {objectiveEnabled ? (
-        <section className="ventas-objective-card ventas-order-objective" aria-label="Objetivo de venta de la persona">
+        <section className="ventas-objective-card ventas-order-objective" aria-label="Objetivo de venta de la persona" aria-busy={objectiveBase.loading}>
           <div className="ventas-objective-card__head">
             <div>
               <strong>Objetivo de venta</strong>
-              <span>Calcula automáticamente la ganancia pendiente de esta persona para la campaña seleccionada.</span>
+              <span>Ganancia pendiente calculada según las ventas de esta persona en la campaña.</span>
             </div>
             <span className={`ventas-pill ${hasPersonReference && objectiveMissing === 0 ? "success" : "warning"}`}>
               {!hasPersonReference ? "SELECCIONAR PERSONA" : objectiveMissing === 0 ? "OBJETIVO CUMPLIDO" : "OBJETIVO PENDIENTE"}
             </span>
           </div>
-          <div className="ventas-objective-grid ventas-order-objective__grid">
-            <div className="ventas-objective-cell"><small>MÍNIMO</small><strong>{objectiveMinimum} UN.</strong></div>
-            <div className="ventas-objective-cell"><small>VENDIDAS ANTES</small><strong>{objectiveBase.loading ? "..." : previousQuantity}</strong></div>
-            <div className="ventas-objective-cell"><small>ESTA VENTA</small><strong>{principalQuantity}</strong></div>
-            <div className="ventas-objective-cell"><small>COMPUTABLES</small><strong>{objectiveBase.loading ? "..." : objectiveSold}</strong></div>
-            <div className="ventas-objective-cell"><small>FALTANTES</small><strong>{objectiveBase.loading ? "..." : objectiveMissing}</strong></div>
-            <div className="ventas-objective-cell ventas-objective-cell--due"><small>GANANCIA A PAGAR</small><strong>{objectiveBase.loading || !hasPersonReference ? "—" : money(objectiveDue)}</strong></div>
+
+          <div className="ventas-order-objective__summary">
+            <div className="ventas-order-objective__overview">
+              <div className="ventas-order-objective__progress">
+                <div className="ventas-order-objective__progress-labels">
+                  <span>Avance del objetivo</span>
+                  <strong>{objectiveBase.loading || !hasPersonReference ? "—" : `${Math.min(objectiveSold, objectiveMinimum)} de ${objectiveMinimum} unidades`}</strong>
+                </div>
+                <div
+                  className="ventas-order-objective__progress-track"
+                  role="progressbar"
+                  aria-label="Avance del objetivo de ventas"
+                  aria-valuemin={0}
+                  aria-valuemax={objectiveMinimum}
+                  aria-valuenow={objectiveBase.loading || !hasPersonReference ? 0 : Math.min(objectiveSold, objectiveMinimum)}
+                >
+                  <span style={{ width: `${objectiveBase.loading || !hasPersonReference ? 0 : objectiveProgress}%` }} />
+                </div>
+              </div>
+              <div className="ventas-objective-grid ventas-order-objective__grid">
+                <div className="ventas-objective-cell"><small>Mínimo</small><strong>{objectiveMinimum} <span>un.</span></strong></div>
+                <div className="ventas-objective-cell"><small>Vendidas antes</small><strong>{objectiveBase.loading ? "..." : previousQuantity}</strong></div>
+                <div className="ventas-objective-cell"><small>Esta venta</small><strong>{principalQuantity}</strong></div>
+                <div className="ventas-objective-cell"><small>Computables</small><strong>{objectiveBase.loading ? "..." : objectiveSold}</strong></div>
+                <div className="ventas-objective-cell ventas-objective-cell--missing"><small>Faltantes</small><strong>{objectiveBase.loading ? "..." : objectiveMissing}</strong></div>
+              </div>
+            </div>
+            <div className="ventas-order-objective__payable">
+              <span>Ganancia a pagar</span>
+              <strong className="ventas-money">{objectiveBase.loading || !hasPersonReference ? "—" : money(objectiveDue)}</strong>
+              <small>{!hasPersonReference ? "Seleccioná una persona para calcular el importe." : objectiveBase.loading ? "Actualizando el cálculo..." : objectiveDue === 0 ? "No hay ganancia pendiente por cobrar." : "Importe pendiente de esta campaña."}</small>
+            </div>
           </div>
+
           <div className="ventas-objective-card__rule">
             <strong>Regla de la campaña</strong>
             <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
@@ -323,6 +371,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           </div>
         </section>
       ) : null}
+      </EntityTabPane>
       </CrudModal>
 
       <VentaItemsModal
