@@ -12,6 +12,7 @@ import {
   faTags,
   faTrashCan,
   faTruck,
+  faUserTie,
   faUsers,
   faVenusMars,
 } from "@fortawesome/free-solid-svg-icons";
@@ -76,6 +77,21 @@ const LIST_META = {
       secondary: item.descripcion || "Tipo de documento",
     }),
   },
+  docentes: {
+    label: "docente",
+    title: "Docentes",
+    description: "Administrá los docentes que aparecen en las planillas de ventas.",
+    icon: faUserTie,
+    fields: [
+      { key: "nombre", label: "Nombre y apellido", maxLength: 100 },
+      { key: "dni", label: "DNI", maxLength: 20, optional: true, type: "dni" },
+      { key: "email", label: "Correo electrónico", maxLength: 150, optional: true, type: "email" },
+    ],
+    display: (item) => ({
+      primary: item.nombre,
+      secondary: item.email || "Docente",
+    }),
+  },
 };
 
 const VALID_LISTS = Object.keys(LIST_META);
@@ -86,7 +102,7 @@ function normalizeList(value) {
 }
 
 function emptyForm(listKey) {
-  const form = { id: "", lista: listKey };
+  const form = { id: "", lista: listKey, activo: true, motivo: "" };
   LIST_META[listKey].fields.forEach((field) => {
     form[field.key] = "";
   });
@@ -98,6 +114,12 @@ function normalizeInput(value, maxLength) {
     .replace(/\s+/g, " ")
     .slice(0, maxLength)
     .toLocaleUpperCase("es-AR");
+}
+
+function normalizeFieldInput(value, field) {
+  if (field.type === "dni") return String(value ?? "").replace(/[^0-9]/g, "").slice(0, field.maxLength);
+  if (field.type === "email") return String(value ?? "").trimStart().toLowerCase().slice(0, field.maxLength);
+  return normalizeInput(value, field.maxLength);
 }
 
 function formatDate(value) {
@@ -143,9 +165,9 @@ function ConfigurationHome() {
     {
       id: "tablas",
       title: "Tablas auxiliares",
-      description: "Personalizá categorías, descripciones y proveedores contables, sexo y tipos de documento.",
+      description: "Personalizá categorías, descripciones, proveedores, sexo, documentos y docentes.",
       icon: faBarsStaggered,
-      status: "5 tablas",
+      status: "6 tablas",
       area: "Datos maestros",
       detail: "Altas, edición y eliminación segura",
       path: "/configuracion/catalogos?lista=contable_categoria",
@@ -174,22 +196,8 @@ function ConfigurationHome() {
   );
 }
 
-function CatalogStat({ label, value, detail, tone }) {
-  return (
-    <article className={`config-catalogStat config-catalogStat--${tone}`}>
-      <span className="config-catalogStat__icon" aria-hidden="true">
-        <FontAwesomeIcon icon={faBarsStaggered} />
-      </span>
-      <div>
-        <small>{label}</small>
-        <strong>{value}</strong>
-        <p>{detail}</p>
-      </div>
-    </article>
-  );
-}
-
 function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, externalBodyRef }) {
+  const isTeachers = meta.title === "Docentes";
   const { bodyRef, hasVerticalScroll, scrollbarWidth } = useTableScrollbarCompensation();
   const setBodyRef = useCallback((node) => {
     bodyRef(node);
@@ -198,16 +206,16 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
 
   return (
     <div
-      className={`config-catalogTable global-scrollAwareTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
+      className={`config-catalogTable global-scrollAwareTable ${isTeachers ? "config-catalogTable--docentes" : ""} ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
       role="table"
       aria-label={meta.title}
       aria-busy={loading}
       style={{ "--global-table-scrollbar-width": `${scrollbarWidth}px` }}
     >
       <div className="config-catalogTable__head global-scrollAwareTable__head" role="row">
-        <span role="columnheader">Opción</span>
-        <span role="columnheader">Uso</span>
-        <span role="columnheader">Creación</span>
+        <span role="columnheader">{isTeachers ? "Docente" : "Opción"}</span>
+        <span role="columnheader">{isTeachers ? "DNI" : "Uso"}</span>
+        <span role="columnheader">{isTeachers ? "Estado" : "Creación"}</span>
         <span className="config-catalogTable__actionsHeading" role="columnheader">Acciones</span>
       </div>
       <div ref={setBodyRef} className="config-catalogTable__body global-scrollAwareTable__body" role="rowgroup">
@@ -224,7 +232,7 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
           const display = meta.display(item);
           const uses = Number(item.cantidad_usos || 0);
           return (
-            <div className="config-catalogTable__row" role="row" key={item.id}>
+            <div className={`config-catalogTable__row ${isTeachers && !Number(item.activo) ? "is-inactive" : ""}`} role="row" key={item.id}>
               <div className="config-catalogIdentity" role="cell">
                 <span className="config-catalogIdentity__icon" aria-hidden="true">
                   <FontAwesomeIcon icon={meta.icon} />
@@ -234,13 +242,26 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
                   <small>{display.secondary}</small>
                 </div>
               </div>
-              <div className="config-catalogUsage" role="cell" data-label="Uso">
-                <strong>{uses}</strong>
-                <span>{uses === 1 ? "registro asociado" : "registros asociados"}</span>
-              </div>
-              <div className="config-usersCreated" role="cell" data-label="Creación">
-                {formatDate(item.creado_en)}
-              </div>
+              {isTeachers ? (
+                <>
+                  <div className="config-catalogDni" role="cell" data-label="DNI">{item.dni || "SIN DNI"}</div>
+                  <div className="config-catalogTeacherState" role="cell" data-label="Estado">
+                    <span className={`config-catalogState ${Number(item.activo) ? "" : "is-inactive"}`}>
+                      <i aria-hidden="true" />{Number(item.activo) ? "ACTIVO" : "INACTIVO"}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="config-catalogUsage" role="cell" data-label="Uso">
+                    <strong>{uses}</strong>
+                    <span>{uses === 1 ? "registro asociado" : "registros asociados"}</span>
+                  </div>
+                  <div className="config-usersCreated" role="cell" data-label="Creación">
+                    {formatDate(item.creado_en)}
+                  </div>
+                </>
+              )}
               <div className="config-catalogActions config-catalogTable__actionsCell mov-actionsInline" role="cell">
                 {writable ? (
                   <>
@@ -257,8 +278,8 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
                       type="button"
                       className="mov-iconBtn mov-iconBtn--danger"
                       onClick={() => onDelete(item)}
-                      disabled={uses > 0}
-                      title={uses > 0 ? "No se puede eliminar porque tiene registros asociados" : "Eliminar definitivamente"}
+                      disabled={!isTeachers && uses > 0}
+                      title={!isTeachers && uses > 0 ? "No se puede eliminar porque tiene registros asociados" : "Eliminar definitivamente"}
                       aria-label={`Eliminar ${display.primary}`}
                     >
                       <FontAwesomeIcon icon={faTrashCan} />
@@ -271,7 +292,7 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
         })}
 
         {!loading && !items.length ? (
-          <div className="config-usersEmpty">No hay opciones que coincidan con la búsqueda.</div>
+          <div className="config-usersEmpty">{isTeachers ? "No hay docentes que coincidan con la búsqueda." : "No hay opciones que coincidan con la búsqueda."}</div>
         ) : null}
       </div>
     </div>
@@ -283,7 +304,7 @@ function CatalogsPanel() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialList = normalizeList(searchParams.get("lista"));
   const writable = canWrite();
-  const { listas, resumen, loading, error, cargar } = useConfiguracion();
+  const { listas, loading, error, cargar } = useConfiguracion();
   const [activeList, setActiveList] = useState(initialList);
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
@@ -301,24 +322,10 @@ function CatalogsPanel() {
   const filteredItems = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("es-AR");
     if (!term) return items;
-    return items.filter((item) =>
-      meta.fields.some((field) =>
-        String(item[field.key] || "").toLocaleLowerCase("es-AR").includes(term),
-      ),
-    );
+    const plain = (value) => String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
+    const normalizedTerm = plain(term);
+    return items.filter((item) => meta.fields.some((field) => plain(item[field.key]).includes(normalizedTerm)));
   }, [items, meta, search]);
-
-  const usageTotal = useMemo(
-    () => items.reduce((total, item) => total + Number(item.cantidad_usos || 0), 0),
-    [items],
-  );
-
-  const stats = [
-    { label: "TOTAL GENERAL", value: resumen.total || 0, detail: "Opciones configuradas", tone: "total" },
-    { label: "EN ESTA TABLA", value: items.length, detail: meta.title, tone: "active" },
-    { label: "USOS", value: usageTotal, detail: "Registros vinculados", tone: "visible" },
-    { label: "MOSTRANDO", value: filteredItems.length, detail: search.trim() ? "Coincidencias" : "Sin filtro", tone: "lists" },
-  ];
 
   const refreshKeepingScroll = useCallback(async () => {
     captureScroll();
@@ -345,6 +352,10 @@ function CatalogsPanel() {
     meta.fields.forEach((field) => {
       next[field.key] = item[field.key] || "";
     });
+    if (activeList === "docentes") {
+      next.activo = Number(item.activo) === 1;
+      next.motivo = item.motivo || "";
+    }
     setFeedback(null);
     setForm(next);
     setFormOpen(true);
@@ -354,12 +365,24 @@ function CatalogsPanel() {
     event.preventDefault();
     const payload = { lista: activeList, id: form.id || null };
     for (const field of meta.fields) {
-      const value = normalizeInput(form[field.key], field.maxLength).trim();
-      if (!value) {
+      const value = normalizeFieldInput(form[field.key], field).trim();
+      if (!value && !field.optional) {
         setFeedback({ type: "error", message: `Completá ${field.label.toLocaleLowerCase("es-AR")}.` });
         return;
       }
+      if (value && field.type === "dni" && !/^\d{6,9}$/.test(value)) {
+        setFeedback({ type: "error", message: "El DNI debe tener entre 6 y 9 dígitos." });
+        return;
+      }
+      if (value && field.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        setFeedback({ type: "error", message: "Ingresá un correo electrónico válido." });
+        return;
+      }
       payload[field.key] = value;
+    }
+    if (activeList === "docentes") {
+      payload.activo = form.activo;
+      payload.motivo = form.activo ? "" : normalizeInput(form.motivo, 250).trim();
     }
 
     setSaving(true);
@@ -370,7 +393,7 @@ function CatalogsPanel() {
       setFeedback({ type: "success", message: response.mensaje });
       await refreshKeepingScroll();
     } catch (requestError) {
-      setFeedback({ type: "error", message: requestError.message || `No se pudo guardar la ${meta.label}.` });
+      setFeedback({ type: "error", message: requestError.message || "No se pudo guardar el registro." });
     } finally {
       setSaving(false);
     }
@@ -418,10 +441,6 @@ function CatalogsPanel() {
           onClose={() => setFeedback(null)}
         />
 
-        <section className="config-catalogStats" aria-label={`Resumen de ${meta.title}`}>
-          {stats.map((stat) => <CatalogStat key={stat.label} {...stat} />)}
-        </section>
-
         <section className="config-catalogPanel">
           <header className="config-catalogPanel__toolbar">
             <div className="config-catalogTabsRow">
@@ -441,7 +460,7 @@ function CatalogsPanel() {
                 ))}
               </div>
             </div>
-            <strong>{loading ? "Cargando opciones..." : `Mostrando ${filteredItems.length} de ${items.length} opciones`}</strong>
+            <strong>{loading ? "Cargando opciones..." : `Mostrando ${filteredItems.length} de ${items.length} ${activeList === "docentes" ? "docentes" : "opciones"}`}</strong>
           </header>
 
           <CatalogTable
@@ -473,23 +492,27 @@ function CatalogsPanel() {
         modalClassName="config-catalogModal"
       >
         <div className="entity-form config-catalogForm">
+          {feedback?.type === "error" ? (
+            <p className="config-catalogForm__error" role="alert">{feedback.message}</p>
+          ) : null}
           <div className="entity-form__grid entity-form__grid--single">
             {meta.fields.map((field, index) => (
               <div className="config-catalogField" key={field.key}>
                 <FloatingField
-                  label={<><FontAwesomeIcon icon={meta.icon} aria-hidden="true" />{field.label} *</>}
+                  label={<><FontAwesomeIcon icon={meta.icon} aria-hidden="true" />{field.label}{field.optional ? "" : " *"}</>}
                   active={Boolean(String(form[field.key] || "").trim())}
                 >
                   <input
-                    type="text"
+                    type={field.type === "email" ? "email" : "text"}
+                    inputMode={field.type === "dni" ? "numeric" : undefined}
                     value={form[field.key] || ""}
                     placeholder=" "
                     onChange={(event) => setForm((current) => ({
                       ...current,
-                      [field.key]: normalizeInput(event.target.value, field.maxLength),
+                      [field.key]: normalizeFieldInput(event.target.value, field),
                     }))}
                     maxLength={field.maxLength}
-                    required
+                    required={!field.optional}
                     autoFocus={index === 0}
                   />
                 </FloatingField>
@@ -499,6 +522,20 @@ function CatalogsPanel() {
                 </div>
               </div>
             ))}
+            {activeList === "docentes" ? (
+              <div className="config-catalogTeacherOptions">
+                <label className="config-catalogTeacherToggle">
+                  <input type="checkbox" checked={Boolean(form.activo)} onChange={(event) => setForm((current) => ({ ...current, activo: event.target.checked, motivo: event.target.checked ? "" : current.motivo }))} />
+                  <span>Docente activo</span>
+                </label>
+                <p>Solo los docentes activos aparecen en las planillas de ventas.</p>
+                {!form.activo ? (
+                  <FloatingField label="Motivo de inactividad (opcional)" active={Boolean(form.motivo?.trim())}>
+                    <input type="text" value={form.motivo || ""} maxLength={250} placeholder=" " onChange={(event) => setForm((current) => ({ ...current, motivo: normalizeInput(event.target.value, 250) }))} />
+                  </FloatingField>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </CrudModal>
@@ -508,8 +545,8 @@ function CatalogsPanel() {
         operacion="eliminar"
         row={deleteModal}
         title={`Eliminar ${meta.label}`}
-        message="La opción se eliminará definitivamente de la tabla auxiliar."
-        warning="Esta acción no se puede deshacer. Las opciones usadas por alumnos o movimientos contables quedan protegidas y no se pueden eliminar."
+        message={activeList === "docentes" ? "El docente se eliminará definitivamente del padrón." : "La opción se eliminará definitivamente de la tabla auxiliar."}
+        warning={activeList === "docentes" ? "Esta acción no se puede deshacer. Si querés conservarlo sin incluirlo en las planillas, editá su estado a inactivo." : "Esta acción no se puede deshacer. Las opciones usadas por alumnos o movimientos contables quedan protegidas y no se pueden eliminar."}
         confirmLabel="Eliminar"
         loadingLabel="Eliminando..."
         loadingMessage="Eliminando opción…"
@@ -517,7 +554,10 @@ function CatalogsPanel() {
         errorMessage="No se pudo eliminar la opción."
         details={deleteModal ? [
           { label: "Sección", value: meta.title },
-          { label: "Registros asociados", value: Number(deleteModal.cantidad_usos || 0) },
+          ...(activeList === "docentes" ? [
+            { label: "Docente", value: deleteModal.nombre },
+            { label: "DNI", value: deleteModal.dni || "SIN DNI" },
+          ] : [{ label: "Registros asociados", value: Number(deleteModal.cantidad_usos || 0) }]),
         ] : []}
         onClose={() => setDeleteModal(null)}
         onConfirm={confirmDelete}

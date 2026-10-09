@@ -10,9 +10,21 @@ trait ConfiguracionGestion
         $idText = trim((string)($body['id'] ?? ''));
         $id = $idText === '' ? null : positive_id($idText, $definition['etiqueta']);
         $data = configuracion_normalizar_campos($definition, $body);
+        $hasState = isset($definition['estado_campo']);
+        $isActive = true;
+        $reason = null;
+        if ($hasState) {
+            $stateValue = $body['activo'] ?? true;
+            if (!in_array($stateValue, [true, false, 1, 0, '1', '0'], true)) {
+                api_error('El estado del docente no es válido.', 'VALIDATION_ERROR', 422);
+            }
+            $isActive = in_array($stateValue, [true, 1, '1'], true);
+            $reason = $isActive ? null : clean_text($body['motivo'] ?? '', 250, true);
+            if ($reason === '') $reason = null;
+        }
 
         try {
-            return transaction($db, static function () use ($db, $auth, $definition, $id, $data): array {
+            return transaction($db, static function () use ($db, $auth, $definition, $id, $data, $hasState, $isActive, $reason): array {
                 configuracion_validar_duplicados($db, $definition, $data, $id);
 
                 $table = (string)$definition['tabla'];
@@ -36,6 +48,14 @@ trait ConfiguracionGestion
                         $columns[] = '`' . (string)$field['columna'] . '`';
                         $values[] = '?';
                         $params[] = $data[$key];
+                    }
+                    if ($hasState) {
+                        $columns[] = '`activo`';
+                        $values[] = '?';
+                        $params[] = $isActive ? 1 : 0;
+                        $columns[] = '`motivo`';
+                        $values[] = '?';
+                        $params[] = $reason;
                     }
 
                     $dateField = $definition['fecha_campo'] ?? null;
@@ -62,6 +82,12 @@ trait ConfiguracionGestion
                     foreach ($definition['campos'] as $key => $field) {
                         $sets[] = '`' . (string)$field['columna'] . '` = ?';
                         $params[] = $data[$key];
+                    }
+                    if ($hasState) {
+                        $sets[] = '`activo` = ?';
+                        $params[] = $isActive ? 1 : 0;
+                        $sets[] = '`motivo` = ?';
+                        $params[] = $reason;
                     }
                     $params[] = $id;
                     $db->prepare(

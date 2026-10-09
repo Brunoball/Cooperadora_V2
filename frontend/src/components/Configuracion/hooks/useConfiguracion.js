@@ -7,6 +7,7 @@ const initialLists = {
   contable_proveedor: [],
   sexo: [],
   tipo_documento: [],
+  docentes: [],
 };
 
 const initialState = {

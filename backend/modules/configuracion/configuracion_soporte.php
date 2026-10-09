@@ -121,6 +121,43 @@ function configuracion_listas_definiciones(): array
                 ['tabla' => 'alumnos_egresados', 'columna' => 'id_tipo_documento'],
             ],
         ],
+        'docentes' => [
+            'lista' => 'docentes',
+            'tabla' => 'docentes',
+            'id_campo' => 'id_docente',
+            'auto_id' => true,
+            'etiqueta' => 'docente',
+            'entidad' => 'DOCENTE',
+            'fecha_campo' => 'fecha_carga',
+            'estado_campo' => 'activo',
+            'motivo_campo' => 'motivo',
+            'campos' => [
+                'nombre' => [
+                    'columna' => 'docente',
+                    'tipo' => 'texto',
+                    'max' => 100,
+                    'label' => 'nombre y apellido',
+                ],
+                'dni' => [
+                    'columna' => 'dni',
+                    'tipo' => 'dni',
+                    'max' => 20,
+                    'label' => 'DNI',
+                    'opcional' => true,
+                ],
+                'email' => [
+                    'columna' => 'email',
+                    'tipo' => 'email',
+                    'max' => 150,
+                    'label' => 'correo electrónico',
+                    'opcional' => true,
+                    'unico' => false,
+                ],
+            ],
+            // Las planillas de ventas consultan docentes directamente; no hay
+            // ninguna FK a id_docente en el esquema actual.
+            'relaciones' => [],
+        ],
     ];
 }
 
@@ -186,10 +223,13 @@ function configuracion_item(PDO $db, array $definition, int $id, bool $lock = fa
     $fields = configuracion_columnas_select($definition);
     $dateField = $definition['fecha_campo'] ?? null;
     $dateSelect = $dateField ? ", `{$dateField}` AS creado_en" : ', NULL AS creado_en';
+    $stateSelect = isset($definition['estado_campo'])
+        ? ', `activo` AS activo, `motivo` AS motivo'
+        : '';
     $suffix = $lock ? ' FOR UPDATE' : '';
 
     $statement = $db->prepare(
-        "SELECT `{$idField}` AS id, {$fields}{$dateSelect}
+        "SELECT `{$idField}` AS id, {$fields}{$dateSelect}{$stateSelect}
          FROM `{$table}`
          WHERE `{$idField}` = ?
          LIMIT 1{$suffix}"
@@ -221,8 +261,22 @@ function configuracion_normalizar_campos(array $definition, array $body): array
     $data = [];
     foreach ($definition['campos'] as $key => $field) {
         $max = (int)($field['max'] ?? 255);
-        $value = clean_text($body[$key] ?? '', $max, true);
-        if ($value === '') {
+        $type = (string)($field['tipo'] ?? 'texto');
+        $value = trim((string)($body[$key] ?? ''));
+        if ($type === 'dni') {
+            $value = preg_replace('/[.\s-]+/u', '', $value) ?? '';
+        } elseif ($type === 'email') {
+            $value = function_exists('mb_strtolower')
+                ? mb_strtolower($value, 'UTF-8')
+                : strtolower($value);
+        } else {
+            $value = clean_text($value, $max, true);
+        }
+        $length = function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+        if ($length > $max) {
+            api_error('El campo ' . $field['label'] . ' supera el máximo permitido.', 'VALIDATION_ERROR', 422);
+        }
+        if ($value === '' && !($field['opcional'] ?? false)) {
             api_error(
                 'El campo ' . (string)$field['label'] . ' es obligatorio.',
                 'VALIDATION_ERROR',
@@ -230,7 +284,13 @@ function configuracion_normalizar_campos(array $definition, array $body): array
                 ['campo' => $key]
             );
         }
-        $data[$key] = $value;
+        if ($value !== '' && $type === 'dni' && !preg_match('/^[0-9]{6,9}$/D', $value)) {
+            api_error('El DNI debe tener entre 6 y 9 dígitos.', 'VALIDATION_ERROR', 422);
+        }
+        if ($value !== '' && $type === 'email' && !filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            api_error('Ingresá un correo electrónico válido.', 'VALIDATION_ERROR', 422);
+        }
+        $data[$key] = $value === '' && ($field['opcional'] ?? false) ? null : $value;
     }
     return $data;
 }
@@ -245,8 +305,9 @@ function configuracion_validar_duplicados(
     $idField = (string)$definition['id_campo'];
 
     foreach ($definition['campos'] as $key => $field) {
-        // En tipos de documento tanto descripción como sigla son únicas.
-        // En las otras tablas el único campo editable también tiene índice UNIQUE.
+        // El nombre y el DNI del docente son únicos; los correos pueden
+        // compartirse. En las tablas preexistentes se conservan las reglas.
+        if (($field['unico'] ?? true) === false || $data[$key] === null) continue;
         $column = (string)$field['columna'];
         $sql = "SELECT `{$idField}` FROM `{$table}` WHERE UPPER(`{$column}`) = UPPER(?)";
         $params = [$data[$key]];

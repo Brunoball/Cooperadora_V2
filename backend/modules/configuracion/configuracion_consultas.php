@@ -29,10 +29,13 @@ trait ConfiguracionConsultas
         $fields = configuracion_columnas_select($definition);
         $dateField = $definition['fecha_campo'] ?? null;
         $dateSelect = $dateField ? ", `{$dateField}` AS creado_en" : ', NULL AS creado_en';
+        $stateSelect = isset($definition['estado_campo'])
+            ? ', `activo` AS activo, `motivo` AS motivo'
+            : '';
         $orderField = (string)reset($definition['campos'])['columna'];
 
         $rows = $db->query(
-            "SELECT `{$idField}` AS id, {$fields}{$dateSelect}
+            "SELECT `{$idField}` AS id, {$fields}{$dateSelect}{$stateSelect}
              FROM `{$table}`
              ORDER BY `{$orderField}` ASC, `{$idField}` ASC"
         )->fetchAll();
