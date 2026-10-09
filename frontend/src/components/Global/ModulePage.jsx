@@ -220,6 +220,7 @@ export function ModulePage({
   const titleTabs = tabsInTitle
     ? filters.find((filter) => filter.type === "tabs")
     : null;
+  const hasDescription = Boolean(description && !titleTabs);
   const headerFilters = titleTabs
     ? filters.filter((filter) => filter !== titleTabs)
     : filters;
@@ -259,13 +260,13 @@ export function ModulePage({
       ) : null}
 
       <article className="mov-card mov-card--table module-card">
-        <header className="mov-card__head module-card__head">
+        <header className={`mov-card__head module-card__head${hasDescription ? " module-card__head--described" : ""}`}>
           <div
             className={
-              headLeftClassName || "mov-card__headLeft module-card__headLeft"
+              `${headLeftClassName || "mov-card__headLeft module-card__headLeft"}${hasDescription ? " module-card__headLeft--described" : ""}`
             }
           >
-            <div className="title-mov module-titleBox">
+            <div className={`title-mov module-titleBox${hasDescription ? " module-titleBox--described" : ""}`}>
               <div className="module-titleRow">
                 <h1 className="mov-card__title module-title">{title}</h1>
                 {titleActions ? (

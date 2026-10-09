@@ -1235,11 +1235,59 @@
 }
 
 .module-description {
-  max-width: 280px;
   margin: 4px 0 0;
   font-size: 12px;
   font-weight: 460;
   line-height: 1.35;
+}
+
+/* Encabezados con descripción breve:
+   el texto acompaña al título mientras entra completo. Cuando el espacio
+   real se reduce (filtros, acciones o menú lateral), pasa como bloque a la
+   siguiente línea. No se parte artificialmente a los 280px.
+   Solo afecta a ModulePage con descripción, no a pestañas ni a tablas. */
+.module-page .module-card__headLeft.module-card__headLeft--described {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  column-gap: 14px;
+  row-gap: 8px;
+}
+
+.module-page .module-titleBox.module-titleBox--described {
+  display: flex;
+
+  justify-content: flex-start;
+  align-items: baseline;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+
+.module-titleBox--described .module-titleRow {
+  flex: 0 0 auto;
+}
+
+.module-page .module-titleBox--described .module-description {
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: normal;
+}
+
+/* Los filtros aprovechan el espacio restante sin comprimir la descripción.
+   Si ya no entran al lado del título, el propio flex-wrap los baja. */
+.module-page .module-card__headLeft--described > .module-headFilters {
+  flex: 1 1 200px;
+  width: auto;
+  min-width: min(100%, 175px);
 }
 
 .module-titleTabs {
@@ -1951,4 +1999,27 @@
 .module-filter--month .module-filterControl {
   width: 100% !important;
   max-width: 100% !important;
+}
+
+/* Variante compacta reutilizable: filas y encabezado de 48 px.
+   Se aplica a tablas; las tarjetas móviles mantienen altura automática. */
+@media (min-width: 761px) {
+  .global-divTable--compact .mov-gridTable--head,
+  .global-divTable--compact .mov-gridTable--row {
+    box-sizing: border-box;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    flex-shrink: 0;
+  }
+
+  .global-divTable--compact .mov-gridCell,
+  .global-divTable--compact .mov-gridCell--head {
+    box-sizing: border-box;
+    height: 47px;
+    min-height: 0;
+    max-height: 47px;
+    padding: 6px 12px;
+    line-height: 17px;
+  }
 }

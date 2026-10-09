@@ -2091,7 +2091,6 @@ html[data-theme="oscuro"] .cuotas-family-expand-btn:hover {
 /* Cooperadora V2 - grilla final de Cuotas */
 .cuotas-grid-v2 {
   grid-template-columns: 1.65fr 1.2fr .72fr .72fr .62fr .9fr .78fr;
-  min-width: 1040px;
 }
 .cuotas-grid-v2.mov-gridTable--head > .mov-gridCell--head:nth-child(5),
 .cuotas-grid-v2.mov-gridTable--head > .mov-gridCell--head:nth-child(7) { justify-content: center; text-align: center; }

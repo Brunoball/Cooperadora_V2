@@ -1,0 +1,91 @@
+/* Proporciones de los formularios de Ventas; no afecta otros módulos. */
+.entity-modal.ventas-modal {
+  --ventas-modal-width: 700px;
+  --ventas-modal-min-height: 560px;
+  width: min(var(--ventas-modal-width), calc(100vw - 36px)) !important;
+  max-width: var(--ventas-modal-width) !important;
+  min-height: min(var(--ventas-modal-min-height), calc(100vh - 36px));
+  max-height: calc(100vh - 36px);
+}
+
+.entity-modal.ventas-product-modal {
+  --ventas-modal-width: 580px;
+  --ventas-modal-min-height: 490px;
+}
+
+.entity-modal.ventas-order-modal {
+  --ventas-modal-width: 720px;
+  --ventas-modal-min-height: 580px;
+}
+
+.entity-modal.ventas-campaign-modal {
+  --ventas-modal-width: 660px;
+  --ventas-modal-min-height: 560px;
+}
+
+.entity-modal.ventas-concepts-modal {
+  --ventas-modal-width: 740px;
+  --ventas-modal-min-height: 580px;
+}
+
+.ventas-modal .entity-modal__header h2 {
+  font-weight: 550;
+  line-height: 1.3;
+}
+
+.ventas-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ventas-modal-title__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 29px;
+  width: 29px;
+  height: 29px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+}
+
+.ventas-modal-title > :last-child {
+  min-width: 0;
+}
+
+/* Al reducir el ancho, los resúmenes y acciones pueden pasar a otra línea. */
+.ventas-modal .ventas-concepts-launcher,
+.ventas-modal .ventas-concepts-launcher__actions,
+.ventas-modal .ventas-concepts-editor__top {
+  flex-wrap: wrap;
+}
+
+.ventas-modal .ventas-concepts-launcher__copy {
+  flex: 1 1 240px;
+}
+
+.ventas-modal .ventas-concepts-launcher__actions {
+  margin-left: auto;
+}
+
+.ventas-modal .entity-modal__footer {
+  flex-shrink: 0;
+}
+
+@media (max-width: 760px) {
+  .entity-modal.ventas-modal {
+    min-height: 0;
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px);
+  }
+
+  .ventas-modal .ventas-concepts-launcher__actions {
+    margin-left: 0;
+  }
+}

@@ -1,0 +1,74 @@
+/* Tablas de Configuración: contrato compartido entre Usuarios y Catálogos.
+   El color se toma de la misma variable que el encabezado global. */
+.config-usersTable > .config-usersTable__head,
+.config-catalogTable > .config-catalogTable__head {
+  background: var(--primary-color);
+  color: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.config-usersTable__head > [role="columnheader"],
+.config-catalogTable__head > [role="columnheader"] {
+  color: inherit;
+  background: transparent;
+}
+
+@media (min-width: 761px) {
+  .config-usersTable .config-usersTable__head,
+  .config-usersTable .config-usersTable__row,
+  .config-usersTable .config-usersTable__skeletonRow,
+  .config-catalogTable .config-catalogTable__head,
+  .config-catalogTable .config-catalogTable__row,
+  .config-catalogTable .config-catalogTable__skeletonRow {
+    box-sizing: border-box;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    flex: 0 0 48px;
+    padding: 0;
+    margin: 0;
+    align-items: stretch;
+    border-bottom-width: 1px;
+  }
+
+  .config-usersTable [role="row"] > .mov-gridCell,
+  .config-usersTable [role="row"] > .mov-gridCell--head,
+  .config-catalogTable [role="row"] > .mov-gridCell,
+  .config-catalogTable [role="row"] > .mov-gridCell--head {
+    box-sizing: border-box;
+    height: 47px;
+    min-height: 0;
+    max-height: 47px;
+    padding: 6px 12px;
+    margin: 0;
+    line-height: 17px;
+    align-self: stretch;
+    align-items: center;
+  }
+
+  .config-usersTable.has-y-scroll > .config-usersTable__head,
+  .config-catalogTable.has-y-scroll > .config-catalogTable__head {
+    padding-inline-end: var(--global-table-scrollbar-width, 0px);
+  }
+
+  .config-usersTable .config-usersAvatar,
+  .config-catalogTable .config-catalogIdentity__icon {
+    box-sizing: border-box;
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    flex: 0 0 30px;
+    border-radius: 8px;
+  }
+
+  .config-usersTable .config-usersIdentity strong,
+  .config-catalogTable .config-catalogIdentity strong {
+    line-height: 17px;
+  }
+
+  .config-usersTable .config-usersIdentity small,
+  .config-catalogTable .config-catalogIdentity small {
+    margin-top: 0;
+    line-height: 14px;
+  }
+}

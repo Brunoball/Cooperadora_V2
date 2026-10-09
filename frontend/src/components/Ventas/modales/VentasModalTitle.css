@@ -1,0 +1,7 @@
+/* Decoración del título exclusivamente; conserva las medidas del modal. */
+.ventas-modal .entity-modal__header h2 .ventas-modal-title-icon {
+  margin-right: 10px;
+  font-size: 13px;
+  vertical-align: 1px;
+  opacity: 0.78;
+}

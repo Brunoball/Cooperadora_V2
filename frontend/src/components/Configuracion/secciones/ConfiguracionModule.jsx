@@ -29,6 +29,7 @@ import { useConfiguracion } from "../hooks/useConfiguracion";
 import { useTableScrollbarCompensation } from "../../Global/useTableScrollbarCompensation";
 import "../configuracion.css";
 import "./CatalogosConfiguracion.css";
+import "./ConfiguracionTablas.css";
 
 const LIST_META = {
   contable_categoria: {
@@ -206,17 +207,17 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
 
   return (
     <div
-      className={`config-catalogTable global-scrollAwareTable ${isTeachers ? "config-catalogTable--docentes" : ""} ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
+      className={`config-catalogTable global-divTable global-divTable--compact global-scrollAwareTable ${isTeachers ? "config-catalogTable--docentes" : ""} ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
       role="table"
       aria-label={meta.title}
       aria-busy={loading}
       style={{ "--global-table-scrollbar-width": `${scrollbarWidth}px` }}
     >
-      <div className="config-catalogTable__head global-scrollAwareTable__head" role="row">
-        <span role="columnheader">{isTeachers ? "Docente" : "Opción"}</span>
-        <span role="columnheader">{isTeachers ? "DNI" : "Uso"}</span>
-        <span role="columnheader">{isTeachers ? "Estado" : "Creación"}</span>
-        <span className="config-catalogTable__actionsHeading" role="columnheader">Acciones</span>
+      <div className="config-catalogTable__head mov-gridTable mov-gridTable--head global-divTable__head global-scrollAwareTable__head" role="row">
+        <span className="mov-gridCell--head" role="columnheader">{isTeachers ? "Docente" : "Opción"}</span>
+        <span className="mov-gridCell--head" role="columnheader">{isTeachers ? "DNI" : "Uso"}</span>
+        <span className="mov-gridCell--head" role="columnheader">{isTeachers ? "Estado" : "Creación"}</span>
+        <span className="mov-gridCell--head config-catalogTable__actionsHeading" role="columnheader">Acciones</span>
       </div>
       <div ref={setBodyRef} className="config-catalogTable__body global-scrollAwareTable__body" role="rowgroup">
         {loading ? (
@@ -232,8 +233,8 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
           const display = meta.display(item);
           const uses = Number(item.cantidad_usos || 0);
           return (
-            <div className={`config-catalogTable__row ${isTeachers && !Number(item.activo) ? "is-inactive" : ""}`} role="row" key={item.id}>
-              <div className="config-catalogIdentity" role="cell">
+            <div className={`config-catalogTable__row mov-gridTable mov-gridTable--row global-divTable__row ${isTeachers && !Number(item.activo) ? "is-inactive" : ""}`} role="row" key={item.id}>
+              <div className="mov-gridCell config-catalogIdentity" role="cell">
                 <span className="config-catalogIdentity__icon" aria-hidden="true">
                   <FontAwesomeIcon icon={meta.icon} />
                 </span>
@@ -244,8 +245,8 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
               </div>
               {isTeachers ? (
                 <>
-                  <div className="config-catalogDni" role="cell" data-label="DNI">{item.dni || "SIN DNI"}</div>
-                  <div className="config-catalogTeacherState" role="cell" data-label="Estado">
+                  <div className="mov-gridCell config-catalogDni" role="cell" data-label="DNI">{item.dni || "SIN DNI"}</div>
+                  <div className="mov-gridCell config-catalogTeacherState" role="cell" data-label="Estado">
                     <span className={`config-catalogState ${Number(item.activo) ? "" : "is-inactive"}`}>
                       <i aria-hidden="true" />{Number(item.activo) ? "ACTIVO" : "INACTIVO"}
                     </span>
@@ -253,16 +254,16 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
                 </>
               ) : (
                 <>
-                  <div className="config-catalogUsage" role="cell" data-label="Uso">
+                  <div className="mov-gridCell config-catalogUsage" role="cell" data-label="Uso">
                     <strong>{uses}</strong>
                     <span>{uses === 1 ? "registro asociado" : "registros asociados"}</span>
                   </div>
-                  <div className="config-usersCreated" role="cell" data-label="Creación">
+                  <div className="mov-gridCell config-usersCreated" role="cell" data-label="Creación">
                     {formatDate(item.creado_en)}
                   </div>
                 </>
               )}
-              <div className="config-catalogActions config-catalogTable__actionsCell mov-actionsInline" role="cell">
+              <div className="mov-gridCell mov-gridCell--actions config-catalogActions config-catalogTable__actionsCell mov-actionsInline" role="cell">
                 {writable ? (
                   <>
                     <button

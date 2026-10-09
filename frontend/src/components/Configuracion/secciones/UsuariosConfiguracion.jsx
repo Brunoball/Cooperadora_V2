@@ -27,6 +27,7 @@ import { getSession, saveSession } from "../../_shared/auth/session";
 import { configuracionApi } from "../api/configuracionApi";
 import { useTableScrollbarCompensation } from "../../Global/useTableScrollbarCompensation";
 import "./UsuariosConfiguracion.css";
+import "./ConfiguracionTablas.css";
 
 const EMPTY_SUMMARY = { total: 0, activos: 0, bajas: 0, admins: 0 };
 const EMPTY_FORM = {
@@ -363,7 +364,7 @@ export default function UsuariosConfiguracion({ onBack }) {
           </header>
 
           <div
-            className={`config-usersTable global-scrollAwareTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
+            className={`config-usersTable global-divTable global-divTable--compact global-scrollAwareTable ${hasVerticalScroll ? "has-y-scroll" : ""}`.trim()}
             role="table"
             aria-label="Usuarios del sistema"
             aria-busy={loading}
@@ -378,14 +379,14 @@ export default function UsuariosConfiguracion({ onBack }) {
                 Cargando usuarios...
               </span>
             ) : null}
-            <div className="config-usersTable__head global-scrollAwareTable__head" role="row">
-              <span role="columnheader">Usuario</span>
-              <span role="columnheader">Nombre completo</span>
-              <span role="columnheader">Rol</span>
-              <span role="columnheader">Estado</span>
-              <span role="columnheader">Creación</span>
+            <div className="config-usersTable__head mov-gridTable mov-gridTable--head global-divTable__head global-scrollAwareTable__head" role="row">
+              <span className="mov-gridCell--head" role="columnheader">Usuario</span>
+              <span className="mov-gridCell--head" role="columnheader">Nombre completo</span>
+              <span className="mov-gridCell--head" role="columnheader">Rol</span>
+              <span className="mov-gridCell--head" role="columnheader">Estado</span>
+              <span className="mov-gridCell--head" role="columnheader">Creación</span>
               <span
-                className="config-usersTable__actionsHeading"
+                className="mov-gridCell--head config-usersTable__actionsHeading"
                 role="columnheader"
               >
                 Acciones
@@ -402,11 +403,11 @@ export default function UsuariosConfiguracion({ onBack }) {
               ) : (
                 filteredUsers.map((user) => (
                   <div
-                    className={`config-usersTable__row ${user.activo ? "" : "is-inactive"}`}
+                    className={`config-usersTable__row mov-gridTable mov-gridTable--row global-divTable__row ${user.activo ? "" : "is-inactive"}`}
                     role="row"
                     key={user.id}
                   >
-                    <div className="config-usersIdentity" role="cell">
+                    <div className="mov-gridCell config-usersIdentity" role="cell">
                       <span className="config-usersAvatar">
                         {userInitial(user.usuario)}
                       </span>
@@ -418,20 +419,20 @@ export default function UsuariosConfiguracion({ onBack }) {
                       </div>
                     </div>
                     <div
-                      className="config-usersEmail"
+                      className="mov-gridCell config-usersEmail"
                       role="cell"
                       data-label="Nombre completo"
                     >
                       {user.nombre_completo || <span>Sin nombre</span>}
                     </div>
-                    <div role="cell" data-label="Rol">
+                    <div className="mov-gridCell" role="cell" data-label="Rol">
                       <span
                         className={`config-usersRole config-usersRole--${user.rol}`}
                       >
                         {ROLE_LABELS[user.rol] || user.rol}
                       </span>
                     </div>
-                    <div role="cell" data-label="Estado">
+                    <div className="mov-gridCell" role="cell" data-label="Estado">
                       <span
                         className={`config-usersState ${user.activo ? "is-active" : "is-inactive"}`}
                       >
@@ -440,14 +441,14 @@ export default function UsuariosConfiguracion({ onBack }) {
                       </span>
                     </div>
                     <div
-                      className="config-usersCreated"
+                      className="mov-gridCell config-usersCreated"
                       role="cell"
                       data-label="Creación"
                     >
                       {formatCreatedAt(user.creado_en)}
                     </div>
                     <div
-                      className="config-usersActions config-usersTable__actionsCell mov-actionsInline"
+                      className="mov-gridCell mov-gridCell--actions config-usersActions config-usersTable__actionsCell mov-actionsInline"
                       role="cell"
                     >
                       <button

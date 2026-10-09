@@ -222,21 +222,6 @@
   text-align: center;
 }
 
-.config-usersTable.has-y-scroll > .config-usersTable__head {
-  padding-right: calc(16px + var(--global-table-scrollbar-width, 0px));
-}
-
-.config-usersTable__head {
-  min-height: 44px;
-  padding: 0 16px;
-  color: #fff;
-  background: var(--balto-midnight);
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .config-usersTable__body {
   min-height: 180px;
   max-height: calc(100vh - 400px);
@@ -245,29 +230,6 @@
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
-}
-
-.config-usersTable__row {
-  min-height: 68px;
-  padding: 9px 16px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--text-primary) 9%, transparent);
-  color: var(--balto-midnight);
-  background: #fff;
-  font-size: 11px;
-}
-
-.config-usersTable__skeletonRow {
-  min-height: 68px;
-  padding: 9px 16px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--text-primary) 9%, transparent);
-  background: #fff;
-}
-
-.config-usersTable__skeletonRow .mov-gridCell {
-  min-height: 48px;
-  padding: 8px 10px;
 }
 
 .config-usersTable__row.is-inactive {
@@ -301,17 +263,18 @@
 .config-usersIdentity strong {
   display: block;
   overflow: hidden;
-  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: inherit;
+  font-weight: 560;
 }
 
 .config-usersIdentity small {
   display: block;
   margin-top: 4px;
   color: var(--balto-action);
-  font-size: 9px;
-  font-weight: 750;
+  font-size: 11px;
+  font-weight: 440;
 }
 
 .config-usersEmail {
@@ -583,6 +546,12 @@
   font-size: 10px;
 }
 
+/* La presentación de encabezados, filas y celdas proviene de Global/module.css. */
+.config-usersTable__row,
+.config-usersTable__skeletonRow {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 1180px) {
   .config-usersStats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -712,5 +681,13 @@
 
   .config-usersForm__roleOptions {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Las tarjetas móviles conservan su distribución sin duplicar padding de celda. */
+@media (max-width: 760px) {
+  .config-usersTable__row > .mov-gridCell {
+    min-height: 0;
+    padding: 0;
   }
 }

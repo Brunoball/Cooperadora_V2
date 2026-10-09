@@ -222,21 +222,6 @@
   text-align: center;
 }
 
-.config-catalogTable.has-y-scroll > .config-catalogTable__head {
-  padding-right: calc(16px + var(--global-table-scrollbar-width, 0px));
-}
-
-.config-catalogTable__head {
-  min-height: 44px;
-  padding: 0 16px;
-  color: #fff;
-  background: var(--balto-midnight);
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .config-catalogTable__head > * {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -253,24 +238,12 @@
   overflow-y: auto;
 }
 
-.config-catalogTable__row {
-  min-height: 68px;
-  padding: 9px 16px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--text-primary) 9%, transparent);
-  color: var(--balto-midnight);
-  background: #fff;
-  font-size: 11px;
-}
-
 .config-catalogTable__row.is-inactive {
   background: color-mix(in srgb, var(--gray-500) 3.5%, transparent);
 }
 
 .config-catalogDni {
   color: var(--balto-midnight);
-  font-size: 11px;
-  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -323,19 +296,6 @@
   font-weight: 650;
 }
 
-.config-catalogTable__skeletonRow {
-  min-height: 68px;
-  padding: 9px 16px;
-  border-bottom: 1px solid
-    color-mix(in srgb, var(--text-primary) 9%, transparent);
-  background: #fff;
-}
-
-.config-catalogTable__skeletonRow .mov-gridCell {
-  min-height: 48px;
-  padding: 8px 10px;
-}
-
 .config-catalogIdentity {
   min-width: 0;
   display: flex;
@@ -362,9 +322,10 @@
 .config-catalogIdentity strong {
   display: block;
   overflow: hidden;
-  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: inherit;
+  font-weight: 560;
 }
 
 .config-catalogIdentity small {
@@ -372,11 +333,11 @@
   margin-top: 4px;
   overflow: hidden;
   color: var(--gray-500);
-  font-size: 9px;
-  font-weight: 700;
   text-overflow: ellipsis;
   text-transform: capitalize;
   white-space: nowrap;
+  font-size: 11px;
+  font-weight: 440;
 }
 
 .config-catalogUsage {
@@ -534,6 +495,12 @@
 .config-catalogForm__help svg {
   color: var(--entity-modal-action);
   font-size: 10px;
+}
+
+/* La presentación de encabezados, filas y celdas proviene de Global/module.css. */
+.config-catalogTable__row,
+.config-catalogTable__skeletonRow {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 1180px) {
@@ -807,5 +774,13 @@
   .config-catalogInfo:hover .config-catalogInfo__tooltip,
   .config-catalogInfo:focus-within .config-catalogInfo__tooltip {
     transform: translateY(0);
+  }
+}
+
+/* Las tarjetas móviles conservan su distribución sin duplicar padding de celda. */
+@media (max-width: 760px) {
+  .config-catalogTable__row > .mov-gridCell {
+    min-height: 0;
+    padding: 0;
   }
 }
