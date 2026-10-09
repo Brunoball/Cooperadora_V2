@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("./helpers/playwright.helper");
 const { authenticatePage } = require("./helpers/auth.helper");
 
 const routes = [

@@ -246,6 +246,30 @@ final class TestingSafety
             "SELECT id_persona FROM ventas_personas
              WHERE UPPER(nombre_apellido) LIKE 'PW E2E VTA PERSONA %'"
         );
+        // Misma regla que el cleanup: una persona creada desde un alumno de
+        // Playwright recibe el nombre oficial del alumno en resolvePerson().
+        // Incluirla en residuos e integridad evita falsos datos "reales".
+        if ($students !== []) {
+            $derivedSalesPersons = self::idsPrepared(
+                $db,
+                'SELECT vp.id_persona
+                   FROM ventas_personas vp
+                   INNER JOIN alumnos a ON a.id_alumno = vp.id_alumno
+                  WHERE vp.id_alumno IN (' . self::placeholders(count($students)) . ")
+                    AND vp.dni = a.num_documento
+                    AND vp.origen = 'alumno'
+                    AND (UPPER(a.apellido) LIKE 'PW E2E ALUMNO %'
+                      OR UPPER(a.apellido) LIKE 'PW EEE ALUMNO %'
+                      OR UPPER(a.apellido) LIKE 'PW E2E INGRESANTE %'
+                      OR UPPER(a.apellido) LIKE 'PW EEE INGRESANTE %')
+                    AND UPPER(TRIM(vp.nombre_apellido)) =
+                        UPPER(TRIM(CONCAT(a.apellido, ' ', COALESCE(a.nombre, ''))))",
+                $students
+            );
+            $salesPersons = array_values(array_unique(array_merge(
+                $salesPersons, $derivedSalesPersons
+            )));
+        }
         $salesOrders = self::ids(
             $db,
             "SELECT id_orden FROM ventas_ordenes
@@ -316,12 +340,19 @@ final class TestingSafety
                 OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'
                 OR UPPER(nombre_descripcion) LIKE 'VENTA PW E2E VTA CAMP %'"
         );
+        // Ventas puede generar un proveedor con el nombre oficial de un alumno
+        // E2E, distinto de PW E2E VTA PERSONA. Excluir esos nombres explícitos
+        // evita confundir esas filas temporales con proveedores reales.
         $contableProviders = self::ids(
             $db,
             "SELECT id_cont_proveedor FROM contable_proveedor
              WHERE UPPER(nombre_proveedor) LIKE 'PW E2E CT %'
                 OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'
-                OR UPPER(nombre_proveedor) LIKE 'PW E2E VTA PERSONA %'"
+                OR UPPER(nombre_proveedor) LIKE 'PW E2E VTA PERSONA %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW E2E ALUMNO %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW EEE ALUMNO %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW E2E INGRESANTE %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW EEE INGRESANTE %'"
         );
         $contableIncomes = [];
         $contableExpenses = [];

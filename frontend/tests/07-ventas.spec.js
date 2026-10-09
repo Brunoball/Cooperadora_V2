@@ -1,4 +1,4 @@
-const { test, expect } = require("@playwright/test");
+const { test, expect } = require("./helpers/playwright.helper");
 const { token } = require("./helpers/auth.helper");
 const { ok, apiFetch } = require("./helpers/api.helper");
 const { createSalesProduct, createSalesCampaign } = require("./helpers/entities.helper");
@@ -95,7 +95,7 @@ test.describe("Ventas", () => {
     expect(r.body.codigo).toBe("VENTA_CAMPANIA_INACTIVA");
   });
 
-  test("producto inactivo adicional no puede entrar en una venta nueva", async ({ request }) => {
+  test("producto ajeno a la campaña no puede entrar en una venta nueva, aunque esté inactivo", async ({ request }) => {
     const t = token();
     const marker = suffix();
     const principal = await createSalesProduct(request, t, `${marker}-A`);
@@ -123,6 +123,6 @@ test.describe("Ventas", () => {
       },
     });
     expect(r.status).toBe(409);
-    expect(r.body.codigo).toBe("VENTA_PRODUCTO_INACTIVO");
+    expect(r.body.codigo).toBe("VENTA_PRODUCTO_CAMPANIA_INVALIDO");
   });
 });

@@ -155,6 +155,33 @@ final class TestingCleanup
                 "SELECT id_persona FROM ventas_personas
                  WHERE UPPER(nombre_apellido) LIKE 'PW E2E VTA PERSONA %'"
             );
+            // Una venta de un alumno E2E usa el nombre oficial del alumno.
+            // resolvePerson() lo sustituye aun cuando Playwright envíe
+            // "PW E2E VTA PERSONA ..."; por eso el filtro por prefijo anterior
+            // no alcanza para encontrar todas las personas E2E.
+            // Para no afectar personas reales, sólo incorporamos coincidencias
+            // exactas de alumno, DNI, origen y nombre dentro del namespace E2E.
+            if ($testStudents !== []) {
+                $derivedSalesPersons = self::ids(
+                    $db,
+                    'SELECT vp.id_persona
+                       FROM ventas_personas vp
+                       INNER JOIN alumnos a ON a.id_alumno = vp.id_alumno
+                      WHERE vp.id_alumno IN (' . self::placeholders(count($testStudents)) . ")
+                        AND vp.dni = a.num_documento
+                        AND vp.origen = 'alumno'
+                        AND (UPPER(a.apellido) LIKE 'PW E2E ALUMNO %'
+                          OR UPPER(a.apellido) LIKE 'PW EEE ALUMNO %'
+                          OR UPPER(a.apellido) LIKE 'PW E2E INGRESANTE %'
+                          OR UPPER(a.apellido) LIKE 'PW EEE INGRESANTE %')
+                        AND UPPER(TRIM(vp.nombre_apellido)) =
+                            UPPER(TRIM(CONCAT(a.apellido, ' ', COALESCE(a.nombre, ''))))",
+                    $testStudents
+                );
+                $testSalesPersons = array_values(array_unique(array_merge(
+                    $testSalesPersons, $derivedSalesPersons
+                )));
+            }
             $testSalesOrders = self::ids(
                 $db,
                 "SELECT id_orden FROM ventas_ordenes
@@ -273,12 +300,20 @@ final class TestingCleanup
                         OR UPPER(nombre_descripcion) LIKE 'PW EEE CT %'
                         OR UPPER(nombre_descripcion) LIKE 'VENTA PW E2E VTA CAMP %'"
                 ),
+                // Una venta de un alumno/ingresante E2E puede crear automáticamente
+                // un proveedor contable con su apellido oficial, no con el nombre
+                // de la persona VTA. Se incluye sólo el namespace explícito E2E.
+                // La eliminación posterior sigue protegida por withoutReferences().
                 'contable_proveedor' => self::ids(
                     $db,
                     "SELECT id_cont_proveedor FROM contable_proveedor
                      WHERE UPPER(nombre_proveedor) LIKE 'PW E2E CT %'
                         OR UPPER(nombre_proveedor) LIKE 'PW EEE CT %'
-                        OR UPPER(nombre_proveedor) LIKE 'PW E2E VTA PERSONA %'"
+                        OR UPPER(nombre_proveedor) LIKE 'PW E2E VTA PERSONA %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW E2E ALUMNO %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW EEE ALUMNO %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW E2E INGRESANTE %'
+                        OR UPPER(nombre_proveedor) LIKE 'PW EEE INGRESANTE %'"
                 ),
                 'sexo' => self::ids(
                     $db,

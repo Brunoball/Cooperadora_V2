@@ -32,6 +32,17 @@ module.exports = async function globalSetup() {
       return;
     }
 
+    // Nunca ejecutar escrituras remotas si el backend desplegado no tiene el
+    // guard de alcance E2E. Esta prueba solo intenta una operación de prueba
+    // que debe ser BLOQUEADA: no muta la base.
+    if (!env.isLocal) {
+      const { apiFetch } = require("./helpers/api.helper");
+      const probe = await apiFetch(api, "e2e_guard_probe", { token: bootstrapToken, method: "POST", data: {} });
+      if (probe.status !== 409 || probe.body?.codigo !== "E2E_SCOPE_BLOCKED") {
+        throw new Error("GUARD E2E remoto no confirmado. Se cancela el testing con escrituras sin modificar datos.");
+      }
+    }
+
     // Borra sólo el namespace E2E de ejecuciones locales interrumpidas.
     await ok(api, "e2e_cleanup", {
       token: bootstrapToken,

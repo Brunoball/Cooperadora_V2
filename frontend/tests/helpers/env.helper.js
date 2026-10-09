@@ -36,6 +36,12 @@ function loadTestEnv(rootDir = process.cwd()) {
   for (const [key, value] of Object.entries(fileValues)) {
     if (process.env[key] === undefined) process.env[key] = value;
   }
+  // La selección y los permisos se leen SIEMPRE de .env.test.
+  // Evita heredar un PW_ALLOW_REMOTE_WRITES=true de un shell anterior.
+  for (const key of ["PW_TARGET", "PW_ALLOW_REMOTE_WRITES", "PW_REMOTE_E2E_CONFIRM",
+    "PW_LOCAL_USER", "PW_LOCAL_PASSWORD", "PW_HOSTINGER_USER", "PW_HOSTINGER_PASSWORD"]) {
+    if (Object.prototype.hasOwnProperty.call(fileValues, key)) process.env[key] = fileValues[key];
+  }
 
   const target = String(process.env.PW_TARGET || "local").trim().toLowerCase();
   if (!["local", "hostinger"].includes(target)) {
@@ -65,9 +71,17 @@ function loadTestEnv(rootDir = process.cwd()) {
 
   if (!local) {
     const allowed = new URL(apiBaseUrl);
-    if (allowed.hostname !== "cooperadora.ipet50.edu.ar") {
-      throw new Error(`Hostinger no autorizado para esta suite: ${allowed.hostname}`);
+    const site = new URL(frontendBaseUrl);
+    if (allowed.protocol !== "https:" || allowed.hostname !== "cooperadora.ipet50.edu.ar" ||
+        allowed.pathname !== "/api/routes" || site.protocol !== "https:" ||
+        site.hostname !== allowed.hostname || site.pathname !== "/") {
+      throw new Error("Destino Hostinger inválido: solo https://cooperadora.ipet50.edu.ar y /api/routes.");
     }
+  }
+
+  if (!local && bool(process.env.PW_ALLOW_REMOTE_WRITES, false) &&
+      String(process.env.PW_REMOTE_E2E_CONFIRM || "").trim() !== "COOPERADORA_E2E_AISLADO") {
+    throw new Error("Escrituras remotas bloqueadas: requiere PW_REMOTE_E2E_CONFIRM=COOPERADORA_E2E_AISLADO en un entorno de pruebas aislado.");
   }
 
   cached = {
@@ -82,6 +96,9 @@ function loadTestEnv(rootDir = process.cwd()) {
     startFrontend: bool(process.env.PW_START_FRONTEND, local),
     startBackend: bool(process.env.PW_START_BACKEND, local),
     allowRemoteWrites: bool(process.env.PW_ALLOW_REMOTE_WRITES, false),
+    remoteWriteConfirmation: String(process.env.PW_REMOTE_E2E_CONFIRM || "").trim(),
+    hostingerIntervalMs: Math.min(5000, Math.max(250, Number(process.env.PW_HOSTINGER_MIN_REQUEST_INTERVAL_MS) || 600)),
+    hostingerMaxRequestMs: Math.min(120000, Math.max(10000, Number(process.env.PW_HOSTINGER_MAX_REQUEST_MS) || 45000)),
     finalCleanup: bool(process.env.PW_FINAL_CLEANUP, true),
     verifyIntegrity: bool(process.env.PW_VERIFY_INTEGRITY, true),
     backendDir: String(process.env.PW_BACKEND_DIR || "../backend"),

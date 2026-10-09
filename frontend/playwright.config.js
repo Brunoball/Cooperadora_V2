@@ -1,60 +1,53 @@
+"use strict";
 const path = require("path");
-const { defineConfig } = require("@playwright/test");
+const { defineConfig, devices } = require("@playwright/test");
 const { loadTestEnv } = require("./tests/helpers/env.helper");
-
 const env = loadTestEnv(__dirname);
-const webServer = [];
+const fullE2E = env.isLocal || env.allowRemoteWrites;
 
-if (env.isLocal && env.startBackend) {
-  webServer.push({
-    command: env.phpCommand,
-    cwd: path.resolve(__dirname, env.backendDir),
-    url: `${env.apiBaseUrl}/api.php?action=health`,
-    reuseExistingServer: true,
-    timeout: 30000,
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-}
-
-if (env.isLocal && env.startFrontend) {
-  webServer.push({
-    command: env.frontendCommand,
-    cwd: __dirname,
-    url: env.frontendBaseUrl,
-    reuseExistingServer: true,
-    timeout: 120000,
-    stdout: "ignore",
-    stderr: "ignore",
-    env: {
-      ...process.env,
-      BROWSER: "none",
-      REACT_APP_E2E: "1",
-      REACT_APP_API_URL: env.apiBaseUrl,
-    },
-  });
-}
-
+// Modo Hostinger normal: smoke remoto de solo lectura. El E2E completo remoto
+// requiere opt-in consciente, preflight del guard y una DB de pruebas aislada.
 module.exports = defineConfig({
   testDir: "./tests",
-  testMatch: /.*\.spec\.js/,
-  globalSetup: require.resolve("./tests/auth.setup"),
-  globalTeardown: require.resolve("./tests/auth.teardown"),
+  testMatch: fullE2E ? "**/*.spec.js" : "**/90-hostinger-smoke.spec.js",
+  testIgnore: fullE2E ? ["**/90-hostinger-smoke.spec.js"] : [],
+  timeout: env.isLocal ? 60000 : 120000,
+  expect: { timeout: env.isLocal ? 10000 : 20000 },
   fullyParallel: false,
   workers: 1,
-  retries: env.isLocal ? 0 : 1,
-  timeout: 60000,
-  expect: { timeout: 10000 },
-  reporter: [["list"]],
+  retries: 0,
+  forbidOnly: !env.isLocal,
+  reporter: "list",
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  globalSetup: path.resolve(__dirname, "tests/auth.setup.js"),
+  globalTeardown: path.resolve(__dirname, "tests/auth.teardown.js"),
   use: {
+    ...devices["Desktop Chrome"],
     baseURL: env.frontendBaseUrl,
-    locale: "es-AR",
-    timezoneId: "America/Argentina/Cordoba",
-    viewport: { width: 1440, height: 900 },
+    ignoreHTTPSErrors: false,
+    actionTimeout: env.isLocal ? 15000 : 30000,
+    navigationTimeout: env.isLocal ? 30000 : 60000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  webServer: webServer.length ? webServer : undefined,
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  webServer: !env.isLocal ? undefined : [
+    ...(env.startBackend ? [{
+      command: env.phpCommand,
+      cwd: path.resolve(__dirname, env.backendDir),
+      url: `${env.apiBaseUrl}/api.php?action=health`,
+      // PHP -S escribe un log por cada request en stderr; Playwright conserva los errores de tests.
+      stderr: "ignore",
+      reuseExistingServer: true,
+      timeout: 120000,
+    }] : []),
+    ...(env.startFrontend ? [{
+      command: env.frontendCommand,
+      cwd: __dirname,
+      url: env.frontendBaseUrl,
+      reuseExistingServer: true,
+      timeout: 180000,
+      env: { REACT_APP_API_URL: env.apiBaseUrl, REACT_APP_E2E: "1", BROWSER: "none" },
+    }] : []),
+  ],
 });

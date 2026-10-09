@@ -1,8 +1,8 @@
 # Cobertura E2E de acciones - Cooperadora V2
 
-Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-acciones.spec.js` falla si una ruta registrada del backend (excepto Bot Panel) no fue ejecutada durante la corrida.
+Esta suite registra en runtime cada `action` para la que realmente se recibió una respuesta HTTP distinta de 5xx. El test `99-cobertura-acciones.spec.js` falla si una ruta registrada del backend principal no tuvo respuesta durante la corrida (excluye el servicio independiente del Bot Panel). **Esto mide rutas ejercitadas, NO significa que todas las combinaciones ni ramas de cada función estén probadas.**
 
-**Acciones registradas al generar este paquete: 107 / 107 cubiertas en runtime por la suite.**
+**Inventario estático actualizado (8/10/2026): 109 acciones registradas en el backend principal; 109 con referencia en los archivos de tests/helpers. La cobertura REAL solo se confirma después de ejecutar la suite completa y aprobar el test `99`, no al crear este ZIP.**
 
 | Action | Método | Cobertura principal |
 |---|---|---|
@@ -77,6 +77,7 @@ Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-ac
 | `e2e_guard_probe` | POST | 00-seguridad-contratos.spec.js |
 | `e2e_integridad` | GET | 09-dashboard-integridad.spec.js, auth.setup.js, auth.teardown.js |
 | `e2e_residuos` | GET | 98-limpieza-preview.spec.js, auth.teardown.js |
+| `e2e_ventas_campania_estado` | POST | helpers/entities.helper.js |
 | `familias_eliminar` | POST | 10-alumnos-familias-extendido.spec.js |
 | `familias_eliminar_definitivo` | POST | 10-alumnos-familias-extendido.spec.js |
 | `familias_guardar` | POST | 03-alumnos-familias.spec.js, 10-alumnos-familias-extendido.spec.js, helpers/entities.helper.js |
@@ -97,6 +98,7 @@ Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-ac
 | `ventas_dashboard` | GET | 14-ventas-cobertura-total.spec.js |
 | `ventas_medios_pago` | GET | 14-ventas-cobertura-total.spec.js |
 | `ventas_menu_activo` | GET | 14-ventas-cobertura-total.spec.js |
+| `ventas_objetivo_persona` | GET | 22-ventas-objetivos-2026.spec.js |
 | `ventas_orden_detalle` | GET | 14-ventas-cobertura-total.spec.js |
 | `ventas_orden_eliminar` | POST | 07-ventas.spec.js, 14-ventas-cobertura-total.spec.js |
 | `ventas_orden_guardar` | POST | 07-ventas.spec.js, 14-ventas-cobertura-total.spec.js |
@@ -126,7 +128,7 @@ Esta suite registra en runtime cada `action` invocada y el test `99-cobertura-ac
 
 ## Cobertura profunda agregada post-freeze
 
-Además de ejecutar las 107/107 acciones registradas, la suite ahora prueba secuencias y combinaciones críticas entre módulos:
+Además del inventario de 109 acciones, la suite prueba secuencias y combinaciones críticas entre módulos:
 
 - `17-ingresantes-ciclo-vida-profundo.spec.js`: matrícula antes de ser alumno, conversión, baja, reactivación, eliminación lógica, lote mixto pagado/no pagado, cancelados y concurrencia de conversión.
 - `18-familias-descuentos-profundo.spec.js`: familias de tres hermanos, cambio 3→2 por baja/eliminación, reactivación, edición de integrantes y activación/desactivación de reglas familiares.
@@ -135,3 +137,26 @@ Además de ejecutar las 107/107 acciones registradas, la suite ahora prueba secu
 - `21-integridad-e2e-profunda.spec.js`: Safety/Residues/Integrity sobre cadenas E2E complejas para asegurar que teardown pueda devolver la base real al baseline exacto.
 
 El objetivo de esta capa no es sólo "tocar" endpoints: valida invariantes de negocio y trazabilidad después de varias transiciones consecutivas.
+
+## Actualización 08/10/2026 - precongelamiento
+
+Se mantiene íntegramente el testing anterior, se corrige el resultado esperado de `07-ventas.spec.js` para productos **ajenos a la campaña** (`VENTA_PRODUCTO_CAMPANIA_INVALIDO`), y se agregan:
+
+- `22-ventas-objetivos-2026.spec.js`: cinco escenarios 0/1/2/3/4 unidades (ganancias $10.000/$6.000/$3.000/$0/$0), importe productos + ganancia, stock, ingreso contable vinculado, pagos múltiples sin doble cobro, liquidación sin artículos, anulación, bloqueo de cambios históricos, consulta `ventas_objetivo_persona` y contrato del menú para WhatsApp.
+- `23-ventas-filtros-planillas-2026.spec.js`: mes, origen, búsqueda, cancelaciones, retiros reversibles, reglas de estado y planilla de alumnos con importes y ganancias agregados sin duplicación.
+- `24-interfaz-y-contratos-2026.spec.js`: cruce de acciones del frontend y rutas del backend, selección por defecto de campaña activa, cálculo de total, exportación, impresión manual, navegación del listado de ventas.
+- `25-regresiones-modulos-transversales-2026.spec.js`: contratos de Alumnos/importación/exportación, Cuotas/condonación/diciembre, Contabilidad/filtros/exportación, integración del Bot Panel en React y smoke de otros módulos.
+- `helpers/api.helper.js`: un intento de conexión fallido ya no cuenta como una acción ejecutada; tampoco se suman respuestas HTTP 5xx.
+- `99-cobertura-acciones.spec.js`: evita resultado falso con 0 rutas y omite cobertura completa en modo remoto de solo lectura.
+
+## Cómo ejecutar
+
+Desde la carpeta `frontend`, con backend PHP y MySQL locales configurados y **una copia de seguridad de la DB**:
+
+```powershell
+npx playwright test --project=chromium --workers=1 --reporter=list
+```
+
+Se necesita el `playwright.config` del proyecto, `.env.test` y las dependencias habituales de Playwright. Mantener `workers=1` es importante porque la suite comparte datos E2E, realiza limpieza y registra acciones en un archivo común.
+
+**Criterio para congelar:** 0 tests fallidos, comprobación `99` de todas las acciones locales, `globalTeardown` sin residuos y huella de integridad real intacta. No ejecutar escritura E2E contra datos de producción. La integración completa del backend **externo** de WhatsApp, entregas reales de mensajes, PDF/Excel generados en navegador y todos los clicks visuales del sistema requieren pruebas adicionales: no se certifican con este paquete.

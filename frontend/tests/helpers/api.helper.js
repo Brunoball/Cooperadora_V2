@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { loadTestEnv } = require("./env.helper");
+const { withRemoteRequestSlot } = require("./hostinger-throttle.helper");
 
 function coverageFile() {
   const env = loadTestEnv();
@@ -36,7 +37,6 @@ function apiUrl(action, query = {}) {
 
 async function rawFetch(api, action, options = {}) {
   const env = loadTestEnv();
-  recordAction(action);
   const headers = {
     "X-COOPERADORA-E2E": env.e2eHeader,
     "User-Agent": options.userAgent || "PW-COOP-E2E-PLAYWRIGHT",
@@ -54,7 +54,14 @@ async function rawFetch(api, action, options = {}) {
   if (options.multipart !== undefined) fetchOptions.multipart = options.multipart;
   else if (options.data !== undefined) fetchOptions.data = options.data;
 
-  const response = await api.fetch(apiUrl(action, options.query), fetchOptions);
+  const response = await withRemoteRequestSlot(() => api.fetch(apiUrl(action, options.query), fetchOptions));
+  // Cobertura significa que el backend respondió realmente. Un pedido que falla
+  // por red o un HTTP 5xx NO puede contar como acción ejecutada correctamente.
+  // Las respuestas 4xx sí cuentan: prueban validaciones y bloqueos esperados.
+  if (!env.isLocal && [429, 502, 503, 504].includes(response.status())) {
+    throw new Error(`Hostinger respondió HTTP ${response.status()} en ${action}. Se detiene esta prueba; no se reintenta para evitar duplicar escrituras.`);
+  }
+  if (response.status() < 500) recordAction(action);
   return { response, status: response.status() };
 }
 
