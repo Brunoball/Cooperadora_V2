@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../../Global/TableEmptyIcon";
 import React, { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -293,7 +294,7 @@ function CatalogTable({ items, loading, meta, writable, onEdit, onDelete, extern
         })}
 
         {!loading && !items.length ? (
-          <div className="config-usersEmpty">{isTeachers ? "No hay docentes que coincidan con la búsqueda." : "No hay opciones que coincidan con la búsqueda."}</div>
+          <div className="config-usersEmpty"><TableEmptyIcon />{isTeachers ? "No hay docentes que coincidan con la búsqueda." : "No hay opciones que coincidan con la búsqueda."}</div>
         ) : null}
       </div>
     </div>

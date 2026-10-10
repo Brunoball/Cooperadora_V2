@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../../Global/TableEmptyIcon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBan, faCheck, faPen, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
@@ -292,7 +293,7 @@ export default function Ingresantes() {
           empty={!loading && !items.length}
         >
           {!loading && error ? <div className="module-empty"><strong>{error}</strong></div> : null}
-          {!loading && !error && !items.length ? <div className="module-empty"><strong>Sin ingresantes para mostrar</strong><span>Cambiá los filtros o cargá una nueva inscripción.</span></div> : null}
+          {!loading && !error && !items.length ? <div className="module-empty"><TableEmptyIcon /><strong>Sin ingresantes para mostrar</strong><span>Cambiá los filtros o cargá una nueva inscripción.</span></div> : null}
           {!loading && !error ? items.map((item) => {
             const selectable = writable && item.estado === "PENDIENTE" && !item.id_alumno_confirmado;
             const selected = selectedIds.includes(Number(item.id_ingresante));

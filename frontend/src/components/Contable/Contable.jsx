@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../Global/TableEmptyIcon";
 import React, {
   useCallback,
   useEffect,
@@ -421,7 +422,7 @@ function Breakdown({ title, items = [] }) {
             </p>
           ))
         ) : (
-          <p className="ct-breakdown__empty">Sin movimientos en el mes.</p>
+          <p className="ct-breakdown__empty"><TableEmptyIcon />Sin movimientos en el mes.</p>
         )}
       </div>
     </article>

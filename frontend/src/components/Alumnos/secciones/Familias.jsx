@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../../Global/TableEmptyIcon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -586,7 +587,7 @@ export default function Familias() {
             <div className="module-empty"><strong>{error}</strong></div>
           ) : null}
           {!loading && !error && !items.length ? (
-            <div className="module-empty">
+            <div className="module-empty"><TableEmptyIcon />
               <strong>Sin familias para mostrar</strong>
               <span>Creá la primera familia o cambiá los filtros.</span>
             </div>

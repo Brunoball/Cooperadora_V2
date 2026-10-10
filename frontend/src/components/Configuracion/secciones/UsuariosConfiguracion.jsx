@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../../Global/TableEmptyIcon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -492,7 +493,7 @@ export default function UsuariosConfiguracion({ onBack }) {
               )}
 
               {!loading && !filteredUsers.length ? (
-                <div className="config-usersEmpty">
+                <div className="config-usersEmpty"><TableEmptyIcon />
                   No hay usuarios que coincidan con los filtros seleccionados.
                 </div>
               ) : null}

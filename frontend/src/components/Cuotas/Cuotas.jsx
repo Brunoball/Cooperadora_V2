@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../Global/TableEmptyIcon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -553,7 +554,7 @@ export default function Cuotas() {
           skeletonRows={8}
         >
           {!loading && items.length === 0 ? (
-            <div className="cuotas-v2-empty">No hay registros que coincidan con los filtros actuales.</div>
+            <div className="cuotas-v2-empty"><TableEmptyIcon />No hay registros que coincidan con los filtros actuales.</div>
           ) : (
             items.map((item) => {
               const amount = item.estado === "DEUDOR" ? item.monto_sugerido : item.monto;

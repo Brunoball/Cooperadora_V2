@@ -2705,3 +2705,25 @@ html[data-theme="oscuro"] .cuotas-page .cuotas-v2-category.is-externo {
   animation: cuotas-print-spinner 0.8s linear infinite;
   transform-origin: center;
 }
+
+/* Cuotas: límites compactos de División/Categoría en todos los tamaños. */
+.cuotas-page .cuotas-head-filters .cuotas-division-filter,
+.cuotas-page .cuotas-head-filters .cuotas-category-filter {
+  min-width: 0;
+  max-width: 100px;
+}
+
+@media (min-width: 561px) {
+  .cuotas-page .cuotas-head-filters .cuotas-division-filter,
+  .cuotas-page .cuotas-head-filters .cuotas-category-filter {
+    flex-basis: 100px;
+  }
+}
+
+.cuotas-page .cuotas-head-filters .cuotas-year-filter > .module-filterControl,
+.cuotas-page .cuotas-head-filters .cuotas-school-year-filter > .module-filterControl,
+.cuotas-page .cuotas-head-filters .cuotas-category-filter > .module-filterControl,
+.cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions
+  .module-filter.cuotas-footerYear-filter > .module-filterControl {
+  padding-right: 0 !important;
+}

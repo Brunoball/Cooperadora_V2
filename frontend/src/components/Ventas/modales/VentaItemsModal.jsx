@@ -1,3 +1,4 @@
+import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import { faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
@@ -90,7 +91,7 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
       closeOnBackdrop={false}
     >
       <EntityTabs
-        tabs={[{ value: "conceptos", label: "Productos y conceptos", badge: draft.length }, { value: "precios", label: "Precios y cantidades" }]}
+        tabs={[{ value: "conceptos", label: <><VentasSectionIcon kind="product" />Productos y conceptos</>, badge: draft.length }, { value: "precios", label: <><VentasSectionIcon kind="prices" />Precios y cantidades</> }]}
         value={activeTab}
         onChange={setActiveTab}
         idPrefix="ventas-concepts-modal-tab"
@@ -100,7 +101,7 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
       <div className="ventas-concepts-editor">
         <div className="ventas-concepts-editor__top">
           <div>
-            <strong>Detalle de la venta</strong>
+            <strong><VentasSectionIcon kind="sale" />Detalle de la venta</strong>
             <small>Podés seleccionar un producto existente o cargar un concepto manual.</small>
           </div>
           <button

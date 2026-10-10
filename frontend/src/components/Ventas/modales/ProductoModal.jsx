@@ -1,3 +1,4 @@
+import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { FloatingField } from "../../Global/Formularios/TabbedForm";
@@ -41,12 +42,14 @@ export default function ProductoModal({ open, initial, saving, onClose, onSave }
   return (
     <CrudModal open={open} title={form.id_producto ? "Editar producto" : "Nuevo producto"} subtitle="Catálogo de productos o conceptos vendibles." onClose={onClose} onSubmit={submit} saving={saving} showSavingEffect={false} wide modalClassName="ventas-modal ventas-product-modal">
       <div className="ventas-form-grid ventas-form-grid--product">
+        <h3 className="ventas-product-section-title"><VentasSectionIcon kind="product" />Datos del producto</h3>
         <FloatingField label="Nombre" wide className="ventas-modal-field">
           <input required maxLength={150} placeholder="Ej.: Entrada fiesta de fin de año" value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} />
         </FloatingField>
         <FloatingField label="Descripción" wide textarea className="ventas-modal-field">
           <textarea rows="3" placeholder="Ej.: Entrada anticipada para la fiesta escolar." value={form.descripcion || ""} onChange={(e) => setForm((v) => ({ ...v, descripcion: upper(e.target.value, 3000) }))} />
         </FloatingField>
+        <h3 className="ventas-product-section-title"><VentasSectionIcon kind="prices" />Precios y stock</h3>
         <FloatingField label="Precio anticipado" className="ventas-modal-field">
           <input required type="number" min="0" step="0.01" placeholder="Ej.: 3500" value={form.precio_anticipada} onChange={(e) => setForm((v) => ({ ...v, precio_anticipada: e.target.value }))} />
         </FloatingField>

@@ -1,0 +1,18 @@
+.ventas-modal .ventas-section-icon {
+  display: inline-block;
+  width: 1em;
+  margin-right: 8px;
+  font-size: 13px;
+  vertical-align: baseline;
+  color: currentColor;
+  opacity: .65;
+  flex-shrink: 0;
+}
+.ventas-modal .ventas-product-section-title {
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--balto-ink, inherit);
+}

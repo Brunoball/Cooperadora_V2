@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../Global/TableEmptyIcon";
 import React, { useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -894,7 +895,7 @@ export default function Alumnos() {
             <div className="module-empty"><strong>{error}</strong></div>
           ) : null}
           {!loading && !error && !items.length ? (
-            <div className="module-empty">
+            <div className="module-empty"><TableEmptyIcon />
               <strong>{view === "activos" ? "Sin alumnos para mostrar" : view === "bajas" ? "Sin alumnos dados de baja" : "Sin alumnos egresados"}</strong>
               <span>{view === "activos" ? "Cambiá los filtros o creá un nuevo alumno." : "Cambiá los filtros para consultar otros alumnos."}</span>
             </div>

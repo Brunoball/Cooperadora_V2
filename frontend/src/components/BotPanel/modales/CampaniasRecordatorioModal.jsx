@@ -1,3 +1,4 @@
+import TableEmptyIcon from "../../Global/TableEmptyIcon";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Picker from "@emoji-mart/react";
 import data from "../emojiDataEs";
@@ -795,7 +796,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                       </table>
                     </div>
                   ) : (
-                    <div className="wp-campaign-no-recipients">No hay envíos registrados para esta campaña.</div>
+                    <div className="wp-campaign-no-recipients"><TableEmptyIcon />No hay envíos registrados para esta campaña.</div>
                   )}
                 </section>
 
@@ -1046,7 +1047,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                   {recipientsError ? <div className="wp-campaign-error">{recipientsError}</div> : null}
 
                   {!loadingRecipients && destinatarios && (destinatarios.alumnos || []).length === 0 ? (
-                    <div className="wp-campaign-no-recipients">No hay alumnos activos que coincidan con estos filtros.</div>
+                    <div className="wp-campaign-no-recipients"><TableEmptyIcon />No hay alumnos activos que coincidan con estos filtros.</div>
                   ) : null}
 
                   {(destinatarios?.alumnos || []).length ? (
@@ -1074,7 +1075,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                       </div>
 
                       {recipientSearch && filteredRecipients.length === 0 ? (
-                        <div className="wp-campaign-no-recipients wp-campaign-no-search-results">
+                        <div className="wp-campaign-no-recipients wp-campaign-no-search-results"><TableEmptyIcon />
                           No se encontraron alumnos con ese nombre o apellido.
                         </div>
                       ) : null}

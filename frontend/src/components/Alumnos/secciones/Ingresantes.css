@@ -370,3 +370,89 @@
 .ingresantes-modal select {
   padding-right: 0 !important;
 }
+
+/* Encabezado flexible según el espacio real que deja la navegación lateral. */
+.ingresantes-page .module-card__head {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.ingresantes-page .module-card__headLeft {
+  display: flex;
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ingresantes-page .module-titleBox {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ingresantes-page .module-titleTabs {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.ingresantes-page .module-card__actions {
+  flex: 1 1 520px;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+}
+
+.ingresantes-page .module-card__actions > .module-headFilters.ingresantes-headFilters {
+  flex: 1 1 260px;
+  width: auto;
+  min-width: 0;
+  max-width: 440px;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.ingresantes-page .ingresantes-headFilters .ingresantes-searchFilter {
+  flex: 1 1 238px;
+  width: auto;
+  min-width: 100px;
+  max-width: 238px;
+}
+
+.ingresantes-page .ingresantes-headFilters .ingresantes-cycleFilter {
+  flex: 0 1 92px;
+  width: auto;
+  min-width: 64px;
+  max-width: 92px;
+}
+
+.ingresantes-page .ingresantes-headFilters .ingresantes-yearFilter {
+  flex: 0 1 90px;
+  width: auto;
+  min-width: 64px;
+  max-width: 90px;
+}
+
+.ingresantes-page .ingresantes-headFilters .module-filterControl {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 620px) {
+  .ingresantes-page .module-card__actions > .module-headFilters.ingresantes-headFilters {
+    flex-basis: 100%;
+    max-width: none;
+    flex-wrap: wrap;
+  }
+
+  .ingresantes-page .ingresantes-headFilters .ingresantes-searchFilter {
+    flex: 1 1 100%;
+    max-width: none;
+    min-width: 0;
+  }
+}

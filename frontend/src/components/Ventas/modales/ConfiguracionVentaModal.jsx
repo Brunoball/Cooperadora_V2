@@ -1,3 +1,4 @@
+import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
@@ -112,7 +113,7 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
       modalClassName="ventas-modal ventas-campaign-modal"
     >
       <EntityTabs
-        tabs={[{ value: "general", label: "Datos y objetivos" }, { value: "mensajes", label: "Vigencia y mensajes" }]}
+        tabs={[{ value: "general", label: <><VentasSectionIcon kind="objective" />Datos y objetivos</> }, { value: "mensajes", label: <><VentasSectionIcon kind="messages" />Vigencia y mensajes</> }]}
         value={activeTab}
         onChange={(value) => { setActiveTab(value); setValidationError(""); }}
         idPrefix="ventas-campaign-modal-tab"
@@ -141,7 +142,7 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
         <section className="ventas-objective-card ventas-field--wide" aria-label="Objetivo de venta por persona">
           <div className="ventas-objective-card__head">
             <div>
-              <strong>Objetivo de venta por persona</strong>
+              <strong><VentasSectionIcon kind="objective" />Objetivo de venta por persona</strong>
               <span>Configurá cuántas unidades debe vender cada persona y qué ganancia debe abonar si no llega al mínimo.</span>
             </div>
             <span className={`ventas-pill ${objective.minimum > 0 ? "warning" : "neutral"}`}>
@@ -191,14 +192,14 @@ export default function ConfiguracionVentaModal({ open, initial, products, savin
           <div className="ventas-objective-card__rule">
             {hasSales ? (
               <>
-                <strong>Regla histórica bloqueada</strong>
+                <strong><VentasSectionIcon kind="locked" />Regla histórica bloqueada</strong>
                 <span>
                   Esta configuración ya tiene ventas registradas. El producto principal, la cantidad mínima y las ganancias no pueden modificarse para no alterar planillas ni cálculos históricos.
                 </span>
               </>
             ) : objective.minimum > 0 ? (
               <>
-                <strong>Cómo se calcula</strong>
+                <strong><VentasSectionIcon kind="calculation" />Cómo se calcula</strong>
                 <span>
                   Si cumple el mínimo no paga ganancia. Si vende al menos una unidad pero le faltan unidades, paga la ganancia simple por cada faltante. Si no vende ninguna, se aplica directamente la ganancia total.
                 </span>

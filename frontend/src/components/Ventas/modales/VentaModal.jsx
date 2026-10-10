@@ -1,3 +1,4 @@
+import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
@@ -237,7 +238,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     <>
       <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
       <EntityTabs
-        tabs={[{ value: "venta", label: "Datos de la venta" }, { value: "comprador", label: "Comprador y objetivo" }]}
+        tabs={[{ value: "venta", label: <><VentasSectionIcon kind="sale" />Datos de la venta</> }, { value: "comprador", label: <><VentasSectionIcon kind="person" />Comprador y objetivo</> }]}
         value={activeTab}
         onChange={(value) => { setActiveTab(value); setValidationError(""); }}
         idPrefix="ventas-order-modal-tab"
@@ -262,7 +263,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
       <section className="ventas-modal-section ventas-concepts-launcher">
         <div className="ventas-concepts-launcher__copy">
-          <strong>Productos y conceptos</strong>
+          <strong><VentasSectionIcon kind="product" />Productos y conceptos</strong>
           <small>
             {hasConfiguredItems
               ? `${configuredItems.length} ${configuredItems.length === 1 ? "concepto agregado" : "conceptos agregados"}`
@@ -292,7 +293,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       </EntityTabPane>
       <EntityTabPane active={activeTab === "comprador"} disableWhenInactive>
       <section className="ventas-modal-section ventas-person-section">
-        <header><div><strong>Comprador o alumno</strong><small>{allDoor ? "Opcional porque todos los conceptos son precio en puerta." : "Obligatorio para ventas anticipadas."}</small></div></header>
+        <header><div><strong><VentasSectionIcon kind="person" />Comprador o alumno</strong><small>{allDoor ? "Opcional porque todos los conceptos son precio en puerta." : "Obligatorio para ventas anticipadas."}</small></div></header>
         <div className="ventas-person-search">
           <FloatingField label="Buscar por DNI o nombre" wide className="ventas-modal-field">
             <input value={personSearch} placeholder="Ej.: 40123456 o Juan Pérez" onChange={(e) => searchPeople(e.target.value)} />
@@ -321,7 +322,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         <section className="ventas-objective-card ventas-order-objective" aria-label="Objetivo de venta de la persona" aria-busy={objectiveBase.loading}>
           <div className="ventas-objective-card__head">
             <div>
-              <strong>Objetivo de venta</strong>
+              <strong><VentasSectionIcon kind="objective" />Objetivo de venta</strong>
               <span>Ganancia pendiente calculada según las ventas de esta persona en la campaña.</span>
             </div>
             <span className={`ventas-pill ${hasPersonReference && objectiveMissing === 0 ? "success" : "warning"}`}>
@@ -363,7 +364,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           </div>
 
           <div className="ventas-objective-card__rule">
-            <strong>Regla de la campaña</strong>
+            <strong><VentasSectionIcon kind="calculation" />Regla de la campaña</strong>
             <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
             {Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 && objectiveReady ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
             {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
