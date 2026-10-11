@@ -61,13 +61,21 @@ export default function InfoModal({
   );
 }
 
-export function InfoSummary({ items = [] }) {
+export function InfoSummary({ items = [], className = "", equalWidthFlexible = false }) {
+  // Los resúmenes de tres tarjetas pueden ocupar todo el ancho sin reservar
+  // una cuarta columna. El ajuste es optativo y no afecta a otras fichas.
+  const summaryStyle = equalWidthFlexible
+    ? { display: "flex", flexWrap: "wrap", alignItems: "stretch", width: "100%", gap: "12px" }
+    : undefined;
+  const itemStyle = equalWidthFlexible ? { flex: "1 1 220px", maxWidth: "100%" } : undefined;
+
   return (
-    <div className="entity-info-summary">
+    <div className={`entity-info-summary ${className}`.trim()} style={summaryStyle}>
       {items.map((item, index) => (
         <article
           className={`entity-info-summary__item ${item.tone ? `is-${item.tone}` : ""}`.trim()}
           key={item.key || `${item.label}-${index}`}
+          style={itemStyle}
         >
           {item.icon ? <FontAwesomeIcon icon={item.icon} /> : null}
           <div>

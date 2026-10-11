@@ -196,6 +196,15 @@
   justify-content: center;
   text-align: center;
 }
+/* Ingresos (no Alumnos): centrar el título y ambas líneas de
+   Descripción / concepto en vista editable y de solo consulta. */
+.contable-grid--income > :nth-child(4),
+.contable-grid--income-readonly > :nth-child(4) {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
 .contable-grid--income > :nth-child(5),
 .contable-grid--income-readonly > :nth-child(5),
 .contable-grid--expense > :nth-child(6) {

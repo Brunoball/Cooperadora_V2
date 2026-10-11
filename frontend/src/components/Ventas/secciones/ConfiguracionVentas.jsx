@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faClipboardList, faCommentDots, faPen, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faCheckCircle, faClipboardList, faCommentDots, faPen, faPowerOff } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -82,7 +82,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
           "Venta / campaña",
           "Producto principal",
           "Objetivo por persona",
-          { label: "Vigencia", align: "center" },
+          { label: "Vigencia", align: "center", className: "ventas-validity-head" },
           { label: "WhatsApp", align: "center" },
           { label: "Ventas", align: "center" },
           { label: "Acciones", align: "center" },
@@ -132,7 +132,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
                 </>
               )}
             </div>
-            <div className="mov-gridCell is-center entity-main-cell">
+            <div className="mov-gridCell is-center entity-main-cell ventas-validity-cell">
               <strong>{row.fecha_inicio || "SIN INICIO"}</strong>
               <small>HASTA {row.fecha_fin || "SIN FIN"}</small>
             </div>
@@ -156,7 +156,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
                   <>
                     <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
                     <ActionButton
-                      icon={view === "activas" ? faTrashCan : faCheckCircle}
+                      icon={view === "activas" ? faPowerOff : faCheckCircle}
                       title={view === "activas" ? "Dar de baja" : "Activar"}
                       tone={view === "activas" ? "danger" : ""}
                       disabled={changingStateId !== null}
@@ -193,7 +193,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
         operacion="advertencia"
         showLoadingEffect={false}
         tone={view === "activas" ? "warning" : "success"}
-        icon={view === "activas" ? faTrashCan : faCheckCircle}
+        icon={view === "activas" ? faPowerOff : faCheckCircle}
         title={view === "activas" ? "Dar de baja configuración" : "Activar configuración"}
         message={view === "activas"
           ? "¿Confirmás que querés dar de baja esta configuración de venta?"

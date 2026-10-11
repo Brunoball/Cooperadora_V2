@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBoxesStacked, faPen, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faBoxesStacked, faPen, faRotateLeft, faPowerOff } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -101,7 +101,7 @@ export default function Productos({ writable, feedback, showFeedback }) {
           { label: "Puerta", align: "right" },
           { label: "Stock", align: "center" },
           "Objetivo vigente",
-          "Uso",
+          { label: "Uso", align: "center" },
           { label: "Acciones", align: "center" },
         ]}
         loading={loading}
@@ -152,14 +152,24 @@ export default function Productos({ writable, feedback, showFeedback }) {
                 <span className="ventas-pill neutral">SIN CONFIGURACIÓN ACTIVA</span>
               )}
             </div>
-            <div className="mov-gridCell">{Number(row.cantidad_usos || 0)} ventas · {Number(row.cantidad_campanias || 0)} campañas</div>
+            <div
+              className="mov-gridCell is-center ventas-usage-cell"
+              title={`${Number(row.cantidad_usos || 0)} ventas · ${Number(row.cantidad_campanias || 0)} campañas`}
+            >
+              <span className={`ventas-pill ventas-usage-chip ${Number(row.cantidad_usos || 0) ? "has-usage" : "neutral"}`}>
+                {Number(row.cantidad_usos || 0)} {Number(row.cantidad_usos || 0) === 1 ? "VENTA" : "VENTAS"}
+              </span>
+              <small className="ventas-usage-subtitle">
+                {Number(row.cantidad_campanias || 0)} {Number(row.cantidad_campanias || 0) === 1 ? "campaña" : "campañas"}
+              </small>
+            </div>
             <div className="mov-gridCell mov-gridCell--actions">
               <div className="mov-actionsInline">
                 {writable ? (
                   <>
                     <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
                     <ActionButton
-                      icon={view === "activos" ? faTrashCan : faRotateLeft}
+                      icon={view === "activos" ? faPowerOff : faRotateLeft}
                       title={view === "activos" ? "Dar de baja" : "Activar"}
                       tone={view === "activos" ? "danger" : ""}
                       disabled={changingStateId !== null}
@@ -196,7 +206,7 @@ export default function Productos({ writable, feedback, showFeedback }) {
         operacion="advertencia"
         showLoadingEffect={false}
         tone={view === "activos" ? "warning" : "success"}
-        icon={view === "activos" ? faTrashCan : faRotateLeft}
+        icon={view === "activos" ? faPowerOff : faRotateLeft}
         title={view === "activos" ? "Dar de baja producto" : "Activar producto"}
         message={view === "activos"
           ? "¿Confirmás que querés dar de baja este producto?"

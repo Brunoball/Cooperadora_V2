@@ -263,102 +263,112 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
           icon={faIdCard}
           bodyClassName="alumnos-formGrid alumnos-formGrid--personal"
         >
-          <FloatingField label="Apellido *" active={active("apellido")} className="alumnos-field--span-6">
-            <input
-              value={form.apellido}
-              maxLength={100}
-              onChange={(event) => set("apellido", event.target.value.toUpperCase())}
-              required
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Nombre" active={active("nombre")} className="alumnos-field--span-6">
-            <input
-              value={form.nombre}
-              maxLength={100}
-              onChange={(event) => set("nombre", event.target.value.toUpperCase())}
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Tipo de documento *" active={active("id_tipo_documento")} className="alumnos-field--span-4">
-            <select
-              value={form.id_tipo_documento}
-              onChange={(event) => set("id_tipo_documento", event.target.value)}
-              required
-            >
-              <option value="">Seleccionar</option>
-              {(catalogs.tipos_documentos || []).map((item) => (
-                <option key={item.id_tipo_documento} value={item.id_tipo_documento}>
-                  {item.sigla} — {item.descripcion}
-                </option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="Número de documento *" active={active("num_documento")} className="alumnos-field--span-4">
-            <input
-              value={form.num_documento}
-              maxLength={20}
-              onChange={(event) => set("num_documento", event.target.value.replace(/\s+/g, ""))}
-              required
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Sexo" active={active("id_sexo")} className="alumnos-field--span-4">
-            <select value={form.id_sexo} onChange={(event) => set("id_sexo", event.target.value)}>
-              <option value="">Sin especificar</option>
-              {(catalogs.sexos || []).map((item) => (
-                <option key={item.id_sexo} value={item.id_sexo}>{item.sexo}</option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="Fecha de nacimiento" active={active("fecha_nacimiento")} className="alumnos-field--span-4">
-            <input
-              type="date"
-              max={localToday()}
-              value={form.fecha_nacimiento}
-              onChange={(event) => set("fecha_nacimiento", event.target.value)}
-            />
-          </FloatingField>
-          <FloatingField label="Lugar de nacimiento" active={active("lugar_nacimiento")} className="alumnos-field--span-8">
-            <input
-              value={form.lugar_nacimiento}
-              maxLength={100}
-              onChange={(event) => set("lugar_nacimiento", event.target.value.toUpperCase())}
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Domicilio" active={active("domicilio")} wide className="alumnos-field--span-12">
-            <input
-              value={form.domicilio}
-              maxLength={150}
-              onChange={(event) => set("domicilio", event.target.value.toUpperCase())}
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Localidad" active={active("localidad")} className="alumnos-field--span-5">
-            <input
-              value={form.localidad}
-              maxLength={100}
-              onChange={(event) => set("localidad", event.target.value.toUpperCase())}
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Código postal" active={active("cp")} className="alumnos-field--span-3">
-            <input
-              value={form.cp}
-              maxLength={10}
-              onChange={(event) => set("cp", event.target.value.toUpperCase())}
-              placeholder=" "
-            />
-          </FloatingField>
-          <FloatingField label="Teléfono" active={active("telefono")} className="alumnos-field--span-4">
-            <input
-              value={form.telefono}
-              maxLength={20}
-              onChange={(event) => set("telefono", event.target.value)}
-              placeholder=" "
-            />
-          </FloatingField>
+          <div className="alumnos-formRow alumnos-formRow--name">
+            <FloatingField label="Apellido *" active={active("apellido")} className="alumnos-field--surname">
+              <input
+                value={form.apellido}
+                maxLength={100}
+                onChange={(event) => set("apellido", event.target.value.toUpperCase())}
+                required
+                placeholder=" "
+              />
+            </FloatingField>
+            <FloatingField label="Nombre" active={active("nombre")} className="alumnos-field--name">
+              <input
+                value={form.nombre}
+                maxLength={100}
+                onChange={(event) => set("nombre", event.target.value.toUpperCase())}
+                placeholder=" "
+              />
+            </FloatingField>
+          </div>
+          <div className="alumnos-formRow alumnos-formRow--documents">
+            <FloatingField label="Tipo de documento *" active={active("id_tipo_documento")} className="alumnos-field--doc-type">
+              <select
+                value={form.id_tipo_documento}
+                onChange={(event) => set("id_tipo_documento", event.target.value)}
+                required
+              >
+                <option value="">Seleccionar</option>
+                {(catalogs.tipos_documentos || []).map((item) => (
+                  <option key={item.id_tipo_documento} value={item.id_tipo_documento}>
+                    {item.sigla} — {item.descripcion}
+                  </option>
+                ))}
+              </select>
+            </FloatingField>
+            <FloatingField label="Número de documento *" active={active("num_documento")} className="alumnos-field--doc-number">
+              <input
+                value={form.num_documento}
+                maxLength={20}
+                onChange={(event) => set("num_documento", event.target.value.replace(/\s+/g, ""))}
+                required
+                placeholder=" "
+              />
+            </FloatingField>
+            <FloatingField label="Sexo" active={active("id_sexo")} className="alumnos-field--sex">
+              <select value={form.id_sexo} onChange={(event) => set("id_sexo", event.target.value)}>
+                <option value="">Sin especificar</option>
+                {(catalogs.sexos || []).map((item) => (
+                  <option key={item.id_sexo} value={item.id_sexo}>{item.sexo}</option>
+                ))}
+              </select>
+            </FloatingField>
+          </div>
+          <div className="alumnos-formRow alumnos-formRow--birth">
+            <FloatingField label="Fecha de nacimiento" active={active("fecha_nacimiento")} className="alumnos-field--birth-date">
+              <input
+                type="date"
+                max={localToday()}
+                value={form.fecha_nacimiento}
+                onChange={(event) => set("fecha_nacimiento", event.target.value)}
+              />
+            </FloatingField>
+            <FloatingField label="Lugar de nacimiento" active={active("lugar_nacimiento")} className="alumnos-field--birth-place">
+              <input
+                value={form.lugar_nacimiento}
+                maxLength={100}
+                onChange={(event) => set("lugar_nacimiento", event.target.value.toUpperCase())}
+                placeholder=" "
+              />
+            </FloatingField>
+          </div>
+          <div className="alumnos-formRow alumnos-formRow--address">
+            <FloatingField label="Domicilio" active={active("domicilio")} wide className="alumnos-field--address">
+              <input
+                value={form.domicilio}
+                maxLength={150}
+                onChange={(event) => set("domicilio", event.target.value.toUpperCase())}
+                placeholder=" "
+              />
+            </FloatingField>
+          </div>
+          <div className="alumnos-formRow alumnos-formRow--contact">
+            <FloatingField label="Localidad" active={active("localidad")} className="alumnos-field--city">
+              <input
+                value={form.localidad}
+                maxLength={100}
+                onChange={(event) => set("localidad", event.target.value.toUpperCase())}
+                placeholder=" "
+              />
+            </FloatingField>
+            <FloatingField label="Código postal" active={active("cp")} className="alumnos-field--zip">
+              <input
+                value={form.cp}
+                maxLength={10}
+                onChange={(event) => set("cp", event.target.value.toUpperCase())}
+                placeholder=" "
+              />
+            </FloatingField>
+            <FloatingField label="Teléfono" active={active("telefono")} className="alumnos-field--phone">
+              <input
+                value={form.telefono}
+                maxLength={20}
+                onChange={(event) => set("telefono", event.target.value)}
+                placeholder=" "
+              />
+            </FloatingField>
+          </div>
         </EntityFormPanel>
       </EntityTabPane>
 
@@ -370,78 +380,84 @@ function AlumnoForm({ form, setForm, catalogs, tab, setTab }) {
           icon={faUsers}
           bodyClassName="alumnos-formGrid alumnos-formGrid--school"
         >
-          <FloatingField label="Año" active={active("id_anio")} className="alumnos-field--span-3">
-            <select value={form.id_anio} onChange={(event) => set("id_anio", event.target.value)}>
-              <option value="">Sin asignar</option>
-              {(catalogs.anios || []).map((item) => (
-                <option key={item.id_anio} value={item.id_anio}>{item.nombre_anio}</option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="División" active={active("id_division")} className="alumnos-field--span-3">
-            <select value={form.id_division} onChange={(event) => set("id_division", event.target.value)}>
-              <option value="">Sin asignar</option>
-              {(catalogs.divisiones || []).map((item) => (
-                <option key={item.id_division} value={item.id_division}>{item.nombre_division}</option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="Categoría" active={active("id_categoria")} className="alumnos-field--span-6">
-            <select value={form.id_categoria} onChange={(event) => setCategoria(event.target.value)}>
-              <option value="">Sin asignar</option>
-              {(catalogs.categorias || []).map((item) => (
-                <option key={item.id_categoria} value={item.id_categoria}>{item.nombre_categoria}</option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="Categoría de monto" active={active("id_cat_monto")} className="alumnos-field--span-6">
-            <select value={form.id_cat_monto} onChange={(event) => setCategoriaMonto(event.target.value)}>
-              <option value="">Sin asignar</option>
-              {(catalogs.categorias_monto || []).map((item) => (
-                <option key={item.id_cat_monto} value={item.id_cat_monto}>
-                  {item.nombre_categoria} — {formatMoney(item.monto_mensual)} / mes
-                </option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="Familia" active={active("id_familia")} className="alumnos-field--span-6">
-            <select value={form.id_familia} onChange={(event) => set("id_familia", event.target.value)}>
-              <option value="">Sin familia</option>
-              {(catalogs.familias || []).map((item) => (
-                <option key={item.id_familia} value={item.id_familia}>
-                  {item.nombre_familia}{item.activo ? "" : " (BAJA)"}
-                </option>
-              ))}
-            </select>
-          </FloatingField>
-          <FloatingField label="Fecha de ingreso *" active={active("ingreso")} className="alumnos-field--span-6">
-            <input
-              type="date"
-              max={localToday()}
-              value={form.ingreso}
-              onChange={(event) => set("ingreso", event.target.value)}
-              required
-            />
-          </FloatingField>
-          <label className={`entity-field alumnos-cobradorCheck alumnos-field--span-6 ${form.es_cobrador ? "is-selected" : ""}`}>
-            <span className="entity-checkRow">
+          <div className="alumnos-formRow alumnos-formRow--course">
+            <FloatingField label="Año" active={active("id_anio")} className="alumnos-field--year">
+              <select value={form.id_anio} onChange={(event) => set("id_anio", event.target.value)}>
+                <option value="">Sin asignar</option>
+                {(catalogs.anios || []).map((item) => (
+                  <option key={item.id_anio} value={item.id_anio}>{item.nombre_anio}</option>
+                ))}
+              </select>
+            </FloatingField>
+            <FloatingField label="División" active={active("id_division")} className="alumnos-field--division">
+              <select value={form.id_division} onChange={(event) => set("id_division", event.target.value)}>
+                <option value="">Sin asignar</option>
+                {(catalogs.divisiones || []).map((item) => (
+                  <option key={item.id_division} value={item.id_division}>{item.nombre_division}</option>
+                ))}
+              </select>
+            </FloatingField>
+            <FloatingField label="Categoría" active={active("id_categoria")} className="alumnos-field--category">
+              <select value={form.id_categoria} onChange={(event) => setCategoria(event.target.value)}>
+                <option value="">Sin asignar</option>
+                {(catalogs.categorias || []).map((item) => (
+                  <option key={item.id_categoria} value={item.id_categoria}>{item.nombre_categoria}</option>
+                ))}
+              </select>
+            </FloatingField>
+            <FloatingField label="Categoría de monto" active={active("id_cat_monto")} className="alumnos-field--amount-category">
+              <select value={form.id_cat_monto} onChange={(event) => setCategoriaMonto(event.target.value)}>
+                <option value="">Sin asignar</option>
+                {(catalogs.categorias_monto || []).map((item) => (
+                  <option key={item.id_cat_monto} value={item.id_cat_monto}>
+                    {item.nombre_categoria} — {formatMoney(item.monto_mensual)} / mes
+                  </option>
+                ))}
+              </select>
+            </FloatingField>
+          </div>
+          <div className="alumnos-formRow alumnos-formRow--enrollment">
+            <FloatingField label="Familia" active={active("id_familia")} className="alumnos-field--family">
+              <select value={form.id_familia} onChange={(event) => set("id_familia", event.target.value)}>
+                <option value="">Sin familia</option>
+                {(catalogs.familias || []).map((item) => (
+                  <option key={item.id_familia} value={item.id_familia}>
+                    {item.nombre_familia}{item.activo ? "" : " (BAJA)"}
+                  </option>
+                ))}
+              </select>
+            </FloatingField>
+            <FloatingField label="Fecha de ingreso *" active={active("ingreso")} className="alumnos-field--admission-date">
               <input
-                type="checkbox"
-                checked={form.es_cobrador}
-                onChange={(event) => set("es_cobrador", event.target.checked)}
+                type="date"
+                max={localToday()}
+                value={form.ingreso}
+                onChange={(event) => set("ingreso", event.target.value)}
+                required
               />
-              <b>Marcar como cobrador</b>
-            </span>
-          </label>
-          <FloatingField label="Observaciones" active={active("observaciones")} wide textarea className="alumnos-field--span-12">
-            <textarea
-              value={form.observaciones}
-              maxLength={5000}
-              rows={4}
-              onChange={(event) => set("observaciones", event.target.value.toUpperCase())}
-              placeholder=" "
-            />
-          </FloatingField>
+            </FloatingField>
+            <label className={`entity-field alumnos-cobradorCheck ${form.es_cobrador ? "is-selected" : ""}`}>
+              <span className="entity-checkRow">
+                <input
+                  type="checkbox"
+                  checked={form.es_cobrador}
+                  onChange={(event) => set("es_cobrador", event.target.checked)}
+                />
+                <b>Marcar como cobrador</b>
+              </span>
+            </label>
+          </div>
+          <div className="alumnos-formRow alumnos-formRow--notes">
+            <FloatingField label="Observaciones" active={active("observaciones")} wide textarea className="alumnos-field--notes">
+              <textarea
+                value={form.observaciones}
+                maxLength={5000}
+                rows={3}
+                onChange={(event) => set("observaciones", event.target.value.toUpperCase())}
+                placeholder=" "
+              />
+            </FloatingField>
+          </div>
         </EntityFormPanel>
       </EntityTabPane>
     </div>
@@ -1129,6 +1145,8 @@ export default function Alumnos() {
             {detailTab === INFO_TAB_PAGOS ? (
               <>
                 <InfoSummary
+                  className="alumnos-pagos-resumen"
+                  equalWidthFlexible
                   items={[
                     { label: "Registros", value: detailModal.data.resumen_pagos?.cantidad || 0 },
                     { label: "Total pagado", value: formatMoney(detailModal.data.resumen_pagos?.total_pagado || 0) },

@@ -2277,3 +2277,57 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
     margin-left: auto;
   }
 }
+
+/* Configuración de ventas: alinear ambas líneas de Vigencia con el header.
+   entity-main-cell centra verticalmente pero por defecto alinea a la izquierda. */
+.ventas-page--campaigns .ventas-validity-head,
+.ventas-page--campaigns .ventas-validity-cell {
+  justify-content: center;
+  text-align: center;
+}
+
+.ventas-page--campaigns .ventas-validity-cell {
+  align-items: center;
+}
+
+.ventas-page--campaigns .ventas-validity-cell > strong,
+.ventas-page--campaigns .ventas-validity-cell > small {
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+
+/* Productos de ventas: uso compacto. El dato principal va en un chip y
+   la cantidad de campañas queda debajo como subtítulo. */
+.ventas-page--products .ventas-usage-cell {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.ventas-page--products .ventas-usage-chip {
+  font-variant-numeric: tabular-nums;
+  min-height: 23px;
+  padding: 4px 8px;
+  font-size: 10px;
+}
+
+.ventas-page--products .ventas-usage-chip.has-usage {
+  color: var(--balto-action, #24559a);
+  border-color: color-mix(in srgb, var(--balto-action, #24559a) 28%, var(--mov-border));
+  background: color-mix(in srgb, var(--balto-action, #24559a) 9%, var(--surface-color, #fff));
+}
+
+.ventas-page--products .ventas-usage-subtitle {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--balto-text, #64748b);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

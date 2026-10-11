@@ -1087,7 +1087,7 @@ export default function ContableModule({ view = "summary" }) {
             "Persona / Proveedor",
             "Fecha",
             "Medio",
-            "Descripción / concepto",
+            { label: "Descripción / concepto", align: "center" },
             { label: "Importe", align: "right" },
             ...(writable ? ["Acciones"] : []),
           ]
@@ -1235,7 +1235,7 @@ export default function ContableModule({ view = "summary" }) {
                         {formatDate(item.fecha)}
                       </div>
                       <div className="mov-gridCell is-center">{item.medio}</div>
-                      <div className="mov-gridCell entity-main-cell">
+                      <div className="mov-gridCell entity-main-cell is-center">
                         <strong>{item.concepto || "—"}</strong>
                         {item.automatico_ventas ? <small>Automático · gestionado desde Ventas</small> : item.detalle ? <small>{item.detalle}</small> : null}
                       </div>
