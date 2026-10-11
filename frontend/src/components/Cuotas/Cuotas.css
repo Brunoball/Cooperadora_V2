@@ -2353,8 +2353,8 @@ html[data-theme="oscuro"] .cuotas-v2-category.is-externo {
   font-size: 10px;
 }
 
-/* Igual que Alumnos: entre 1021 y 1499 las acciones bajan de la cabecera. */
-@media (min-width: 1021px) and (max-width: 1499px) {
+/* Hasta 1650px, las acciones y el select Año se muestran únicamente debajo de la tabla. */
+@media (max-width: 1650px) {
   .cuotas-page .module-card__actions > .cuotas-collector-action,
   .cuotas-page .module-card__actions > .cuotas-print-action,
   .cuotas-page .module-card__actions > .cuotas-export-action {
@@ -2569,11 +2569,11 @@ html[data-theme="oscuro"] .cuotas-v2-category.is-externo {
 }
 
 /* =========================================================
-   CUOTAS · AÑO COMPACTO EN FOOTER DE MONITOR ANGOSTO
-   El select que baja debajo de la tabla debe igualar los 32px
-   de Cobrador / Imprimir / Exportar, sin heredar los 44px globales.
+   CUOTAS · SELECT AÑO COMPACTO DEBAJO DE TABLA HASTA 1650px
+   El select mantiene los 32px de Cobrador / Imprimir / Exportar,
+   sin heredar los 44px globales.
    ========================================================= */
-@media (min-width: 1021px) and (max-width: 1499px) {
+@media (max-width: 1650px) {
   .cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions
     .module-filter.cuotas-footerYear-filter {
     display: flex !important;
@@ -2726,4 +2726,27 @@ html[data-theme="oscuro"] .cuotas-page .cuotas-v2-category.is-externo {
 .cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions
   .module-filter.cuotas-footerYear-filter > .module-filterControl {
   padding-right: 0 !important;
+}
+
+/* Si la paginación necesita otra fila, mantiene las acciones completas
+   sin desplazar ni superponer sus botones. */
+@media (max-width: 880px) {
+  .cuotas-page .cuotas-tableFooter-v2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cuotas-page .cuotas-tableFooter-v2 .global-pagination__left,
+  .cuotas-page .cuotas-tableFooter-v2 .global-pagination__right {
+    grid-column: 1;
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .cuotas-page .cuotas-tableFooter-v2 .cuotas-footerActions {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    min-width: 0;
+    width: 100%;
+  }
 }

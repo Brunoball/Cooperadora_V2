@@ -2377,3 +2377,18 @@
 .alumnos-stateField select {
   padding-right: 0 !important;
 }
+
+/* ALUMNOS · Localidad / Teléfono centrados en encabezado y filas de
+   Activos, Dados de baja y Egresados, sin alterar las demás columnas. */
+.socios-page .socios-grid.mov-gridTable--head > .mov-gridCell--head:nth-child(4),
+.socios-page .socios-grid.mov-gridTable--row > .mov-gridCell:nth-child(4),
+.socios-page .alumnos-inactive-grid.mov-gridTable--head > .mov-gridCell--head:nth-child(4),
+.socios-page .alumnos-inactive-grid.mov-gridTable--row > .mov-gridCell:nth-child(4) {
+  justify-content: center;
+  text-align: center;
+}
+
+.socios-page .alumnos-contactLocationCell > strong,
+.socios-page .alumnos-contactLocationCell > span {
+  text-align: center;
+}
