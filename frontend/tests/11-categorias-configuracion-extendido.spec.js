@@ -101,7 +101,7 @@ test.describe("Categorías y Configuración - cobertura extendida", () => {
     expect(Number(deleted.id)).toBe(Number(id));
   });
 
-  test("las cinco listas configurables soportan alta, lectura y eliminación E2E", async ({ request }) => {
+  test("las seis listas configurables soportan alta, lectura y eliminación E2E", async ({ request }) => {
     const t = token();
     const marker = suffix().replace(/[^A-Z0-9]/gi, "").slice(-8);
     const definitions = [
@@ -110,6 +110,7 @@ test.describe("Categorías y Configuración - cobertura extendida", () => {
       { lista: "contable_proveedor", payload: { nombre: `PW E2E CT PROV ${marker}` } },
       { lista: "sexo", payload: { nombre: `PW E2E SEX ${marker}` } },
       { lista: "tipo_documento", payload: { descripcion: `PW E2E DOC ${marker}`, sigla: `PWE2E${marker}`.slice(0, 10) } },
+      { lista: "docentes", payload: { nombre: `PW E2E DOCENTE ${marker}`, dni: "", email: "", activo: true } },
     ];
 
     const created = [];

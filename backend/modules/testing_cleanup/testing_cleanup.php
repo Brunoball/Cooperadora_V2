@@ -62,6 +62,7 @@ final class TestingCleanup
             'contable_proveedor' => 0,
             'sexo' => 0,
             'tipos_documentos' => 0,
+            'docentes' => 0,
             'sis_sesiones' => 0,
             'sis_sesion_actual' => 0,
             'sis_login_auditoria' => 0,
@@ -328,6 +329,10 @@ final class TestingCleanup
                         OR UPPER(descripcion) LIKE 'PW EEE DOC %'
                         OR UPPER(sigla) LIKE 'PWE2E%'"
                 ),
+                'docentes' => self::ids(
+                    $db,
+                    "SELECT id_docente FROM docentes WHERE UPPER(docente) LIKE 'PW E2E DOCENTE %'"
+                ),
             ];
 
             $testContableIngresos = [];
@@ -532,6 +537,7 @@ final class TestingCleanup
                 'tipos_documentos' => [
                     ['alumnos', 'id_tipo_documento'], ['alumnos_egresados', 'id_tipo_documento'],
                 ],
+                'docentes' => [], // Las planillas consultan docentes sin FK.
             ];
             $idColumns = [
                 'contable_categoria' => 'id_cont_categoria',
@@ -539,6 +545,7 @@ final class TestingCleanup
                 'contable_proveedor' => 'id_cont_proveedor',
                 'sexo' => 'id_sexo',
                 'tipos_documentos' => 'id_tipo_documento',
+                'docentes' => 'id_docente',
             ];
             foreach ($testConfig as $table => $ids) {
                 $safe = self::withoutReferences($db, $ids, $configRelations[$table]);
@@ -653,6 +660,7 @@ final class TestingCleanup
             ['contable_proveedor', $config['contable_proveedor'] ?? []],
             ['sexo', $config['sexo'] ?? []],
             ['tipos_documentos', $config['tipos_documentos'] ?? []],
+            ['docentes', $config['docentes'] ?? []],
             ['sis_usuarios', $users],
         ];
         foreach ($maps as [$table, $ids]) {

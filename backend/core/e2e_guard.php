@@ -121,6 +121,10 @@ function e2e_target_state(PDO $db, string $kind, int $id): ?bool
             'tipos_documentos', 'id_tipo_documento',
             "UPPER(descripcion) LIKE 'PW E2E DOC %' OR UPPER(descripcion) LIKE 'PW EEE DOC %' OR UPPER(sigla) LIKE 'PWE2E%'",
         ],
+        'config_docentes' => [
+            'docentes', 'id_docente',
+            "UPPER(docente) LIKE 'PW E2E DOCENTE %'",
+        ],
         'ventas_producto' => [
             'ventas_productos', 'id_producto',
             "UPPER(nombre) LIKE 'PW E2E VTA PROD %'",
@@ -316,6 +320,7 @@ function e2e_config_kind(string $list): ?string
         'contable_proveedor' => 'config_contable_proveedor',
         'sexo' => 'config_sexo',
         'tipo_documento' => 'config_tipo_documento',
+        'docentes' => 'config_docentes',
     ][$list] ?? null;
 }
 
@@ -328,6 +333,7 @@ function e2e_config_creation_marker(string $list, array $body): bool
         'tipo_documento' =>
             e2e_marker((string)($body['descripcion'] ?? ''), ['PW E2E DOC ', 'PW EEE DOC '])
             || e2e_marker((string)($body['sigla'] ?? ''), ['PWE2E']),
+        'docentes' => e2e_marker((string)($body['nombre'] ?? ''), ['PW E2E DOCENTE ']),
         default => false,
     };
 }
@@ -531,6 +537,14 @@ function e2e_scope_guard(string $action, array $auth): void
             $id = $body['id'] ?? null;
             if ($id !== null && trim((string)$id) !== '') {
                 e2e_assert_target($db, $action, $kind, $id);
+                // El nombre de un docente E2E debe seguir marcado también
+                // después de editarlo, para que el teardown pueda limpiarlo.
+                if ($list === 'docentes' && $action === 'configuracion_lista_guardar') {
+                    $name = trim((string)($body['nombre'] ?? ''));
+                    if ($name !== '' && !e2e_config_creation_marker($list, $body)) {
+                        e2e_scope_error($action, 'Un docente E2E editado debe conservar el prefijo PW E2E DOCENTE.');
+                    }
+                }
                 return;
             }
             if ($action !== 'configuracion_lista_guardar') return;

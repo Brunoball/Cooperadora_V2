@@ -14,7 +14,7 @@ final class TestingSafety
         'categoria', 'categoria_monto', 'categoria_hermanos',
         'categoria_hermanos_historial', 'precios_historicos',
         'contable_categoria', 'contable_descripcion', 'contable_proveedor',
-        'sexo', 'tipos_documentos',
+        'sexo', 'tipos_documentos', 'docentes',
         'ventas_productos', 'ventas_campanias', 'ventas_personas',
         'ventas_ordenes', 'ventas_orden_items',
         'anio', 'division', 'meses', 'medio_pago',
@@ -414,6 +414,10 @@ final class TestingSafety
                     OR UPPER(descripcion) LIKE 'PW EEE DOC %'
                     OR UPPER(sigla) LIKE 'PWE2E%'"
             ),
+            'docentes' => self::ids(
+                $db,
+                "SELECT id_docente FROM docentes WHERE UPPER(docente) LIKE 'PW E2E DOCENTE %'"
+            ),
         ];
     }
 
@@ -457,6 +461,7 @@ final class TestingSafety
             'contable_proveedor' => $in('contable_proveedor', $row['id_cont_proveedor'] ?? null),
             'sexo' => $in('sexo', $row['id_sexo'] ?? null),
             'tipos_documentos' => $in('tipos_documentos', $row['id_tipo_documento'] ?? null),
+            'docentes' => $in('docentes', $row['id_docente'] ?? null),
             'ventas_productos' => $in('ventas_productos', $row['id_producto'] ?? null),
             'ventas_campanias' => $in('ventas_campanias', $row['id_campania'] ?? null),
             'ventas_personas' => $in('ventas_personas', $row['id_persona'] ?? null),
@@ -504,6 +509,7 @@ final class TestingSafety
             'contable_proveedor' => 'contable_proveedor',
             'sexo' => 'sexo',
             'tipos_documentos' => 'tipos_documentos',
+            'docentes' => 'docentes',
             'sis_usuarios' => 'usuarios',
         ];
         return isset($map[$table]) && in_array($id, $sets[$map[$table]] ?? [], true);

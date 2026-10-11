@@ -11,6 +11,12 @@ final class Cuotas extends CuotasRegistros
         api_success(self::listarDatos($auth['db'], $_GET));
     }
 
+    public static function cuponesCobrador(): never
+    {
+        $auth = auth_context();
+        api_success(self::cuponesCobradorDatos($auth['db'], $_GET));
+    }
+
     public static function totalesEstado(): never
     {
         $auth = auth_context();

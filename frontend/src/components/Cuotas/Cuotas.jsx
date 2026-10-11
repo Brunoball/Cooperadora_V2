@@ -343,20 +343,29 @@ export default function Cuotas() {
     await refreshData();
   };
 
-  const printReceipts = async (rows, { rotated = false } = {}) => {
+  const printReceipts = async (rows, { rotated = false, windows = {}, skipStudentLookup = false } = {}) => {
     const normalized = rows.map((item) => receiptFromRow(item, catalogos.meses || []));
     const internal = normalized.filter((item) => !isExternal(item));
     const external = normalized.filter(isExternal);
-    const internalWindow = internal.length ? window.open("", "", "width=900,height=1200") : null;
-    const externalWindow = external.length ? window.open("", "", "width=900,height=1200") : null;
+    const internalWindow = internal.length
+      ? (windows.internal || window.open("", "", "width=900,height=1200"))
+      : null;
+    const externalWindow = external.length
+      ? (windows.external || window.open("", "", "width=900,height=1200"))
+      : null;
+    if (!internal.length) windows.internal?.close?.();
+    if (!external.length) windows.external?.close?.();
     try {
+      if ((internal.length && !internalWindow) || (external.length && !externalWindow)) {
+        throw new Error("El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes e intentá de nuevo.");
+      }
       if (internal.length) {
         const fn = rotated ? imprimirInternosRotados : imprimirInternos;
-        await fn(internal, "", internalWindow);
+        await fn(internal, "", internalWindow, { skipStudentLookup });
       }
       if (external.length) {
         const fn = rotated ? imprimirExternosRotados : imprimirExternos;
-        await fn(external, "", externalWindow);
+        await fn(external, "", externalWindow, { skipStudentLookup });
       }
     } catch (err) {
       internalWindow?.close?.();
@@ -410,21 +419,38 @@ export default function Cuotas() {
   };
 
   const printCollectorBook = async () => {
+    // Abrir antes de consultar la API: tras un await el navegador puede
+    // bloquear las ventanas por no reconocer la interacción del usuario.
+    const categorySelected = (catalogos.categorias || []).find((item) =>
+      String(item.id_categoria) === String(categoria),
+    );
+    const onlyExternal = String(categorySelected?.nombre || "").trim().toUpperCase() === "EXTERNO";
+    const onlyInternal = Boolean(categorySelected) && !onlyExternal;
+    const windows = {
+      internal: !onlyExternal ? window.open("", "", "width=900,height=1200") : null,
+      external: !onlyInternal ? window.open("", "", "width=900,height=1200") : null,
+    };
     setBulkPrinting(true);
     try {
-      const rows = await fetchAll({
-        estado: "DEUDORES",
-        cobrador: "1",
-        mes: String(mes),
-        medio_pago: "",
+      const result = await cuotasApi.cuponesCobrador({
+        anio,
+        buscar,
+        categoria,
+        id_anio: anioLectivo,
+        division,
       });
+      const rows = result.items || [];
       if (!rows.length) {
-        showFeedback("warning", "No hay cobradores pendientes para imprimir en el período seleccionado.");
+        windows.internal?.close?.();
+        windows.external?.close?.();
+        showFeedback("warning", "No hay alumnos cobradores con períodos escolares para imprimir.");
         return;
       }
-      await printReceipts(rows);
+      await printReceipts(rows, { windows, skipStudentLookup: true });
     } catch (err) {
-      showFeedback("error", err.message || "No se pudieron imprimir los comprobantes del período seleccionado.");
+      windows.internal?.close?.();
+      windows.external?.close?.();
+      showFeedback("error", err.message || "No se pudieron imprimir todos los cupones de cobrador.");
     } finally {
       setBulkPrinting(false);
     }

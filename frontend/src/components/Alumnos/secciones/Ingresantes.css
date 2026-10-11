@@ -115,7 +115,7 @@
 }
 
 /* =========================================================
-   CHECKBOXES — mismo patrón visual en tabla y modal
+   CHECKBOX DE MATRÍCULA EN MODAL
    ========================================================= */
 .ingresantes-check {
   display: inline-flex;
@@ -191,29 +191,6 @@
   opacity: .55;
 }
 
-/* Checkbox de selección dentro de la columna Acciones, igual al patrón de Ventas. */
-.ingresantes-check--action {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  min-height: 30px;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 30px;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  transition: background .14s ease, border-color .14s ease;
-}
-
-.ingresantes-check--action:hover {
-  border-color: color-mix(in srgb, var(--primary-500, #3b82f6) 15%, transparent);
-  background: color-mix(in srgb, var(--primary-500, #3b82f6) 7%, transparent);
-}
-
 /* Checkbox de matrícula dentro del modal. */
 .ingresantes-formGrid > .ingresantes-check--field {
   min-width: 0;
@@ -249,23 +226,10 @@
   cursor: not-allowed;
 }
 
-/* La fila pendiente completa es seleccionable, salvo controles interactivos. */
+/* Se permite elegir pendientes del ciclo vigente, sin pintar la fila de azul.
+   La selección se indica junto al nombre y con el contador del botón superior. */
 .ingresantes-grid.mov-gridTable--row.is-selectable {
   cursor: pointer;
-  transition: background .16s ease, box-shadow .16s ease;
-}
-
-.ingresantes-grid.mov-gridTable--row.is-selectable:hover {
-  background: color-mix(in srgb, var(--primary-500, #3b82f6) 5%, var(--surface-color, #fff));
-}
-
-.ingresantes-grid.mov-gridTable--row.is-selected {
-  background: color-mix(in srgb, var(--primary-500, #3b82f6) 9%, var(--surface-color, #fff));
-  box-shadow: inset 4px 0 0 var(--primary-600, #2563eb);
-}
-
-.ingresantes-grid.mov-gridTable--row.is-selected:hover {
-  background: color-mix(in srgb, var(--primary-500, #3b82f6) 12%, var(--surface-color, #fff));
 }
 
 .ingresantes-grid.mov-gridTable--row.is-selectable:focus-visible {

@@ -163,6 +163,12 @@ export const imprimirRecibos = async (listaSocios, periodoActual = '', ventana, 
   // 1) Completar información
   const alumnos = [];
   for (const item of (listaSocios || [])) {
+    // La libreta masiva ya trae los datos completos: evita una consulta HTTP
+    // redundante por cada cupón (hasta diez por alumno).
+    if (opciones?.skipStudentLookup) {
+      alumnos.push(item);
+      continue;
+    }
     const id = getIdAlumno(item);
     if (!id) { alumnos.push(item); continue; }
     try {

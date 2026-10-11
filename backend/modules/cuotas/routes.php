@@ -7,6 +7,7 @@ function register_cuotas_routes(Router $router): void
 {
     $router->register('cuotas_listar', 'GET', [Cuotas::class, 'listar'], true);
     $router->register('cuotas_totales_estado', 'GET', [Cuotas::class, 'totalesEstado'], true);
+    $router->register('cuotas_cupones_cobrador', 'GET', [Cuotas::class, 'cuponesCobrador'], true);
     $router->register('cuotas_catalogos', 'GET', [Cuotas::class, 'catalogos'], true);
     $router->register('cuotas_contexto_pago', 'GET', [Cuotas::class, 'contextoPago'], true);
     $router->register('cuotas_contextos_pago', 'GET', [Cuotas::class, 'contextosPago'], true);

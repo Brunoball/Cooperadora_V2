@@ -275,7 +275,7 @@ export default function Ingresantes() {
         className="ingresantes-page"
         secondaryActions={writable ? [{
           key: "pasar-alumnos",
-          label: "Pasar a alumnos",
+          label: selectedCount > 0 ? `Pasar a alumnos (${selectedCount})` : "Pasar a alumnos",
           icon: faCheck,
           className: "mov-btn--ghost",
           disabled: selectedCount <= 0 || processingBulk || !cycleCanActivate,
@@ -295,15 +295,16 @@ export default function Ingresantes() {
           {!loading && error ? <div className="module-empty"><strong>{error}</strong></div> : null}
           {!loading && !error && !items.length ? <div className="module-empty"><TableEmptyIcon /><strong>Sin ingresantes para mostrar</strong><span>Cambiá los filtros o cargá una nueva inscripción.</span></div> : null}
           {!loading && !error ? items.map((item) => {
-            const selectable = writable && item.estado === "PENDIENTE" && !item.id_alumno_confirmado;
+            const selectable = writable && cycleCanActivate && item.estado === "PENDIENTE" && !item.id_alumno_confirmado;
             const selected = selectedIds.includes(Number(item.id_ingresante));
             return (
               <div
-                className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ingresantes-grid ${selectable ? "is-selectable" : ""} ${selected ? "is-selected" : ""}`.trim()}
+                className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ingresantes-grid ${selectable ? "is-selectable" : ""}`.trim()}
                 key={item.id_ingresante}
                 role="row"
                 tabIndex={selectable ? 0 : undefined}
                 aria-selected={selectable ? selected : undefined}
+                title={selectable ? (selected ? "Quitar de la selección" : "Hacé clic para seleccionar este ingresante") : item.estado === "PENDIENTE" && !cycleCanActivate ? `Los ingresantes del ciclo ${cycle} todavía no pueden pasarse a Alumnos.` : undefined}
                 onClick={(event) => {
                   if (selectable && !isInteractiveRowTarget(event.target)) toggleSelected(item);
                 }}
@@ -319,7 +320,7 @@ export default function Ingresantes() {
                   <div className="ingresantes-nameRow">
                     <div>
                       <strong>{item.nombre_completo}</strong>
-                      <small>{item.id_alumno_confirmado ? `Ingresado · Alumno #${item.id_alumno_confirmado}${item.alumno_confirmado_eliminado ? " · Alumno eliminado" : ""}` : item.estado === "CANCELADO" ? "Cancelado" : `Pendiente · Ciclo ${item.ciclo_lectivo}`}</small>
+                      <small>{item.id_alumno_confirmado ? `Ingresado · Alumno #${item.id_alumno_confirmado}${item.alumno_confirmado_eliminado ? " · Alumno eliminado" : ""}` : item.estado === "CANCELADO" ? "Cancelado" : `Pendiente · Ciclo ${item.ciclo_lectivo}${selectable && selected ? " · Seleccionado" : ""}`}</small>
                     </div>
                   </div>
                 </div>
@@ -332,19 +333,6 @@ export default function Ingresantes() {
                 </div>
                 <div className="mov-gridCell is-center">{formatDate(item.fecha_inscripcion)}</div>
                 <div className="mov-gridCell mov-actionsInline is-center">
-                  {selectable ? (
-                    <label
-                      className="ingresantes-check ingresantes-check--action"
-                      title={selected ? "Quitar de la selección" : "Seleccionar ingresante"}
-                    >
-                      <input
-                        type="checkbox"
-                        aria-label={`Seleccionar ${item.nombre_completo}`}
-                        checked={selected}
-                        onChange={() => toggleSelected(item)}
-                      />
-                    </label>
-                  ) : null}
                   {writable && !item.id_alumno_confirmado ? <button className="mov-iconBtn" type="button" title="Editar" onClick={() => openEdit(item)}><FontAwesomeIcon icon={faPen} /></button> : null}
                   {writable && !item.id_alumno_confirmado && item.estado === "PENDIENTE" ? <button className="mov-iconBtn" type="button" title="Cancelar ingreso" onClick={() => requestStateChange(item, "CANCELADO")}><FontAwesomeIcon icon={faBan} /></button> : null}
                   {writable && !item.id_alumno_confirmado && item.estado === "CANCELADO" ? <button className="mov-iconBtn" type="button" title="Volver a pendiente" onClick={() => requestStateChange(item, "PENDIENTE")}><FontAwesomeIcon icon={faRotateLeft} /></button> : null}

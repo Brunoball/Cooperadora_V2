@@ -2,6 +2,7 @@ import { apiGet, apiPost } from "../../_shared/api/apiClient";
 
 export const cuotasApi = {
   listar: (params) => apiGet("cuotas_listar", params),
+  cuponesCobrador: (params) => apiGet("cuotas_cupones_cobrador", params),
   totalesEstado: (params) => apiGet("cuotas_totales_estado", params),
   catalogos: (params) => apiGet("cuotas_catalogos", params),
   contextoPago: (params) => apiGet("cuotas_contexto_pago", params),

@@ -557,6 +557,66 @@ abstract class CuotasConsultas extends CuotasSoporte
         return $items;
     }
 
+    /**
+     * Libreta completa del cobrador: un cupón por cada mes escolar aplicable
+     * de cada alumno activo, sin depender del período seleccionado en pantalla.
+     * Los importes se calculan por mes para respetar precios y descuentos
+     * familiares históricos. No registra ni modifica pagos.
+     */
+    protected static function cuponesCobradorDatos(PDO $db, array $filters): array
+    {
+        self::validarEsquema($db);
+        $year = self::validarAnio($filters['anio'] ?? date('Y'));
+        $studentFilters = $filters;
+        $studentFilters['estado'] = 'DEUDORES';
+        $studentFilters['cobrador'] = '1';
+        $students = self::alumnosBase($db, $studentFilters);
+        if ($students === []) {
+            return ['items' => [], 'cantidad_alumnos' => 0, 'cantidad_cupones' => 0, 'anio' => $year];
+        }
+
+        $months = [];
+        foreach (self::periodosCatalogo($db) as $period) {
+            $id = (int)$period['id_mes'];
+            if (self::esMensual($id)) $months[] = $period;
+        }
+
+        // Conservar agrupados los cupones de cada alumno, de marzo a diciembre.
+        $byStudent = [];
+        foreach ($students as $student) {
+            $byStudent[(int)$student['id_alumno']] = [];
+        }
+        foreach ($months as $period) {
+            $periodId = (int)$period['id_mes'];
+            $monthRows = [];
+            foreach ($students as $student) {
+                if (!self::periodoAplicaAlumno($student, $periodId)) continue;
+                if (!self::alumnoElegible($student, $periodId, $year)) continue;
+                $monthRows[] = self::filaBase($student, $year, $period, 'deudor', null);
+            }
+            if ($monthRows === []) continue;
+            $monthRows = self::agregarMontosSugeridosPagina($db, $monthRows, $year, $periodId);
+            foreach ($monthRows as $row) {
+                $byStudent[(int)$row['id_alumno']][] = $row;
+            }
+        }
+
+        $items = [];
+        $studentCount = 0;
+        foreach ($byStudent as $rows) {
+            if ($rows === []) continue;
+            $studentCount++;
+            foreach ($rows as $row) $items[] = $row;
+        }
+
+        return [
+            'items' => $items,
+            'cantidad_alumnos' => $studentCount,
+            'cantidad_cupones' => count($items),
+            'anio' => $year,
+        ];
+    }
+
     protected static function listarDatos(PDO $db, array $filters): array
     {
         [$rows, $year, $period] = self::construirFilas($db, $filters, false);
