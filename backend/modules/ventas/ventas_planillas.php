@@ -4,6 +4,17 @@ declare(strict_types=1);
 /** Funciones de Ventas agrupadas por subsección; cargado desde ventas.php. */
 trait VentasPlanillas
 {
+    /**
+     * Contrato de composición: estos métodos ya existen en la clase
+     * o en otro trait del módulo. No agrega lógica ni los reemplaza.
+     * Facilita su resolución a los analizadores estáticos (Intelephense).
+     */
+    abstract private static function campaign(PDO $db, int $id, bool $forUpdate = false): array;
+    abstract private static function db(): PDO;
+    abstract private static function fetchOne(PDO $db, string $sql, array $params = []): ?array;
+    abstract private static function nullablePositiveId(mixed $value): ?int;
+    abstract private static function objectiveForSold(array $campaign, int $sold): array;
+
     // Resumen y consultas generales
     public static function resumen(): never
     {
@@ -45,6 +56,7 @@ trait VentasPlanillas
                              ORDER BY mes DESC")->fetchAll(PDO::FETCH_COLUMN)?:[];
         $currentMonth=date('Y-m');
         if(!in_array($currentMonth,$months,true)) array_unshift($months,$currentMonth);
+        /** @disregard P1012 */
         api_success(['productos'=>$products,'campanias'=>$campaigns,'medios_pago'=>$payment,'estados'=>self::PAYMENT_STATES,'meses_ventas'=>$months]);
     }
 

@@ -37,10 +37,25 @@ function apiUrl(action, query = {}) {
 
 async function rawFetch(api, action, options = {}) {
   const env = loadTestEnv();
+  let auditHeaders = {};
+  if (env.productionE2E && ["e2e_integridad", "e2e_residuos", "e2e_cleanup"].includes(action)) {
+    let baseline = String(options.headers?.["X-COOPERADORA-E2E-BASELINE"] || "");
+    if (!baseline && fs.existsSync(env.authFile)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(env.authFile, "utf8"));
+        baseline = String(state.auditBaselineToken || "");
+      } catch { /* Se rechaza abajo sin enviar una petición peligrosa. */ }
+    }
+    if (!baseline) {
+      throw new Error("Falta la marca firmada de auditoría E2E de esta ejecución. No se consultó ni modificó la base.");
+    }
+    auditHeaders = { "X-COOPERADORA-E2E-BASELINE": baseline };
+  }
   const headers = {
     "X-COOPERADORA-E2E": env.e2eHeader,
     "User-Agent": options.userAgent || "PW-COOP-E2E-PLAYWRIGHT",
     Accept: options.accept || "application/json",
+    ...auditHeaders,
     ...(options.headers || {}),
   };
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
@@ -54,12 +69,37 @@ async function rawFetch(api, action, options = {}) {
   if (options.multipart !== undefined) fetchOptions.multipart = options.multipart;
   else if (options.data !== undefined) fetchOptions.data = options.data;
 
-  const response = await withRemoteRequestSlot(() => api.fetch(apiUrl(action, options.query), fetchOptions));
+  // Sólo GET se puede repetir de forma automática. Un POST que acaba en
+  // timeout puede haber confirmado una venta/pago y NO debe reenviarse.
+  const readOnly = fetchOptions.method.toUpperCase() === "GET";
+  const transientHttp = new Set([408, 425, 429, 500, 502, 503, 504]);
+  const delays = [300, 800, 1600];
+  let response;
+  for (let attempt = 0; attempt <= (readOnly && !env.isLocal ? delays.length : 0); attempt++) {
+    try {
+      response = await withRemoteRequestSlot(() => api.fetch(apiUrl(action, options.query), {
+        ...fetchOptions,
+        timeout: options.timeout || (env.isLocal ? 30000 : env.hostingerMaxRequestMs),
+        maxRetries: 0,
+      }));
+      if (readOnly && !env.isLocal && transientHttp.has(response.status()) && attempt < delays.length) {
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        continue;
+      }
+      break;
+    } catch (error) {
+      if (!readOnly || env.isLocal || attempt >= delays.length) {
+        const note = readOnly ? "" : " No se reintentó el POST: la operación podría haberse confirmado.";
+        throw new Error(`Error de conexión en ${action}.${note} ${error.message}`, { cause: error });
+      }
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
   // Cobertura significa que el backend respondió realmente. Un pedido que falla
   // por red o un HTTP 5xx NO puede contar como acción ejecutada correctamente.
   // Las respuestas 4xx sí cuentan: prueban validaciones y bloqueos esperados.
   if (!env.isLocal && [429, 502, 503, 504].includes(response.status())) {
-    throw new Error(`Hostinger respondió HTTP ${response.status()} en ${action}. Se detiene esta prueba; no se reintenta para evitar duplicar escrituras.`);
+    throw new Error(`Hostinger respondió HTTP ${response.status()} en ${action}. ${readOnly ? "GET agotó los reintentos seguros." : "POST sin reintentos para no duplicar escrituras."}`);
   }
   if (response.status() < 500) recordAction(action);
   return { response, status: response.status() };

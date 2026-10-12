@@ -21,6 +21,174 @@ final class TestingSafety
         'sis_usuarios', 'sis_sesiones', 'sis_login_auditoria', 'auditoria',
     ];
 
+    /**
+     * Preflight PÚBLICO únicamente en instancia APP_ENV=testing.
+     * No crea sesiones ni altera datos: verifica DB física y ausencia de E2E
+     * previo. Exige clave independiente en .env del backend aislado.
+     */
+    public static function preflightAislado(): never
+    {
+        if (!function_exists('e2e_is_local_environment') ||
+            strtolower(trim((string)env_value('APP_ENV', 'production'))) !== 'testing' ||
+            !e2e_request_header_active()) {
+            api_error('Preflight E2E no disponible.', 'NOT_FOUND', 404);
+        }
+        $configuredKey = (string)env_value('E2E_PREFLIGHT_KEY', '');
+        $submittedKey = (string)($_SERVER['HTTP_X_COOPERADORA_E2E_CHECK'] ?? '');
+        if (strlen($configuredKey) < 24 || !hash_equals($configuredKey, $submittedKey)) {
+            api_error('Preflight E2E no autorizado.', 'FORBIDDEN', 403);
+        }
+        $db = app_db();
+        $dbName = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if (!str_ends_with(strtolower($dbName), '_e2e')) {
+            api_error('Base E2E aislada no identificada.', 'E2E_DB_NOT_ISOLATED', 409);
+        }
+        $sets = self::e2eSets($db);
+        $total = 0;
+        foreach ($sets as $ids) $total += count($ids);
+        $total += self::scalarCount($db, "SELECT COUNT(*) FROM sis_login_auditoria WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%' OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'");
+        $total += self::scalarCount($db, "SELECT COUNT(*) FROM auditoria WHERE UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW E2E%' OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW E2E%'");
+        api_success(['datos' => [
+            'app_env' => 'testing',
+            'base_datos' => $dbName,
+            'residuos_e2e' => $total,
+        ]], 'Preflight remoto de aislamiento.');
+    }
+
+    /**
+     * Preflight local ANTES de iniciar sesión: preserva cualquier residuo
+     * de pruebas anteriores en vez de borrarlo indiscriminadamente.
+     */
+    public static function preflightLocal(): never
+    {
+        if (!e2e_is_local_environment() || !e2e_request_header_active()) {
+            api_error('Preflight local no disponible.', 'NOT_FOUND', 404);
+        }
+        $db = app_db();
+        $sets = self::e2eSets($db);
+        $total = 0;
+        foreach ($sets as $ids) $total += count($ids);
+        $total += self::scalarCount($db, "SELECT COUNT(*) FROM sis_login_auditoria
+            WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
+               OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'");
+        $total += self::scalarCount($db, "SELECT COUNT(*) FROM auditoria
+            WHERE UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW E2E%'
+               OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW E2E%'
+               OR UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW EEE%'
+               OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW EEE%'
+               OR UPPER(COALESCE(datos_anteriores,'')) LIKE '%PWE2E%'
+               OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PWE2E%'");
+        if ($total !== 0) {
+            api_error('Existen registros E2E anteriores en local. No se modificó ninguno.', 'E2E_PREEXISTENTES', 409);
+        }
+        api_success(['datos' => ['residuos_e2e' => 0]], 'Preflight local sin datos E2E anteriores.');
+    }
+
+    /**
+     * Preflight de producción E2E: estrictamente solo lectura y previo al login.
+     * Una clave independiente de 24+ caracteres evita habilitarlo por error.
+     * Si existe un solo resto E2E, la corrida se rechaza SIN borrarlo.
+     */
+    public static function preflightProduccion(): never
+    {
+        if (strtolower(trim((string)env_value('APP_ENV', 'production'))) !== 'production'
+            || !e2e_request_header_active()) {
+            api_error('Preflight de producción no disponible.', 'NOT_FOUND', 404);
+        }
+        $configuredKey = (string)env_value('E2E_PREFLIGHT_KEY', '');
+        $submittedKey = (string)($_SERVER['HTTP_X_COOPERADORA_E2E_CHECK'] ?? '');
+        if (strlen($configuredKey) < 24 || !hash_equals($configuredKey, $submittedKey)) {
+            api_error('Preflight de producción no autorizado.', 'FORBIDDEN', 403);
+        }
+        $db = app_db();
+        $dbName = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if (!str_ends_with(strtolower($dbName), 'cooperadora_v2') || str_ends_with(strtolower($dbName), '_e2e')) {
+            api_error('No es la base de producción esperada.', 'E2E_DB_UNEXPECTED', 409);
+        }
+        // La auditoría de LOGIN es histórica y append-only. NO es un residuo
+        // de negocio ni se puede eliminar basándose solo en el prefijo E2E.
+        // Conservamos una marca máxima firmada ANTES de iniciar sesión:
+        // cualquier fila <= ese ID permanece intocable durante esta corrida.
+        $sets = self::e2eSets($db);
+        $counts = [];
+        foreach ($sets as $name => $ids) {
+            if ($ids !== []) $counts[$name] = count($ids);
+        }
+        $auditoriaMarcada = self::scalarCount($db, "SELECT COUNT(*) FROM auditoria
+            WHERE UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW E2E%'
+               OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW E2E%'
+               OR UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW EEE%'
+               OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW EEE%'
+               OR UPPER(COALESCE(datos_anteriores,'')) LIKE '%PWE2E%'
+               OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PWE2E%'");
+        if ($auditoriaMarcada > 0) $counts['auditoria_marcada'] = $auditoriaMarcada;
+        $total = array_sum($counts);
+        if ($total !== 0) {
+            api_error('Existen registros E2E previos de negocio/auditoría general; no se alterará ninguno.',
+                'E2E_PREEXISTENTES', 409, [
+                    'residuos_e2e' => $total,
+                    'conteos' => $counts,
+                ]);
+        }
+
+        $loginAuditMax = self::scalarCount($db, 'SELECT COALESCE(MAX(id_auditoria), 0) FROM sis_login_auditoria');
+        $historicalE2EAudit = self::scalarCount($db, "SELECT COUNT(*) FROM sis_login_auditoria
+            WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
+               OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'");
+        $auditBaselineToken = self::signAuditBaseline($dbName, $loginAuditMax, $configuredKey);
+        api_success(['datos' => [
+            'app_env' => 'production',
+            'base_datos' => $dbName,
+            'residuos_e2e' => 0,
+            'login_auditoria_historica' => $historicalE2EAudit,
+            'audit_baseline_token' => $auditBaselineToken,
+        ]], 'Producción apta para E2E; auditoría histórica protegida por ID.');
+    }
+
+    /**
+     * Token HMAC vinculado a DB y vencimiento; NO admite alterar el límite de
+     * auditoría. Las filas anteriores al preflight no son propiedad de Playwright.
+     */
+    private static function signAuditBaseline(string $dbName, int $maxId, string $key): string
+    {
+        $payload = json_encode([
+            'db' => $dbName,
+            'limite' => $maxId,
+            'vence' => time() + 7200,
+            'nonce' => bin2hex(random_bytes(12)),
+        ], JSON_THROW_ON_ERROR);
+        $encoded = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
+        return $encoded . '.' . hash_hmac('sha256', $encoded, $key);
+    }
+
+    public static function productionAuditBaseline(PDO $db): ?int
+    {
+        if (strtolower(trim((string)env_value('APP_ENV', 'production'))) !== 'production') {
+            return null;
+        }
+        $key = (string)env_value('E2E_PREFLIGHT_KEY', '');
+        $token = trim((string)($_SERVER['HTTP_X_COOPERADORA_E2E_BASELINE'] ?? ''));
+        $parts = explode('.', $token);
+        if (strlen($key) < 24 || count($parts) !== 2 ||
+            !hash_equals(hash_hmac('sha256', $parts[0], $key), $parts[1])) {
+            api_error('Falta la marca firmada de auditoría de esta corrida E2E.',
+                'E2E_AUDIT_BASELINE_INVALID', 403);
+        }
+        $decoded = base64_decode(strtr($parts[0], '-_', '+/'), true);
+        $payload = $decoded === false ? null : json_decode($decoded, true);
+        $actualDb = (string)$db->query('SELECT DATABASE()')->fetchColumn();
+        if (!is_array($payload) ||
+            ($payload['db'] ?? '') !== $actualDb ||
+            !isset($payload['limite'], $payload['vence']) ||
+            !is_int($payload['limite']) || $payload['limite'] < 0 ||
+            !is_int($payload['vence']) || $payload['vence'] < time() ||
+            $payload['vence'] > time() + 7200) {
+            api_error('La marca E2E venció o corresponde a otra base de datos.',
+                'E2E_AUDIT_BASELINE_INVALID', 403);
+        }
+        return $payload['limite'];
+    }
+
     public static function probe(): never
     {
         // e2e_scope_guard() debe interceptar esta acción antes del handler.
@@ -36,12 +204,15 @@ final class TestingSafety
     {
         $auth = require_admin();
         self::requireE2EHeader();
-        if (!function_exists('e2e_is_local_environment') || !e2e_is_local_environment()) {
-            api_error(
-                'La preparación aislada de campañas de Ventas sólo está disponible en entorno local/test.',
-                'E2E_LOCAL_ONLY',
-                403
-            );
+        $production = strtolower(trim((string)env_value('APP_ENV', 'production'))) === 'production';
+        if ($production && (
+            !str_starts_with(strtolower((string)($auth['usuario'] ?? '')), 'pw_e2e_') ||
+            strlen((string)env_value('E2E_PREFLIGHT_KEY', '')) < 24
+        )) {
+            api_error('Cambio aislado reservado al usuario E2E de producción.', 'E2E_SCOPE_BLOCKED', 409);
+        }
+        if (!$production && (!function_exists('e2e_is_local_environment') || !e2e_is_local_environment())) {
+            api_error('Entorno E2E no habilitado.', 'E2E_SCOPE_BLOCKED', 409);
         }
 
         $body = request_body();
@@ -90,11 +261,15 @@ final class TestingSafety
         $counts = [];
         foreach ($sets as $key => $ids) $counts[$key] = count($ids);
 
+        $auditFloor = self::productionAuditBaseline($auth['db']);
+        $auditFilter = $auditFloor === null ? '' : 'id_auditoria > ' . $auditFloor . ' AND ';
         $counts['login_auditoria'] = self::scalarCount(
             $auth['db'],
             "SELECT COUNT(*) FROM sis_login_auditoria
-             WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
-                OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'"
+             WHERE {$auditFilter}(
+                 LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
+                 OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'
+             )"
         );
         $counts['auditoria_marcada'] = self::scalarCount(
             $auth['db'],
@@ -124,6 +299,7 @@ final class TestingSafety
         // Excluir solamente esa PK evita que el setup altere artificialmente el baseline.
         $sets['sesion_actual'] = isset($auth['id_sesion']) ? [(int)$auth['id_sesion']] : [];
         $tables = [];
+        $auditFloor = self::productionAuditBaseline($db);
 
         foreach (self::TABLES as $table) {
             if (!self::tableExists($db, $table)) continue;
@@ -131,7 +307,12 @@ final class TestingSafety
             $realRows = [];
 
             foreach ($rows as $row) {
-                if (self::isE2ERow($table, $row, $sets)) continue;
+                // Las auditorías anteriores al preflight son datos históricos,
+                // aun cuando contengan un marcador usado en pruebas antiguas.
+                $historicalLoginAudit = $table === 'sis_login_auditoria'
+                    && $auditFloor !== null
+                    && (int)($row['id_auditoria'] ?? 0) <= $auditFloor;
+                if (!$historicalLoginAudit && self::isE2ERow($table, $row, $sets)) continue;
 
                 // Campo volátil actualizado por cada request autenticado. No forma
                 // parte de la integridad funcional de los datos productivos.

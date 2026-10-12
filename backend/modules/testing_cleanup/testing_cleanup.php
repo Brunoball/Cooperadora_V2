@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/../testing_safety/testing_safety.php';
+
 /**
  * Limpieza EXCLUSIVA del namespace Playwright de Cooperadora V2.
  *
@@ -17,6 +19,15 @@ final class TestingCleanup
     {
         $auth = require_admin();
         self::requireE2EHeader();
+        // La limpieza remota no puede autorizarse solo por el header público
+        // PLAYWRIGHT: además exige la clave privada usada en el preflight.
+        if (strtolower(trim((string)env_value('APP_ENV', 'production'))) === 'production') {
+            $key = (string)env_value('E2E_PREFLIGHT_KEY', '');
+            $submitted = (string)($_SERVER['HTTP_X_COOPERADORA_E2E_CHECK'] ?? '');
+            if (strlen($key) < 24 || !hash_equals($key, $submitted)) {
+                api_error('Limpieza E2E remota no autorizada.', 'E2E_CLEANUP_FORBIDDEN', 403);
+            }
+        }
         $body = request_body();
         if (strtoupper(trim((string)($body['confirmacion'] ?? ''))) !== self::CONFIRMATION) {
             api_error('Confirmación de limpieza E2E inválida.', 'E2E_CLEANUP_CONFIRMACION_INVALIDA', 422);
@@ -28,13 +39,14 @@ final class TestingCleanup
         );
         $currentSessionId = $closeCurrentSession ? (int)($auth['id_sesion'] ?? 0) : null;
 
+        $auditFloor = TestingSafety::productionAuditBaseline($auth['db']);
         api_success(
-            self::cleanup($auth['db'], $currentSessionId),
+            self::cleanup($auth['db'], $currentSessionId, $auditFloor),
             'Limpieza final de Playwright completada.'
         );
     }
 
-    private static function cleanup(PDO $db, ?int $currentSessionId = null): array
+    private static function cleanup(PDO $db, ?int $currentSessionId = null, ?int $auditFloor = null): array
     {
         $counts = [
             'egresos_comision' => 0,
@@ -553,21 +565,29 @@ final class TestingCleanup
                 $counts[$table] += self::deleteByIds($db, $table, $idColumns[$table], $safe);
             }
 
-            // Seguridad/autenticación.
+            // Nunca borrar auditorías que ya estaban en la DB antes del
+            // preflight. El límite está firmado con la clave del backend.
+            // En local, sin límite, se conserva el comportamiento anterior.
+            $auditLimitSql = $auditFloor === null ? '' : 'id_auditoria > ' . $auditFloor . ' AND ';
             $counts['sis_sesiones'] += self::deleteByIds($db, 'sis_sesiones', 'id_usuario', $testUsers);
+            $auditCriteria = "({$auditLimitSql}(
+                LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
+                OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'
+            ))";
+            // En producción sólo las auditorías de login creadas después
+            // del preflight, vinculadas a este namespace, son eliminables.
+            // La condición adicional de usuario se aplica al mismo límite.
             if ($testUsers !== []) {
                 $statement = $db->prepare(
                     "DELETE FROM sis_login_auditoria
-                     WHERE id_usuario IN (" . self::placeholders(count($testUsers)) . ")
-                        OR LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
-                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'"
+                     WHERE {$auditCriteria}
+                        OR (" . ($auditFloor === null ? '' : "id_auditoria > {$auditFloor} AND ") .
+                          "id_usuario IN (" . self::placeholders(count($testUsers)) . "))"
                 );
                 $statement->execute($testUsers);
             } else {
                 $statement = $db->prepare(
-                    "DELETE FROM sis_login_auditoria
-                     WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
-                        OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'"
+                    "DELETE FROM sis_login_auditoria WHERE {$auditCriteria}"
                 );
                 $statement->execute();
             }

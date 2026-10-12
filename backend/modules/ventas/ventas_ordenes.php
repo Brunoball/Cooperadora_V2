@@ -4,6 +4,23 @@ declare(strict_types=1);
 /** Funciones de Ventas agrupadas por subsección; cargado desde ventas.php. */
 trait VentasOrdenes
 {
+    /**
+     * Contrato de composición: estos métodos ya existen en la clase
+     * o en otro trait del módulo. No agrega lógica ni los reemplaza.
+     * Facilita su resolución a los analizadores estáticos (Intelephense).
+     */
+    abstract private static function auth(): array;
+    abstract private static function boolValue(mixed $value): int;
+    abstract private static function campaign(PDO $db, int $id, bool $forUpdate = false): array;
+    abstract private static function db(): PDO;
+    abstract private static function ensureOption(PDO $db, string $table, string $idColumn, string $nameColumn, string $name): int;
+    abstract private static function fetchOne(PDO $db, string $sql, array $params = []): ?array;
+    abstract private static function integer(mixed $value, string $label, int $min = 0, int $max = 1000000): int;
+    abstract private static function normalizeState(mixed $value, string $default = 'aprobada'): string;
+    abstract private static function nullablePositiveId(mixed $value): ?int;
+    abstract private static function pagination(): array;
+    abstract private static function product(PDO $db, int $id, bool $forUpdate = false): array;
+
     // Objetivos y ganancias
     private static function objectiveForSold(array $campaign, int $sold): array
     {
@@ -225,6 +242,7 @@ trait VentasOrdenes
             if ($name === '') api_error('Cada concepto debe tener un nombre.', 'VALIDATION_ERROR', 422, ['item' => $index]);
             $quantity = self::integer($raw['cantidad'] ?? 1, 'cantidad', 1, 100000);
             $type = strtolower(trim((string)($raw['tipo_precio'] ?? $raw['precio_tipo'] ?? 'personalizado')));
+            /** @disregard P1012 */
             if (!in_array($type, self::PRICE_TYPES, true)) $type = 'personalizado';
 
             $priceRaw = $raw['precio_unitario'] ?? null;
@@ -237,10 +255,12 @@ trait VentasOrdenes
             }
             $price = (float)decimal_amount($priceRaw, 'precio', 0, 999999999.99);
             $subtotal = round($quantity * $price, 2);
+            /** @disregard P1012 */
             if ($subtotal > self::MONEY_MAX) {
                 api_error('El subtotal de un concepto supera el máximo permitido por la base de datos.', 'VALIDATION_ERROR', 422, ['item' => $index]);
             }
             $total = round($total + $subtotal, 2);
+            /** @disregard P1012 */
             if ($total > self::MONEY_MAX) {
                 api_error('El total de la venta supera el máximo permitido por la base de datos.', 'VALIDATION_ERROR');
             }
@@ -408,6 +428,19 @@ trait VentasOrdenes
             'VENTA ' . clean_text($order['campania_nombre'], 145, true)
         );
         $providerName = clean_text($order['nombre_apellido'] ?: 'VENTA EN PUERTA', 120, true);
+        // Una venta E2E sin persona no debe crear la opción contable REAL
+        // "VENTA EN PUERTA". Su marcador exclusivo permite retirarla al terminar
+        // la corrida junto a las demás opciones PW E2E. La rama normal, las
+        // ventas reales y las ventas E2E CON comprador no cambian.
+        if (
+            empty($order['nombre_apellido'])
+            && function_exists('e2e_request_header_active')
+            && e2e_request_header_active()
+            && str_starts_with(strtoupper((string)($order['observacion'] ?? '')), 'PW E2E VTA ORDEN ')
+            && str_starts_with(strtoupper((string)($order['campania_nombre'] ?? '')), 'PW E2E VTA CAMP ')
+        ) {
+            $providerName = 'PW E2E VTA PERSONA SIN COMPRADOR';
+        }
         $providerId = self::ensureOption($db, 'contable_proveedor', 'id_cont_proveedor', 'nombre_proveedor', $providerName);
         $date = substr((string)($order['aprobado_en'] ?: $order['creado_en']), 0, 10);
 
@@ -445,50 +478,153 @@ trait VentasOrdenes
     // Registro y gestión de ventas
     public static function ordenes(): never
     {
-        $db=self::db(); [$page,$perPage,$offset]=self::pagination();
-        $campaign=self::nullablePositiveId($_GET['id_campania'] ?? null);
-        $state=strtolower(trim((string)($_GET['estado'] ?? 'aprobada')));
-        $retreat=strtolower(trim((string)($_GET['retiro'] ?? '')));
-        $origin=strtolower(trim((string)($_GET['origen'] ?? '')));
-        $month=trim((string)($_GET['mes'] ?? ''));
-        $search=trim((string)($_GET['buscar'] ?? $_GET['q'] ?? ''));
-        $where=['1=1']; $params=[];
-        if($campaign){$where[]='o.id_campania=?';$params[]=$campaign;}
-        // En TODOS solo se muestran ventas pagadas o pendientes, no anulaciones históricas.
-        if ($state === '' || $state === 'vigentes') {
-            $where[] = "o.estado IN ('aprobada','pendiente')";
-        } else {
-            if (!in_array($state,self::ORDER_STATES,true)) api_error('Filtro de estado inválido.','VALIDATION_ERROR');
-            $where[]='o.estado=?'; $params[]=$state;
+        // Las consultas del listado no dependen de la BD del bot. Usamos un
+        // SELECT principal simple y cargamos sus conceptos por separado para
+        // evitar subconsultas correlacionadas/GROUP_CONCAT en el mismo SELECT.
+        $stage = 'conexion';
+        try {
+            $db = self::db();
+            [$page, $perPage, $offset] = self::pagination();
+            $campaign = self::nullablePositiveId($_GET['id_campania'] ?? null);
+            $state = strtolower(trim((string)($_GET['estado'] ?? 'aprobada')));
+            $retreat = strtolower(trim((string)($_GET['retiro'] ?? '')));
+            $origin = strtolower(trim((string)($_GET['origen'] ?? '')));
+            $month = trim((string)($_GET['mes'] ?? ''));
+            $search = trim((string)($_GET['buscar'] ?? $_GET['q'] ?? ''));
+
+            $where = ['1=1'];
+            $params = [];
+            if ($campaign !== null) {
+                $where[] = 'o.id_campania = ?';
+                $params[] = $campaign;
+            }
+            if ($state === '' || $state === 'vigentes') {
+                $where[] = "o.estado IN ('aprobada', 'pendiente')";
+            } else {
+                /** @disregard P1012 */
+                if (!in_array($state, self::ORDER_STATES, true)) {
+                    api_error('Filtro de estado inválido.', 'VALIDATION_ERROR');
+                }
+                $where[] = 'o.estado = ?';
+                $params[] = $state;
+            }
+            if ($retreat === 'pendiente') {
+                $where[] = "o.estado = 'aprobada' AND o.retirado = 0";
+            } elseif ($retreat === 'retirado') {
+                $where[] = "o.estado = 'aprobada' AND o.retirado = 1";
+            }
+            if ($origin !== '' && !in_array($origin, ['manual', 'bot_whatsapp', 'importado'], true)) {
+                api_error('Filtro de origen inválido.', 'VALIDATION_ERROR');
+            }
+            if ($origin !== '') {
+                $where[] = 'o.origen = ?';
+                $params[] = $origin;
+            }
+            if ($month !== '') {
+                if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
+                    api_error('Filtro de mes inválido.', 'VALIDATION_ERROR');
+                }
+                // Rango semiabierto de fechas: conserva el fallback histórico
+                // fecha_venta -> aprobado_en -> creado_en sin DATE_FORMAT.
+                $begin = $month . '-01';
+                $next = (new DateTimeImmutable($begin))->modify('first day of next month')->format('Y-m-d');
+                $where[] = 'COALESCE(o.fecha_venta, o.aprobado_en, o.creado_en) >= ?'
+                    . ' AND COALESCE(o.fecha_venta, o.aprobado_en, o.creado_en) < ?';
+                $params[] = $begin;
+                $params[] = $next;
+            }
+
+            $searchJoins = '';
+            if ($search !== '') {
+                $filter = build_search_filter($search, [
+                    'o.codigo_orden LIKE {param}',
+                    'vp.dni LIKE {param}',
+                    'vp.nombre_apellido LIKE {param}',
+                    'c.nombre LIKE {param}',
+                    'o.referencia_pago LIKE {param}',
+                    'o.observacion LIKE {param}',
+                ], 160, null);
+                // Una búsqueda sólo con símbolos no produce términos: no
+                // insertar una condición SQL vacía (provocaba un 500).
+                if ($filter['sql'] !== '') {
+                    $where[] = $filter['sql'];
+                    $params = array_merge($params, $filter['params']);
+                    $searchJoins = ' LEFT JOIN ventas_campanias c ON c.id_campania = o.id_campania'
+                        . ' LEFT JOIN ventas_personas vp ON vp.id_persona = o.id_venta_persona';
+                }
+            }
+
+            $whereSql = implode(' AND ', $where);
+            $stage = 'conteo';
+            $count = $db->prepare('SELECT COUNT(*) FROM ventas_ordenes o'
+                . $searchJoins . ' WHERE ' . $whereSql);
+            $count->execute($params);
+            $total = (int)$count->fetchColumn();
+
+            $stage = 'registros';
+            $statement = $db->prepare(
+                'SELECT o.*, c.nombre AS campania_nombre, vp.dni, vp.nombre_apellido,'
+                . ' a.telefono, mp.medio_pago,'
+                . ' COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en)) AS fecha_venta'
+                . ' FROM ventas_ordenes o'
+                . ' LEFT JOIN ventas_campanias c ON c.id_campania = o.id_campania'
+                . ' LEFT JOIN ventas_personas vp ON vp.id_persona = o.id_venta_persona'
+                . ' LEFT JOIN alumnos a ON a.id_alumno = vp.id_alumno'
+                . ' LEFT JOIN medio_pago mp ON mp.id_medio_pago = o.id_medio_pago'
+                . ' WHERE ' . $whereSql
+                . ' ORDER BY COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en)) DESC,'
+                . ' o.id_orden DESC LIMIT ' . (int)$perPage . ' OFFSET ' . (int)$offset
+            );
+            $statement->execute($params);
+            $items = $statement->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            if ($items !== []) {
+                $stage = 'conceptos';
+                $ids = array_map(static fn(array $row): int => (int)$row['id_orden'], $items);
+                $placeholders = implode(',', array_fill(0, count($ids), '?'));
+                $concepts = $db->prepare(
+                    'SELECT id_orden, producto_nombre, cantidad FROM ventas_orden_items'
+                    . ' WHERE id_orden IN (' . $placeholders . ') ORDER BY id_orden, id_item'
+                );
+                $concepts->execute($ids);
+                $counts = [];
+                $details = [];
+                while ($concept = $concepts->fetch(PDO::FETCH_ASSOC)) {
+                    $id = (int)$concept['id_orden'];
+                    $counts[$id] = ($counts[$id] ?? 0) + 1;
+                    if ($concept['producto_nombre'] !== null && $concept['cantidad'] !== null) {
+                        $details[$id][] = (string)$concept['producto_nombre'] . ' x' . (string)$concept['cantidad'];
+                    }
+                }
+                foreach ($items as &$item) {
+                    $id = (int)$item['id_orden'];
+                    $item['cantidad_items'] = $counts[$id] ?? 0;
+                    $item['detalle_items'] = isset($details[$id]) ? implode(' · ', $details[$id]) : null;
+                }
+                unset($item);
+            }
+
+            $stage = 'respuesta';
+            api_success([
+                'items' => $items,
+                'paginacion' => [
+                    'pagina' => $page,
+                    'por_pagina' => $perPage,
+                    'total' => $total,
+                    'total_paginas' => (int)ceil($total / $perPage),
+                ],
+            ]);
+        } catch (Throwable $error) {
+            // No publicamos detalles de SQL/servidor ni credenciales al navegador.
+            // La etapa permite localizar la consulta problemática si Hostinger
+            // difiere del dump compartido, incluso con APP_DEBUG=false.
+            error_log('[Cooperadora V2][ventas_ordenes_listar][' . $stage . '] ' . $error->__toString());
+            api_error(
+                'No se pudo cargar el listado de ventas (etapa: ' . $stage . ').',
+                'VENTAS_LISTAR_ERROR',
+                500
+            );
         }
-        if($retreat==='pendiente')$where[]="o.estado='aprobada' AND o.retirado=0"; elseif($retreat==='retirado')$where[]="o.estado='aprobada' AND o.retirado=1";
-        if($origin!=='' && !in_array($origin,['manual','bot_whatsapp','importado'],true)) api_error('Filtro de origen inválido.','VALIDATION_ERROR');
-        if($origin!==''){$where[]='o.origen=?';$params[]=$origin;}
-        if($month!==''){
-            if(!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/',$month)) api_error('Filtro de mes inválido.','VALIDATION_ERROR');
-            $where[]="DATE_FORMAT(COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en),'%Y-%m')=?";$params[]=$month;
-        }
-        if($search!==''){
-            $filter=build_search_filter($search,['o.codigo_orden LIKE {param}','vp.dni LIKE {param}','vp.nombre_apellido LIKE {param}','c.nombre LIKE {param}','o.referencia_pago LIKE {param}','o.observacion LIKE {param}'],160,null);
-            $where[]=$filter['sql'];$params=array_merge($params,$filter['params']);
-        }
-        $whereSql=implode(' AND ',$where);
-        $count=$db->prepare("SELECT COUNT(*) FROM ventas_ordenes o INNER JOIN ventas_campanias c ON c.id_campania=o.id_campania LEFT JOIN ventas_personas vp ON vp.id_persona=o.id_venta_persona WHERE {$whereSql}");
-        $count->execute($params);$total=(int)$count->fetchColumn();
-        $statement=$db->prepare("SELECT o.*,c.nombre AS campania_nombre,vp.dni,vp.nombre_apellido,a.telefono,mp.medio_pago,
-                    COALESCE(o.fecha_venta,DATE(o.aprobado_en),DATE(o.creado_en)) AS fecha_venta,
-                    (SELECT COUNT(*) FROM ventas_orden_items i WHERE i.id_orden=o.id_orden) AS cantidad_items,
-                    (SELECT GROUP_CONCAT(CONCAT(i.producto_nombre,' x',i.cantidad) ORDER BY i.id_item SEPARATOR ' · ') FROM ventas_orden_items i WHERE i.id_orden=o.id_orden) AS detalle_items
-               FROM ventas_ordenes o
-               INNER JOIN ventas_campanias c ON c.id_campania=o.id_campania
-               LEFT JOIN ventas_personas vp ON vp.id_persona=o.id_venta_persona
-               LEFT JOIN alumnos a ON a.id_alumno=vp.id_alumno
-               INNER JOIN medio_pago mp ON mp.id_medio_pago=o.id_medio_pago
-              WHERE {$whereSql}
-              ORDER BY COALESCE(o.fecha_venta,DATE(o.aprobado_en),DATE(o.creado_en)) DESC,o.id_orden DESC
-              LIMIT {$perPage} OFFSET {$offset}");
-        $statement->execute($params);
-        api_success(['items'=>$statement->fetchAll(PDO::FETCH_ASSOC)?:[],'paginacion'=>['pagina'=>$page,'por_pagina'=>$perPage,'total'=>$total,'total_paginas'=>(int)ceil($total/$perPage)]]);
     }
 
     public static function detalleOrden(): never
@@ -543,6 +679,7 @@ trait VentasOrdenes
                 api_error('Agregá un concepto válido o liquidá una ganancia por objetivo pendiente.', 'VALIDATION_ERROR');
             }
             $finalTotal=round((float)$itemsTotal+$objectiveGain,2);
+            /** @disregard P1012 */
             if($finalTotal<=0 || $finalTotal>self::MONEY_MAX) api_error('El total final de la venta no es válido.','VALIDATION_ERROR');
             $total=number_format($finalTotal,2,'.','');
             $objectiveGainDb=number_format($objectiveGain,2,'.','');

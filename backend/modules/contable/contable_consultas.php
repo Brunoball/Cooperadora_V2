@@ -3,6 +3,19 @@ declare(strict_types=1);
 
 trait ContableConsultas
 {
+    /**
+     * Contrato de composición: estos métodos ya existen en la clase
+     * o en otro trait del módulo. No agrega lógica ni los reemplaza.
+     * Facilita su resolución a los analizadores estáticos (Intelephense).
+     */
+    abstract protected static function aCentavos(mixed $value): int;
+    abstract protected static function filtroAnio(mixed $value): int;
+    abstract protected static function filtroMes(mixed $value, bool $required = true): ?int;
+    abstract protected static function idOpcional(mixed $value, string $label): ?int;
+    abstract protected static function importeDesdeCentavos(int $cents): float;
+    abstract protected static function nombreArchivoDesdeUrl(?string $url): string;
+    abstract protected static function nombreMes(int $month): string;
+
     protected static function resumenDatos(PDO $db, int $year, int $month, ?int $mean = null): array
     {
         $payments = array_fill(1, 12, ['cuotas' => 0, 'matriculas' => 0]);
@@ -20,6 +33,7 @@ trait ContableConsultas
              WHERE p.estado = \'pagado\' AND YEAR(p.fecha_pago) = ?' . $paymentMeanSql . '
              GROUP BY MONTH(p.fecha_pago)'
         );
+        /** @disregard P1012 */
         $paymentParams = [self::MES_MATRICULA, self::MES_MATRICULA, $year];
         if ($mean !== null) $paymentParams[] = $mean;
         $statement->execute($paymentParams);
@@ -151,6 +165,7 @@ trait ContableConsultas
              WHERE p.estado = \'pagado\' AND p.fecha_pago BETWEEN ? AND ?' . $paymentMeanSql . '
              GROUP BY 1'
         );
+        /** @disregard P1012 */
         $paymentParams = [self::MES_MATRICULA, $from, $to];
         if ($mean !== null) $paymentParams[] = $mean;
         $payment->execute($paymentParams);

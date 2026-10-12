@@ -206,7 +206,7 @@ test.describe("Ventas - cobertura extendida", () => {
 
   test("menu activo público refleja campaña visible", async ({ request }) => {
     const f = await salesFixture(request, { active: true, visible: true });
-    const menu = await ok(request, "ventas_menu_activo");
+    const menu = await ok(request, "ventas_menu_activo", { token: f.t });
     expect(menu.mostrar_opcion_menu).toBe(true);
     expect(Number(menu.campania_activa.id_campania)).toBe(Number(f.campaign.id_campania));
   });

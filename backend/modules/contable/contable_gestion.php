@@ -3,6 +3,20 @@ declare(strict_types=1);
 
 trait ContableGestion
 {
+    /**
+     * Contrato de composición: estos métodos ya existen en la clase
+     * o en otro trait del módulo. No agrega lógica ni los reemplaza.
+     * Facilita su resolución a los analizadores estáticos (Intelephense).
+     */
+    abstract protected static function borrarArchivoFisico(?string $path): void;
+    abstract protected static function guardarArchivoEgreso(array $auth): ?array;
+    abstract protected static function idOpcional(mixed $value, string $label): ?int;
+    abstract protected static function medioPago(PDO $db, int $id): array;
+    abstract protected static function opcion(PDO $db, int $id, string $expectedType): array;
+    abstract protected static function opcionMeta(string $type): array;
+    abstract protected static function tipoOpcion(mixed $value): string;
+    abstract protected static function validUploadPath(string $path): bool;
+
     protected static function guardarOpcionDatos(array $auth, array $body): array
     {
         $db = $auth['db'];

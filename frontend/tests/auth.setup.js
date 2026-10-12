@@ -1,18 +1,85 @@
 const fs = require("fs");
 const path = require("path");
 const { request } = require("@playwright/test");
-const { loadTestEnv } = require("./helpers/env.helper");
-const { ok, login, coverageFile } = require("./helpers/api.helper");
+const { loadTestEnv, verifyPreRunSafety } = require("./helpers/env.helper");
+const { ok, login, coverageFile, apiFetch } = require("./helpers/api.helper");
+const { beginAttempt, armCurrentRun } = require("./helpers/setup-guard.helper");
+const { recoverPreviousRun } = require("./helpers/recovery.helper");
 
 module.exports = async function globalSetup() {
-  const env = loadTestEnv();
+  const env = verifyPreRunSafety(loadTestEnv());
   fs.mkdirSync(path.dirname(env.authFile), { recursive: true });
-  try { fs.unlinkSync(coverageFile()); } catch {}
-
+  beginAttempt(env);
+  // Playwright puede ejecutar globalTeardown incluso si falla globalSetup.
+  // Nunca borrar el marcador de la sesión anterior antes de validarla.
   const api = await request.newContext({ ignoreHTTPSErrors: false });
+  let bootstrapToken = null;
+  let setupCompleted = false;
+  let remotePreflightPassed = false;
+  let auditBaselineToken = null;
   try {
-    const bootstrap = await login(api, env.username, env.password, "PW-COOP-E2E-BOOTSTRAP");
-    const bootstrapToken = bootstrap.token;
+    await recoverPreviousRun(api, env);
+    try { fs.unlinkSync(coverageFile()); } catch {}
+    if (env.isLocal) {
+      const probe = await apiFetch(api, "e2e_preflight_local");
+      if (probe.status !== 200 || !probe.body?.exito || Number(probe.body?.datos?.residuos_e2e) !== 0) {
+        throw new Error(`PREFLIGHT LOCAL BLOQUEADO: hay registros E2E anteriores o falta el backend actualizado. HTTP=${probe.status}. No se borró nada.`);
+      }
+    }
+    if (env.productionE2E) {
+      // SIN login ni auditoría de nueva sesión. Si había cualquier E2E
+      // anterior abortar en vez de borrar/modificar una sola fila ajena.
+      const probe = await apiFetch(api, "e2e_preflight_produccion", {
+        headers: { "X-COOPERADORA-E2E-CHECK": env.preflightKey },
+      });
+      if (probe.status !== 200 || !probe.body?.exito ||
+          probe.body?.datos?.app_env !== "production" ||
+          !String(probe.body?.datos?.base_datos || "").toLowerCase().endsWith("cooperadora_v2") ||
+          Number(probe.body?.datos?.residuos_e2e) !== 0) {
+        // No confundir registros E2E preexistentes con una clave incorrecta.
+        // El backend devuelve únicamente conteos por tipo, nunca datos personales.
+        const codigo = probe.body?.codigo || "sin código";
+        const counts = probe.body?.detalles?.conteos;
+        const resumen = counts && typeof counts === "object"
+          ? Object.entries(counts)
+              .filter(([, cantidad]) => Number(cantidad) > 0)
+              .map(([tabla, cantidad]) => `${tabla}: ${cantidad}`)
+              .join(", ")
+          : "";
+        if (codigo === "E2E_PREEXISTENTES") {
+          throw new Error(
+            "Hostinger aceptó la clave, pero existen registros E2E anteriores. " +
+            (resumen ? `Detectados: ${resumen}. ` : "Actualizá el PHP para obtener el desglose. ") +
+            "No se borraron registros ni se ejecutó ningún CRUD de prueba."
+          );
+        }
+        throw new Error(
+          `PREFLIGHT PRODUCCIÓN BLOQUEADO: HTTP=${probe.status}, código=${codigo}. ` +
+          "Revisá el entorno, la clave y el backend; no se ejecutó ningún CRUD de prueba."
+        );
+      }
+      auditBaselineToken = String(probe.body?.datos?.audit_baseline_token || "");
+      if (!auditBaselineToken) {
+        throw new Error("El preflight respondió sin marca firmada de auditoría. Actualizá testing_safety.php antes de continuar.");
+      }
+      remotePreflightPassed = true;
+    }
+    if (env.isolatedRemote) {
+      // Sin login, sesiones ni ninguna escritura: aborta antes de crear un solo
+      // registro si NO es la instancia de prueba con su DB exclusiva.
+      const probe = await apiFetch(api, "e2e_preflight_aislado", {
+        headers: { "X-COOPERADORA-E2E-CHECK": env.preflightKey },
+      });
+      if (probe.status !== 200 || !probe.body?.exito ||
+          probe.body?.datos?.app_env !== "testing" ||
+          probe.body?.datos?.base_datos !== env.remoteDbName ||
+          Number(probe.body?.datos?.residuos_e2e) !== 0) {
+        throw new Error("PREFLIGHT E2E BLOQUEADO: comprobar APP_ENV=testing, DB exclusiva terminada en _e2e y cero registros E2E anteriores. No se modificó ningún dato.");
+      }
+    }
+    const bootstrap = await login(api, env.username, env.password,
+      env.allowRemoteWrites ? "PW-COOP-E2E-BOOTSTRAP-RUN" : "PW-COOP-E2E-BOOTSTRAP");
+    bootstrapToken = bootstrap.token;
 
     // Hostinger queda en lectura/smoke salvo habilitación explícita.
     if (!env.isLocal && !env.allowRemoteWrites) {
@@ -29,6 +96,8 @@ module.exports = async function globalSetup() {
           organizacion: bootstrap.organizacion,
         },
       }, null, 2), "utf8");
+      armCurrentRun(env);
+      setupCompleted = true;
       return;
     }
 
@@ -43,12 +112,8 @@ module.exports = async function globalSetup() {
       }
     }
 
-    // Borra sólo el namespace E2E de ejecuciones locales interrumpidas.
-    await ok(api, "e2e_cleanup", {
-      token: bootstrapToken,
-      method: "POST",
-      data: { confirmacion: "LIMPIAR_PLAYWRIGHT" },
-    });
+    // Nunca limpiar residuos de corridas previas. Ambos preflights, local y
+    // Hostinger, rechazan restos antes de iniciar una nueva corrida.
 
     const stamp = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const runnerUsername = `pw_e2e_${stamp}`.slice(0, 60);
@@ -72,13 +137,17 @@ module.exports = async function globalSetup() {
     // La huella se calcula con la sesión bootstrap. El backend excluye de la
     // huella esa PK exacta y todo el namespace PW E2E, por lo que representa
     // únicamente datos reales.
-    const integrity = await ok(api, "e2e_integridad", { token: bootstrapToken });
+    const integrity = await ok(api, "e2e_integridad", { token: bootstrapToken,
+      headers: auditBaselineToken ? { "X-COOPERADORA-E2E-BASELINE": auditBaselineToken } : {},
+    });
 
     fs.writeFileSync(env.authFile, JSON.stringify({
       createdAt: new Date().toISOString(),
+      runnerPid: process.pid,
       target: env.target,
       readOnly: false,
       bootstrapToken,
+      auditBaselineToken,
       baselineHash: integrity.datos?.sha256 || null,
       baselineTables: integrity.datos?.tablas || {},
       runner: { usuario: runnerUsername, contrasena: runnerPassword },
@@ -89,7 +158,38 @@ module.exports = async function globalSetup() {
         organizacion: runner.organizacion,
       },
     }, null, 2), "utf8");
+    armCurrentRun(env);
+    setupCompleted = true;
+  } catch (error) {
+    if (!setupCompleted && (env.isLocal || remotePreflightPassed) && bootstrapToken) {
+      // Una falla tras crear el runner no debe dejar basura sin intento de
+      // limpieza. El preflight garantizó cero E2E previos al inicio.
+      try {
+        const headers = {
+          ...(env.productionE2E ? { "X-COOPERADORA-E2E-CHECK": env.preflightKey } : {}),
+          ...(auditBaselineToken ? { "X-COOPERADORA-E2E-BASELINE": auditBaselineToken } : {}),
+        };
+        await ok(api, "e2e_cleanup", {
+          token: bootstrapToken, method: "POST", headers,
+          data: { confirmacion: "LIMPIAR_PLAYWRIGHT", cerrar_sesion_actual: false },
+        });
+        const residues = await ok(api, "e2e_residuos", { token: bootstrapToken, headers });
+        if (Number(residues.datos?.total) !== 0) {
+          throw new Error(`Setup dejó residuos E2E: ${JSON.stringify(residues.datos?.conteos || {})}`);
+        }
+        await ok(api, "e2e_cleanup", {
+          token: bootstrapToken, method: "POST", headers,
+          data: { confirmacion: "LIMPIAR_PLAYWRIGHT", cerrar_sesion_actual: true },
+        });
+      } catch (cleanupError) {
+        throw new Error(`Falló setup y también la limpieza E2E. Revisá los residuos manualmente antes de repetir: ${cleanupError.message}`, { cause: error });
+      }
+    }
+    throw error;
   } finally {
+    if (!setupCompleted && bootstrapToken) {
+      try { await apiFetch(api, "auth_logout", { token: bootstrapToken, method: "POST" }); } catch {}
+    }
     await api.dispose();
   }
 };

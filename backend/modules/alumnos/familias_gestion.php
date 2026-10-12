@@ -3,6 +3,13 @@ declare(strict_types=1);
 
 trait FamiliasGestion
 {
+    /**
+     * Contrato de composición: estos métodos ya existen en la clase
+     * o en otro trait del módulo. No agrega lógica ni los reemplaza.
+     * Facilita su resolución a los analizadores estáticos (Intelephense).
+     */
+    abstract private static function obtenerDatos(PDO $db, int $id): array;
+
     private static function guardarDatos(array $auth, array $body): array
     {
         $db = $auth['db'];

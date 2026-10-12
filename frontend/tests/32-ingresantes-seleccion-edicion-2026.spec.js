@@ -85,9 +85,17 @@ test("Ciclo vigente: seleccionar tocando la fila funciona sin checkbox y sin pin
   await expect(row).toContainText("Seleccionado");
   await expect(page.getByRole("button", { name: /pasar a alumnos \(1\)/i })).toBeEnabled();
   await page.mouse.move(0, 0);
-  const after = await visibleRowBackground(row);
-  const maxChannelDifference = Math.max(...after.map((channel, index) => Math.abs(channel - before[index])));
-  expect(maxChannelDifference, `La selección no debe pintar la fila de azul: antes=${before}, después=${after}`).toBeLessThanOrEqual(5);
+  // El hover global anima el fondo durante 160 ms. Después de mover el
+  // mouse fuera de la fila, esperamos a que termine la transición antes
+  // de comparar: el estado seleccionado no debe dejar un fondo azulado.
+  await expect.poll(async () => {
+    const after = await visibleRowBackground(row);
+    return Math.max(...after.map((channel, index) => Math.abs(channel - before[index])));
+  }, {
+    message: `La selección no debe pintar la fila de azul (fondo inicial: ${before.join(",")})`,
+    timeout: 4_000,
+    intervals: [100, 150, 250],
+  }).toBeLessThanOrEqual(5);
   await row.getByText(incoming.num_documento).click();
   await expect(row).toHaveAttribute("aria-selected", "false");
   await expect(row).not.toContainText("Seleccionado");

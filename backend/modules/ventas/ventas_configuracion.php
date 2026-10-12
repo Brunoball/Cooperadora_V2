@@ -280,12 +280,26 @@ trait VentasConfiguracion
     public static function menuActivo(): never
     {
         $db=app_db();
+        // El menú público (WhatsApp/usuarios reales) NUNCA presenta campañas
+        // PW E2E; las pruebas con Bearer de su usuario runner ven solo E2E.
+        $testMenu = false;
+        if (function_exists('e2e_request_header_active') && e2e_request_header_active()) {
+            $credentials = request_auth_credentials();
+            if (($credentials['source'] ?? '') === 'bearer' && ($credentials['token'] ?? '') !== '') {
+                $current = require_auth();
+                $testMenu = str_starts_with(strtolower((string)($current['usuario'] ?? '')), 'pw_e2e_');
+            }
+        }
+        $campaignScope = $testMenu
+            ? " AND UPPER(c.nombre) LIKE 'PW E2E VTA CAMP %'"
+            : " AND UPPER(c.nombre) NOT LIKE 'PW E2E VTA CAMP %'";
         $row=self::fetchOne($db,"SELECT c.id_campania,c.nombre,c.tipo_persona,c.pregunta_persona,c.mensaje_inicio,c.mensaje_aprobado,c.fecha_inicio,c.fecha_fin,
                    c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
                    p.id_producto,p.nombre AS producto_nombre,p.descripcion AS producto_descripcion,p.precio_anticipada,p.precio_puerta,p.stock
               FROM ventas_campanias c INNER JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
              WHERE c.activo=1 AND c.visible_menu=1 AND p.activo=1
                AND (c.fecha_inicio IS NULL OR c.fecha_inicio<=CURDATE()) AND (c.fecha_fin IS NULL OR c.fecha_fin>=CURDATE())
+               {$campaignScope}
              ORDER BY c.id_campania DESC LIMIT 1");
         if(!$row)api_success(['mostrar_opcion_menu'=>false,'campania_activa'=>null,'campanias'=>[]]);
         $campaign=[

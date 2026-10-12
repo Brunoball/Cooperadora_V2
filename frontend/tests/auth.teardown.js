@@ -2,10 +2,16 @@ const fs = require("fs");
 const { request } = require("@playwright/test");
 const { loadTestEnv } = require("./helpers/env.helper");
 const { ok, logout, coverageFile } = require("./helpers/api.helper");
+const { claimCurrentRun, endAttempt } = require("./helpers/setup-guard.helper");
 
 module.exports = async function globalTeardown() {
   const env = loadTestEnv();
-  if (!fs.existsSync(env.authFile)) return;
+  // Un globalSetup abortado no puede habilitar la limpieza de una corrida vieja.
+  // Sin marcador valido para esta ejecucion, no se abre ninguna conexion HTTP.
+  let claimed = false;
+  try { claimed = claimCurrentRun(env); }
+  finally { if (!claimed) endAttempt(env); }
+  if (!claimed) return;
 
   const state = JSON.parse(fs.readFileSync(env.authFile, "utf8"));
   const api = await request.newContext();
@@ -31,6 +37,7 @@ module.exports = async function globalTeardown() {
       const cleaned = await ok(api, "e2e_cleanup", {
         token: state.bootstrapToken,
         method: "POST",
+        headers: env.productionE2E ? { "X-COOPERADORA-E2E-CHECK": env.preflightKey } : {},
         data: { confirmacion: "LIMPIAR_PLAYWRIGHT", cerrar_sesion_actual: false },
       });
 
@@ -72,6 +79,7 @@ module.exports = async function globalTeardown() {
       await ok(api, "e2e_cleanup", {
         token: state.bootstrapToken,
         method: "POST",
+        headers: env.productionE2E ? { "X-COOPERADORA-E2E-CHECK": env.preflightKey } : {},
         data: { confirmacion: "LIMPIAR_PLAYWRIGHT", cerrar_sesion_actual: true },
       });
     }
@@ -79,8 +87,13 @@ module.exports = async function globalTeardown() {
     if (!finalError) finalError = error;
   } finally {
     await api.dispose();
-    try { fs.unlinkSync(env.authFile); } catch {}
+    // Si la limpieza falla en remoto conservar credenciales/huella para
+    // diagnóstico supervisado, nunca ejecutar limpieza masiva automática.
+    if (!finalError) {
+      try { fs.unlinkSync(env.authFile); } catch {}
+    }
     try { fs.unlinkSync(coverageFile()); } catch {}
+    endAttempt(env);
   }
 
   if (finalError) throw finalError;

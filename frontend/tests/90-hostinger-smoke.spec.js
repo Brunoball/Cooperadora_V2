@@ -5,7 +5,7 @@ const { token, authenticatePage } = require("./helpers/auth.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
 
 const env = loadTestEnv();
-test.describe("Hostinger — lectura regulada y sin mutaciones de negocio", () => {
+test.describe("Hostinger — disponibilidad y lecturas autenticadas", () => {
   test.skip(env.isLocal, "Esta suite se reserva para PW_TARGET=hostinger.");
 
   test("health y autorización HTTP", async ({ request }) => {
@@ -17,7 +17,7 @@ test.describe("Hostinger — lectura regulada y sin mutaciones de negocio", () =
 
   test("sesión remota de pruebas", async ({ request }) => {
     const current = await ok(request, "auth_usuario_actual", { token: token() });
-    expect(current.usuario?.usuario).toBe(env.username);
+    expect(current.usuario?.usuario).toBe(env.allowRemoteWrites ? require("./helpers/auth.helper").authState().runner?.usuario : env.username);
   });
 
   const reads = [

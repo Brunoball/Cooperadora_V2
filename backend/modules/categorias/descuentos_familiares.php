@@ -8,6 +8,14 @@ declare(strict_types=1);
  */
 trait DescuentosFamiliaresGestion
 {
+    /**
+     * Contrato de composición: estos métodos ya existen en la clase
+     * o en otro trait del módulo. No agrega lógica ni los reemplaza.
+     * Facilita su resolución a los analizadores estáticos (Intelephense).
+     */
+    abstract private static function categoriaDetalle(PDO $db, int $id, bool $lock = false): ?array;
+    abstract private static function reglaHermanosDetalle(PDO $db, int $id, bool $lock = false): ?array;
+
     private static function guardarHermanosDatos(array $auth, array $body): array
     {
         $db = $auth['db'];

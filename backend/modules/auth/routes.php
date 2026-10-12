@@ -179,7 +179,15 @@ function auth_login(): never
         api_error('El usuario se encuentra deshabilitado.', 'USER_DISABLED', 403);
     }
 
-    auth_upgrade_password_if_needed($db, $user, $password);
+    // Una sesión del runner E2E sobre un administrador preexistente no debe
+    // modificar su hash (rehash automático) por efecto del propio testing.
+    // El login productivo normal mantiene intacta su política de upgrades.
+    $e2eExistingAccount = function_exists('e2e_request_header_active')
+        && e2e_request_header_active()
+        && !str_starts_with(strtolower((string)$user['usuario']), 'pw_e2e_');
+    if (!$e2eExistingAccount) {
+        auth_upgrade_password_if_needed($db, $user, $password);
+    }
 
     $hours = max(1, min(168, (int)env_value('SESSION_HOURS', '12')));
     $expiresAt = (new DateTimeImmutable())->modify("+{$hours} hours");

@@ -1,6 +1,7 @@
 const { test, expect } = require("./helpers/playwright.helper");
 const { apiFetch, ok } = require("./helpers/api.helper");
 const { token } = require("./helpers/auth.helper");
+const { loadTestEnv } = require("./helpers/env.helper");
 
 test.describe("Contratos y seguridad", () => {
   test("health identifica Cooperadora V2", async ({ request }) => {
@@ -22,6 +23,46 @@ test.describe("Contratos y seguridad", () => {
     });
     expect(r.status).toBe(409);
     expect(r.body.codigo).toBe("E2E_SCOPE_BLOCKED");
+  });
+
+  test("preflight E2E remoto permanece bloqueado en local", async ({ request }) => {
+    // En Hostinger E2E esta acción se valida ANTES del login (auth.setup.js).
+    // En local hay que comprobar que sea fail-closed y registrar su respuesta HTTP.
+    // En hostinger se bloquea, y la preflight de producción ya se validó
+    // antes del login del runner. Se prueba aquí la denegación del aislado.
+    // En local también debe permanecer bloqueado como hasta ahora.
+
+    const response = await apiFetch(request, "e2e_preflight_aislado");
+    expect([403, 404]).toContain(response.status);
+    expect(response.body?.exito === true || response.body?.ok === true).toBe(false);
+  });
+
+  test("preflight local bloquea si ya existe un runner y no borra nada", async ({ request }) => {
+    const result = await apiFetch(request, "e2e_preflight_local");
+    if (loadTestEnv().isLocal) {
+      expect(result.status).toBe(409);
+      expect(result.body?.codigo).toBe("E2E_PREEXISTENTES");
+    } else {
+      expect(result.status).toBe(404);
+    }
+  });
+
+  test("preflight de producción no acepta claves arbitrarias", async ({ request }) => {
+    const result = await apiFetch(request, "e2e_preflight_produccion", {
+      headers: { "X-COOPERADORA-E2E-CHECK": "INVALIDA-NUNCA-ACEPTAR" },
+    });
+    expect([403, 404]).toContain(result.status);
+  });
+
+  test("cleanup E2E rechaza una confirmación inválida sin borrar registros", async ({ request }) => {
+    const result = await apiFetch(request, "e2e_cleanup", {
+      token: token(),
+      method: "POST",
+      data: { confirmacion: "INVALIDA_NO_LIMPIAR" },
+    });
+    // Local comprueba el texto de confirmación. Producción exige además
+    // la clave privada incluso para llegar a esa comprobación.
+    expect([403, 422]).toContain(result.status);
   });
 
   test("Playwright no puede modificar un usuario real", async ({ request }) => {

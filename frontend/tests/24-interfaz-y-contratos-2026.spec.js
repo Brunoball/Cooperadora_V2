@@ -107,6 +107,12 @@ test('interfaz: nueva venta selecciona por defecto la campaña activa, si existe
   await page.goto('/ventas/registradas');
   await page.getByRole('button', { name: /nueva venta/i }).first().click();
   const campaignSelect = page.locator('.ventas-order-modal select[required]').first();
-  await expect(campaignSelect).toHaveValue(String(active.id_campania));
+  if (env.productionE2E && !/^PW E2E VTA CAMP /i.test(String(active.nombre || ''))) {
+    // La campaña real debe estar aislada del usuario PW E2E: no seleccionarla
+    // automáticamente para evitar afectar una venta productiva por accidente.
+    await expect(campaignSelect).not.toHaveValue(String(active.id_campania));
+  } else {
+    await expect(campaignSelect).toHaveValue(String(active.id_campania));
+  }
   await expect(page.getByText('Productos y conceptos').first()).toBeVisible();
 });

@@ -170,7 +170,7 @@ test('configuración: no acepta objetivo incompleto y conserva reglas de campañ
 
 test('campañas y menú WhatsApp: exponen objetivo y tipo comprador desde configuración', async ({ request }) => {
   const f = await fixture(request, { visible_menu: true });
-  const menu = await ok(request, 'ventas_menu_activo');
+  const menu = await ok(request, 'ventas_menu_activo', { token: f.t });
   expect(menu.mostrar_opcion_menu).toBe(true);
   expect(Number(menu.campania_activa.id_campania)).toBe(Number(f.campaign.id_campania));
   expect(menu.campania_activa.tipo_persona).toBe('comprador');
