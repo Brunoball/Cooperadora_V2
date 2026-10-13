@@ -52,7 +52,7 @@ test.describe("Cuotas", () => {
     expect(context).toBeTruthy();
   });
 
-  test("cobrador conserva bruto = neto + comisión incluso con monto $10", async ({ request }) => {
+  test("cobrador guarda bruto en pagos y comisión por separado incluso con monto $10", async ({ request }) => {
     const t = token();
     const catalogs = await baseCatalogs(request, t);
     const category = await createCategory(request, t, suffix());
@@ -60,7 +60,7 @@ test.describe("Cuotas", () => {
       category, catalogs, marker: suffix(), esCobrador: true,
     });
 
-    await ok(request, "cuotas_registrar_pago", {
+    const paid = await ok(request, "cuotas_registrar_pago", {
       token: t,
       method: "POST",
       data: {
@@ -72,6 +72,10 @@ test.describe("Cuotas", () => {
         monto_libre: 10,
       },
     });
+    expect(Number(paid.items[0].monto_pago_es_bruto)).toBe(1);
+    expect(Number(paid.items[0].monto_pago)).toBe(10);
+    expect(Number(paid.monto_comision_cobrador)).toBe(2);
+    expect(Number(paid.monto_neto_cooperadora)).toBe(8);
 
     const list = await ok(request, "cuotas_listar", {
       token: t,
@@ -80,7 +84,8 @@ test.describe("Cuotas", () => {
     const row = (list.items || []).find((x) => Number(x.id_alumno) === Number(student.id_alumno));
     expect(row).toBeTruthy();
     expect(Number(row.monto_bruto_pago)).toBeCloseTo(10, 2);
-    expect(Number(row.monto) + Number(row.monto_comision_cobrador)).toBeCloseTo(10, 2);
+    expect(Number(row.monto)).toBeCloseTo(10, 2);
+    expect(Number(row.monto_comision_cobrador)).toBeCloseTo(2, 2);
   });
 
   test("no permite cobrar dos veces el mismo período", async ({ request }) => {

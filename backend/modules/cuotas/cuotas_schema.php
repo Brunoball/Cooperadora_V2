@@ -41,7 +41,7 @@ function ensure_cuotas_schema(PDO $db): void
         'meses_historial' => ['id_hist', 'id_mes', 'monto_anterior', 'monto_nuevo', 'fecha_cambio'],
         'pagos' => [
             'id_pago', 'id_alumno', 'id_mes', 'anio_aplicado', 'fecha_pago',
-            'estado', 'monto_base', 'monto_pago', 'id_medio_pago', 'tipo_pago',
+            'estado', 'monto_base', 'monto_pago', 'monto_pago_es_bruto', 'id_medio_pago', 'tipo_pago',
             'porcentaje_descuento_familiar',
         ],
         'medio_pago' => ['id_medio_pago', 'medio_pago'],

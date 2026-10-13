@@ -22,8 +22,8 @@ trait ContableConsultas
         $paymentMeanSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(p.fecha_pago) AS mes,
-                    SUM(CASE WHEN p.id_mes = ? THEN COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(com.comision, 0) ELSE 0 END) AS matriculas,
-                    SUM(CASE WHEN p.id_mes <> ? THEN COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(com.comision, 0) ELSE 0 END) AS cuotas
+                    SUM(CASE WHEN p.id_mes = ? THEN COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END ELSE 0 END) AS matriculas,
+                    SUM(CASE WHEN p.id_mes <> ? THEN COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END ELSE 0 END) AS cuotas
              FROM pagos p
              LEFT JOIN (
                  SELECT id_pago_origen, SUM(importe) AS comision
@@ -154,7 +154,7 @@ trait ContableConsultas
         $paymentMeanSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
         $payment = $db->prepare(
             'SELECT CASE WHEN p.id_mes = ? THEN \'MATRÍCULA\' ELSE COALESCE(cm.nombre_categoria, \'CUOTAS\') END AS nombre,
-                    SUM(COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(com.comision, 0)) AS total
+                    SUM(COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END) AS total
              FROM pagos p
              LEFT JOIN alumnos a ON a.id_alumno = p.id_alumno
              LEFT JOIN categoria_monto cm ON cm.id_cat_monto = a.id_cat_monto
@@ -223,7 +223,7 @@ trait ContableConsultas
         $means = $db->prepare(
             'SELECT nombre, SUM(total) AS total FROM (
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre,
-                       SUM(COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(com.comision, 0)) AS total
+                       SUM(COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END) AS total
                 FROM pagos p
                 LEFT JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
                 LEFT JOIN (

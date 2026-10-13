@@ -13,7 +13,7 @@ function ensure_contable_schema(PDO $db): void
 
     $probes = [
         'alumnos' => 'SELECT id_alumno, apellido, nombre, num_documento, id_cat_monto, es_cobrador, activo, eliminado, ingreso FROM alumnos LIMIT 0',
-        'pagos' => 'SELECT id_pago, id_alumno, id_mes, anio_aplicado, fecha_pago, estado, monto_base, monto_pago, id_medio_pago, tipo_pago FROM pagos LIMIT 0',
+        'pagos' => 'SELECT id_pago, id_alumno, id_mes, anio_aplicado, fecha_pago, estado, monto_base, monto_pago, monto_pago_es_bruto, id_medio_pago, tipo_pago FROM pagos LIMIT 0',
         'ingresantes' => 'SELECT id_ingresante, num_documento, ciclo_lectivo, estado, matricula_pagada, monto_matricula, id_medio_pago, fecha_pago_matricula, id_alumno_confirmado FROM ingresantes LIMIT 0',
         'meses' => 'SELECT id_mes, nombre, monto FROM meses LIMIT 0',
         'medio_pago' => 'SELECT id_medio_pago, medio_pago FROM medio_pago LIMIT 0',

@@ -15,6 +15,7 @@ import "./ModalPagoCuota.css";
 const PERIODOS_MENSUALES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
 const ANUAL = 13;
 const MATRICULA = 14;
+const COBRADOR_PORCENTAJE = 15;
 const MITAD_1 = 15;
 const MITAD_2 = 16;
 const H1_MONTHS = new Set([3, 4, 5, 6, 7]);
@@ -145,7 +146,13 @@ export default function ModalPagoCuota({
     return Array.from(all).sort((a, b) => Number(b) - Number(a));
   }, [catalogos?.anios, initialYear]);
 
-  const monthly = periods.filter((item) => PERIODOS_MENSUALES.has(Number(item.id_mes)));
+  // Los meses anteriores al ingreso no generan deuda ni muestran casilla;
+  // si existe un pago/condonación heredado, su casilla permanece visible.
+  const monthly = periods.filter((item) =>
+    PERIODOS_MENSUALES.has(Number(item.id_mes)) && !item.ocultar_por_ingreso);
+  const rangoMensual = monthly.length
+    ? `${monthly[0].nombre} a ${monthly[monthly.length - 1].nombre}`
+    : "Sin cuotas mensuales aplicables";
   const special = {
     anual: periodMap.get(ANUAL),
     mitad1: periodMap.get(MITAD_1),
@@ -207,26 +214,59 @@ export default function ModalPagoCuota({
     setSelected((current) => Array.from(new Set([...current, ...availableMonthly])));
   };
 
-  const operationTotal = condoning
-    ? 0
-    : selected.reduce((sum, id) => {
-        const period = periodMap.get(Number(id));
-        const applicableFamily = family
-          ? Math.max(1, Number(period?.cantidad_familia_aplicable || 1))
-          : 1;
-        // Debe coincidir con CuotasRegistros: cada período se distribuye
-        // al peso entre los integrantes (6.666,67 × 3 = $20.000).
-        const parcial = Math.round(Number(amounts[String(id)] || 0) * applicableFamily);
-        const usaTarifaFamiliar = Boolean(family && tarifaFamiliarActual && !freeMode
-          && PERIODOS_MENSUALES.has(Number(id))
-          && Number(period?.cantidad_familia_elegible || 0) === tarifaFamiliarActual.integrantes
-          && Math.abs(Number(amounts[String(id)] || 0) - tarifaFamiliarActual.importe) < 0.01);
-        if (usaTarifaFamiliar && applicableFamily > 1) {
-          const millar = Math.round(parcial / 1000) * 1000;
-          if (Math.abs(millar - parcial) <= Math.min(3, applicableFamily)) return sum + millar;
-        }
-        return sum + parcial;
-      }, 0);
+  // Vista previa por alumno y por período: la comisión se calcula sobre lo
+  // realmente cobrado a cada alumno marcado como cobrador, nunca sobre el total
+  // de toda la familia. El backend recalcula al confirmar dentro de la transacción.
+  const estimaciones = condoning ? [] : selected.map((periodId) => {
+    const period = periodMap.get(Number(periodId));
+    const amount = Math.max(0, Number(amounts[String(periodId)] || 0));
+    const principalId = Number(alumno?.id_alumno || alumno?.id_socio || context?.alumno?.id_alumno);
+    const roster = family && context?.familia?.tiene_familia
+      ? (context.familia.integrantes || []).filter((m) => m.activo)
+      : [{ id_alumno: principalId, es_cobrador: Boolean(context?.alumno?.es_cobrador ?? alumno?.es_cobrador) }];
+    // En las cuotas mensuales se excluyen hermanos que no habían ingresado.
+    const applicableIds = new Set((period?.ids_familia_aplicable || []).map(Number));
+    const targets = roster.filter((member) => {
+      const id = Number(member.id_alumno || member.id_socio);
+      if (family && PERIODOS_MENSUALES.has(Number(periodId)) && !applicableIds.has(id)) return false;
+      const state = String(member.periodos?.[periodId] || 'DEUDOR').toUpperCase();
+      return state === 'DEUDOR';
+    });
+    const useCurrentFamilyRate = Boolean(family && tarifaFamiliarActual && !freeMode
+      && PERIODOS_MENSUALES.has(Number(periodId))
+      && Number(period?.cantidad_familia_elegible || 0) === tarifaFamiliarActual.integrantes
+      && Math.abs(amount - tarifaFamiliarActual.importe) < 0.01);
+    const isFamilyDiscount = family && Boolean(period?.descuento_familiar_aplicado)
+      && (Math.abs(amount - Number(period?.monto_sugerido || 0)) < 0.005 || useCurrentFamilyRate);
+    const allocationIds = family
+      ? (isFamilyDiscount ? (period?.ids_familia_reparto || []) : (period?.ids_familia_aplicable || []))
+          .map(Number).sort((a, b) => a - b)
+      : [principalId];
+    const ids = allocationIds.length > 0 ? allocationIds : [principalId];
+    const adjustedAmount = period?.mitad_parcial && Number(periodId) === ANUAL ? amount / 2 : amount;
+    let totalGroup = Math.round(adjustedAmount * ids.length);
+    if (useCurrentFamilyRate && ids.length > 1) {
+      const roundedThousand = Math.round(totalGroup / 1000) * 1000;
+      if (Math.abs(roundedThousand - totalGroup) <= Math.min(3, ids.length)) totalGroup = roundedThousand;
+    }
+    const quotient = Math.floor(totalGroup / ids.length);
+    const remainder = totalGroup - quotient * ids.length;
+    const distributedAmounts = new Map(ids.map((id, index) => [id, quotient + (index < remainder ? 1 : 0)]));
+    const details = targets.map((member) => {
+      const id = Number(member.id_alumno || member.id_socio);
+      const gross = ids.length > 1 && distributedAmounts.has(id)
+        ? distributedAmounts.get(id) : Math.round(adjustedAmount);
+      const commission = member.es_cobrador ? Math.round(gross * COBRADOR_PORCENTAJE / 100) : 0;
+      return { gross, commission };
+    });
+    return {
+      id_mes: Number(periodId),
+      gross: details.reduce((sum, item) => sum + item.gross, 0),
+      commission: details.reduce((sum, item) => sum + item.commission, 0),
+    };
+  });
+  const operationTotal = estimaciones.reduce((sum, item) => sum + item.gross, 0);
+  const collectorTotal = estimaciones.reduce((sum, item) => sum + item.commission, 0);
 
   const applyFreeAmount = (raw) => {
     const normalized = amountInput(raw);
@@ -498,10 +538,18 @@ export default function ModalPagoCuota({
       wide
       modalClassName="cuotas-v2-payment-modal cuotas-modal--payment"
       footerStart={
-        <div className="cuotas-payment-footer-total">
-          <span>{condoning ? "Importe condonado" : "Total operación"}</span>
-          <small>{selected.length} período(s) seleccionado(s)</small>
-          <strong>{money(operationTotal)}</strong>
+        <div className="cuotas-v2-footer-totals">
+          <div className="cuotas-payment-footer-total">
+            <span>{condoning ? "Importe condonado" : "Total operación"}</span>
+            <small>{selected.length} período(s) seleccionado(s)</small>
+            <strong>{money(operationTotal)}</strong>
+          </div>
+          {!condoning && collectorTotal > 0 ? (
+            <div className="cuotas-v2-footer-collector-box" aria-label="Comisión del cobrador del 15 por ciento">
+              <span>15% para cobrador</span>
+              <strong>{money(collectorTotal)}</strong>
+            </div>
+          ) : null}
         </div>
       }
     >
@@ -555,7 +603,7 @@ export default function ModalPagoCuota({
               <header className="cuotas-v2-section__head">
                 <div>
                   <h3>Cuotas mensuales</h3>
-                  <p>{alumnoInterno ? "Marzo a noviembre. Los alumnos internos no abonan diciembre." : "Marzo a diciembre. Podés seleccionar varios meses en una sola operación."} {!condoning ? "Editá los importes desde la pestaña Montos de las cuotas." : ""}</p>
+                  <p>{alumnoInterno ? `${rangoMensual}. Los alumnos internos no abonan diciembre.` : `${rangoMensual}. Podés seleccionar varios meses en una sola operación.`} {!condoning ? "Editá los importes desde la pestaña Montos de las cuotas." : ""}</p>
                 </div>
                 <button type="button" className="mov-btn mov-btn--ghost" onClick={toggleAllMonthly} disabled={!availableMonthly.length}>
                   {allMonthlySelected ? "Quitar disponibles" : "Seleccionar disponibles"}

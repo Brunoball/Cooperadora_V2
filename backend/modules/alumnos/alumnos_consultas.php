@@ -101,10 +101,15 @@ trait AlumnosConsultas
 
         $payments = $db->prepare(
             'SELECT p.id_pago, p.id_mes, m.nombre AS mes, p.anio_aplicado, p.fecha_pago,
-                    p.estado, p.monto_base, p.monto_pago, p.tipo_pago, mp.medio_pago
+                    p.estado, p.monto_base,
+                    (COALESCE(p.monto_pago, p.monto_base, 0)
+                     + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(ec.comision, 0) END) AS monto_pago,
+                    p.tipo_pago, mp.medio_pago
              FROM pagos p
              LEFT JOIN meses m ON m.id_mes = p.id_mes
              LEFT JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
+             LEFT JOIN (SELECT id_pago_origen, SUM(importe) AS comision FROM egresos
+                        WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen) ec ON ec.id_pago_origen = p.id_pago
              WHERE p.id_alumno = ?
              ORDER BY p.anio_aplicado DESC, p.id_mes DESC, p.fecha_pago DESC, p.id_pago DESC
              LIMIT 36'
@@ -114,9 +119,15 @@ trait AlumnosConsultas
 
         $paymentSummary = $db->prepare(
             'SELECT COUNT(*) AS cantidad,
-                    COALESCE(SUM(CASE WHEN estado = \'pagado\' THEN monto_pago ELSE 0 END), 0) AS total_pagado,
-                    MAX(fecha_pago) AS ultimo_pago
-             FROM pagos WHERE id_alumno = ?'
+                    COALESCE(SUM(CASE WHEN p.estado = \'pagado\' THEN
+                        COALESCE(p.monto_pago, p.monto_base, 0)
+                        + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(ec.comision, 0) END
+                        ELSE 0 END), 0) AS total_pagado,
+                    MAX(p.fecha_pago) AS ultimo_pago
+             FROM pagos p
+             LEFT JOIN (SELECT id_pago_origen, SUM(importe) AS comision FROM egresos
+                        WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen) ec ON ec.id_pago_origen = p.id_pago
+             WHERE p.id_alumno = ?'
         );
         $paymentSummary->execute([$id]);
         $summary = $paymentSummary->fetch() ?: [];

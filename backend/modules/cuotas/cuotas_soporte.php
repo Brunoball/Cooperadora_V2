@@ -167,6 +167,18 @@ abstract class CuotasSoporte
         return sprintf('%04d-12-31', $year);
     }
 
+    /**
+     * Corte de pertenencia al padrón. Para una cuota mensual, cualquier día del
+     * mes de ingreso habilita ESE mes (incluido el 31). No se utiliza esta fecha
+     * para elegir los precios históricos, que siguen tomando el inicio del mes.
+     */
+    protected static function fechaCorteIngresoPeriodo(int $year, int $periodId): string
+    {
+        $reference = self::fechaReferenciaPeriodo($year, $periodId);
+        if (!self::esMensual($periodId)) return $reference;
+        return (new DateTimeImmutable($reference))->format('Y-m-t');
+    }
+
     protected static function alumnoElegible(array $student, int $periodId, int $year): bool
     {
         $entry = trim((string)($student['ingreso'] ?? ''));
@@ -174,15 +186,15 @@ abstract class CuotasSoporte
 
         try {
             $entryDate = new DateTimeImmutable($entry);
-            $reference = new DateTimeImmutable(self::fechaReferenciaPeriodo($year, $periodId));
+            $reference = new DateTimeImmutable(self::fechaCorteIngresoPeriodo($year, $periodId));
         } catch (Throwable) {
             // La columna ingreso es DATE NOT NULL. Si llegara un dato heredado inválido,
             // se conserva la compatibilidad y no se oculta un pago ya existente.
             return true;
         }
 
-        // Un alumno activo hoy no necesariamente pertenecía al padrón del período
-        // consultado. La elegibilidad se determina por su fecha real de ingreso.
+        // Un ingreso el 25/04 habilita abril, pero no marzo. La misma regla
+        // se reutiliza al listar deudores, validar cobros e imprimir cupones.
         return $entryDate <= $reference;
     }
 
@@ -486,11 +498,17 @@ abstract class CuotasSoporte
             &$familyDiscountByPeriod,
             &$familyMemberIdsByPeriod,
             &$familyTargetIdsByPeriod,
-            &$warnings
+            &$warnings,
+            $year
         ): ?array {
-            $periodFamilyCount = self::cantidadFamiliaEnFecha($db, $familyId, $date);
-            $memberIds = self::idsFamiliaEnFecha($db, $familyId, $date);
-            $targetIds = self::idsFamiliaActivaActualEnFecha($db, $familyId, $date);
+            // La pertenencia familiar del mes se mide al cierre de ese mes,
+            // sin desplazar la fecha histórica utilizada para los precios.
+            $familyDate = self::esMensual($periodId)
+                ? self::fechaCorteIngresoPeriodo($year, $periodId)
+                : $date;
+            $periodFamilyCount = self::cantidadFamiliaEnFecha($db, $familyId, $familyDate);
+            $memberIds = self::idsFamiliaEnFecha($db, $familyId, $familyDate);
+            $targetIds = self::idsFamiliaActivaActualEnFecha($db, $familyId, $familyDate);
             $rule = self::reglaHermanosParaFecha(
                 $db,
                 $category['id_cat_monto'],
@@ -688,6 +706,10 @@ abstract class CuotasSoporte
         }
         $realPeriodId = (int)$payment['id_mes'];
         $special = in_array($realPeriodId, [self::MES_ANUAL, self::MES_MITAD_1, self::MES_MITAD_2], true);
+        $commission = $db->prepare('SELECT COALESCE(SUM(importe), 0) FROM egresos WHERE id_pago_origen = ?');
+        $commission->execute([(int)$payment['id_pago']]);
+        $gross = (float)($payment['monto_pago'] ?? 0)
+            + ((int)($payment['monto_pago_es_bruto'] ?? 0) === 1 ? 0.0 : (float)$commission->fetchColumn());
         return [
             'id_pago' => (int)$payment['id_pago'],
             'id_mes_real' => $realPeriodId,
@@ -695,7 +717,7 @@ abstract class CuotasSoporte
             'anio_aplicado' => (int)$payment['anio_aplicado'],
             'fecha_pago' => (string)$payment['fecha_pago'],
             'estado' => strtoupper((string)$payment['estado']),
-            'monto' => (float)($payment['monto_pago'] ?? 0),
+            'monto' => $gross,
             'monto_base' => (float)($payment['monto_base'] ?? 0),
             'medio_pago' => (string)($payment['medio_pago'] ?? ''),
             'nombre_mes' => strtoupper((string)$payment['periodo']),
@@ -800,10 +822,12 @@ abstract class CuotasSoporte
         );
         $commissionStatement->execute([(int)$payment['id_pago']]);
         $commission = (float)$commissionStatement->fetchColumn();
-        $gross = (float)($payment['monto_pago'] ?? 0) + $commission;
+        // Datos heredados (bandera 0) guardaban neto; los nuevos guardan bruto.
+        $storedAmount = (float)($payment['monto_pago'] ?? 0);
+        $gross = $storedAmount + ((int)($payment['monto_pago_es_bruto'] ?? 0) === 1 ? 0.0 : $commission);
         $receipt['importe_total'] = $gross;
         $receipt['monto_total'] = $gross;
-        $receipt['monto_neto_cooperadora'] = (float)($payment['monto_pago'] ?? 0);
+        $receipt['monto_neto_cooperadora'] = round($gross - $commission, 2);
         $receipt['monto_comision_cobrador'] = $commission;
         $receipt['monto_base'] = (float)($payment['monto_base'] ?? 0);
         $receipt['medio_pago'] = (string)($payment['medio_pago'] ?? '');

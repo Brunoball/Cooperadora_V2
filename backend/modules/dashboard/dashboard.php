@@ -216,7 +216,7 @@ final class Dashboard
             "SELECT
                 COALESCE(SUM(
                     CASE WHEN p.estado = 'pagado'
-                         THEN COALESCE(p.monto_pago, p.monto_base, 0) + COALESCE(ec.comision, 0)
+                         THEN COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(ec.comision, 0) END
                          ELSE 0 END
                 ), 0) AS total,
                 SUM(p.estado = 'pagado') AS cobros,

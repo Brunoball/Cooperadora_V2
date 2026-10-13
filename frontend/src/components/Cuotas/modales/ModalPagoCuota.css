@@ -452,3 +452,46 @@ html[data-theme="oscuro"] .cuotas-v2-payment-modal .cuotas-v2-monthly-amount-row
     line-height: 1.2;
   }
 }
+
+/* Resumen de cobrador compacto, alineado con Total operación en el pie. */
+.cuotas-v2-footer-totals {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cuotas-v2-footer-collector-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 142px;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning-600, #a16207) 24%, var(--cuotas-pay-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning-600, #a16207) 5%, var(--cuotas-pay-surface));
+  font-variant-numeric: tabular-nums;
+}
+
+.cuotas-v2-footer-collector-box > span {
+  color: var(--entity-modal-text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+}
+
+.cuotas-v2-footer-collector-box > strong {
+  color: var(--entity-modal-ink);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .cuotas-v2-footer-totals { width: 100%; }
+  .cuotas-v2-footer-collector-box { min-width: 0; }
+}

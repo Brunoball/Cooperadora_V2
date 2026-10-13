@@ -74,6 +74,11 @@
   --amount-chip-tone: var(--primary-500);
 }
 
+.ct-student-amount-tag.is-collector {
+  --amount-chip-tone: var(--warning-600);
+  white-space: normal;
+}
+
 /* Las celdas permanecen centradas verticalmente aunque Monto tenga dos líneas. */
 .ct-student-grid.mov-gridTable--row > .mov-gridCell {
   align-self: stretch;

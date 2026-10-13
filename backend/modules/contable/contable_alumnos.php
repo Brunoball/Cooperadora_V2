@@ -88,7 +88,7 @@ trait ContableAlumnos
         $whereSql = implode(' AND ', $where);
         $listSql = <<<SQL
 SELECT p.id_pago, p.id_alumno, p.id_mes, p.anio_aplicado, p.fecha_pago,
-       p.monto_base, p.monto_pago, p.tipo_pago, p.id_medio_pago,
+       p.monto_base, p.monto_pago, p.monto_pago_es_bruto, p.tipo_pago, p.id_medio_pago,
        a.apellido, a.nombre, a.num_documento, a.id_familia,
        cm.id_cat_monto, cm.nombre_categoria AS categoria,
        cm.monto_mensual AS categoria_monto_mensual,
@@ -123,7 +123,7 @@ SQL;
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $gross = round(
                 (float)($row['monto_pago'] ?? $row['monto_base'] ?? 0)
-                + (float)$row['comision'],
+                + ((int)($row['monto_pago_es_bruto'] ?? 0) === 1 ? 0.0 : (float)$row['comision']),
                 2
             );
             $rawRows[] = [
@@ -208,6 +208,8 @@ SQL;
                     'medio' => (string)$row['medio'],
                     'monto' => (float)$entry['monto'],
                     'etiqueta_monto' => '',
+                    'etiqueta_cobrador' => '',
+                    'comision_cobrador' => 0.0,
                     'ajuste_monto' => 'NORMAL',
                     'es_ingresante' => true,
                 ];
@@ -228,6 +230,8 @@ SQL;
                 'medio' => (string)$row['medio'],
                 'monto' => (float)$entry['monto'],
                 'etiqueta_monto' => $labels['texto'],
+                'etiqueta_cobrador' => (float)$row['comision'] > 0 ? 'COBRADOR · 15% (' . number_format((float)$row['comision'], 2, ',', '.') . ')' : '',
+                'comision_cobrador' => (float)$row['comision'],
                 'ajuste_monto' => $labels['tipo'],
                 'es_ingresante' => false,
             ];

@@ -111,9 +111,12 @@ final class Ingresantes
         $matriculaExistente = 0;
 
         $paymentStmt = $db->prepare(
-            'SELECT id_pago, fecha_pago, estado, monto_base, monto_pago, id_medio_pago
-             FROM pagos
-             WHERE id_alumno = ? AND id_mes = 14 AND anio_aplicado = ?
+            'SELECT p.id_pago, p.fecha_pago, p.estado, p.monto_base, p.monto_pago, p.monto_pago_es_bruto,
+                    p.id_medio_pago, COALESCE(ec.comision, 0) AS comision
+             FROM pagos p
+             LEFT JOIN (SELECT id_pago_origen, SUM(importe) AS comision FROM egresos
+                        WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen) ec ON ec.id_pago_origen = p.id_pago
+             WHERE p.id_alumno = ? AND p.id_mes = 14 AND p.anio_aplicado = ?
              LIMIT 1 FOR UPDATE'
         );
         $paymentStmt->execute([$idAlumno, $cicloLectivo]);
@@ -128,7 +131,11 @@ final class Ingresantes
             $medioIngresante = $before['id_medio_pago'] !== null ? (int)$before['id_medio_pago'] : null;
 
             if ($existingPayment) {
-                $existingAmount = round((float)($existingPayment['monto_pago'] ?? $existingPayment['monto_base'] ?? 0), 2);
+                $existingAmount = round(
+                    (float)($existingPayment['monto_pago'] ?? $existingPayment['monto_base'] ?? 0)
+                    + ((int)($existingPayment['monto_pago_es_bruto'] ?? 0) === 1 ? 0.0 : (float)$existingPayment['comision']),
+                    2
+                );
                 $existingMedium = $existingPayment['id_medio_pago'] !== null ? (int)$existingPayment['id_medio_pago'] : null;
                 $samePayment = strtolower((string)$existingPayment['estado']) === 'pagado'
                     && $existingAmount === $amount
@@ -146,8 +153,8 @@ final class Ingresantes
             } else {
                 $insert = $db->prepare(
                     "INSERT INTO pagos
-                     (id_alumno, id_mes, anio_aplicado, fecha_pago, estado, monto_base, monto_pago, id_medio_pago, tipo_pago, creado_en)
-                     VALUES (?, 14, ?, ?, 'pagado', ?, ?, ?, 'NORMAL', NOW())"
+                     (id_alumno, id_mes, anio_aplicado, fecha_pago, estado, monto_base, monto_pago, monto_pago_es_bruto, id_medio_pago, tipo_pago, creado_en)
+                     VALUES (?, 14, ?, ?, 'pagado', ?, ?, 1, ?, 'NORMAL', NOW())"
                 );
                 $insert->execute([$idAlumno, $cicloLectivo, $fechaPago, $amount, $amount, $medioIngresante]);
                 $matriculaMigrada = 1;
@@ -160,7 +167,8 @@ final class Ingresantes
                  SET matricula_pagada = 1, monto_matricula = ?, id_medio_pago = ?, fecha_pago_matricula = ?, actualizado_en = NOW()
                  WHERE id_ingresante = ?'
             )->execute([
-                (float)($existingPayment['monto_pago'] ?? $existingPayment['monto_base'] ?? 0),
+                (float)($existingPayment['monto_pago'] ?? $existingPayment['monto_base'] ?? 0)
+                    + ((int)($existingPayment['monto_pago_es_bruto'] ?? 0) === 1 ? 0.0 : (float)$existingPayment['comision']),
                 $existingPayment['id_medio_pago'] !== null ? (int)$existingPayment['id_medio_pago'] : null,
                 (string)$existingPayment['fecha_pago'],
                 (int)$before['id_ingresante'],

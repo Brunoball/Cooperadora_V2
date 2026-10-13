@@ -845,9 +845,13 @@ trait AlumnosGestion
             // permanece físicamente en alumnos para que todas las FK y el historial
             // financiero sigan apuntando para siempre a la misma persona.
             $payments = $db->prepare(
-                'SELECT COUNT(*) AS cantidad, COALESCE(SUM(monto_pago), 0) AS total
-                 FROM pagos
-                 WHERE id_alumno = ?'
+                'SELECT COUNT(*) AS cantidad,
+                        COALESCE(SUM(COALESCE(p.monto_pago, p.monto_base, 0)
+                          + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(ec.comision, 0) END), 0) AS total
+                 FROM pagos p
+                 LEFT JOIN (SELECT id_pago_origen, SUM(importe) AS comision FROM egresos
+                            WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen) ec ON ec.id_pago_origen = p.id_pago
+                 WHERE p.id_alumno = ?'
             );
             $payments->execute([$id]);
             $paymentHistory = $payments->fetch() ?: ['cantidad' => 0, 'total' => 0];

@@ -212,10 +212,16 @@ abstract class CuotasConsultas extends CuotasSoporte
             'fecha_pago' => $payment ? (string)$payment['fecha_pago'] : null,
             'id_medio_pago' => $payment && $payment['id_medio_pago'] !== null ? (int)$payment['id_medio_pago'] : null,
             'medio_pago' => $payment ? (string)($payment['medio_pago'] ?? '') : '',
-            'monto' => $payment ? (float)($payment['monto_pago'] ?? 0) : 0.0,
+            'monto' => $payment
+                ? (float)($payment['monto_pago'] ?? 0)
+                  + ((int)($payment['monto_pago_es_bruto'] ?? 0) === 1
+                    ? 0.0 : (float)($payment['monto_comision_cobrador'] ?? 0))
+                : 0.0,
             'monto_comision_cobrador' => $payment ? (float)($payment['monto_comision_cobrador'] ?? 0) : 0.0,
             'monto_bruto_pago' => $payment
-                ? (float)($payment['monto_pago'] ?? 0) + (float)($payment['monto_comision_cobrador'] ?? 0)
+                ? (float)($payment['monto_pago'] ?? 0)
+                  + ((int)($payment['monto_pago_es_bruto'] ?? 0) === 1
+                    ? 0.0 : (float)($payment['monto_comision_cobrador'] ?? 0))
                 : 0.0,
             'monto_base_pago' => $payment ? (float)($payment['monto_base'] ?? 0) : 0.0,
             'tipo_pago' => $payment ? (string)($payment['tipo_pago'] ?? '') : '',
@@ -380,21 +386,24 @@ abstract class CuotasConsultas extends CuotasSoporte
             }
         }
 
+        // Tarifas: primer día del período. Pertenencia familiar: último día
+        // del mes, para incluir hermanos ingresados en cualquier fecha del mismo.
         $referenceDate = self::fechaReferenciaPeriodo($year, $periodId);
-        $familyDataAtDate = static function (int $familyId) use ($familyMembers, $referenceDate): array {
+        $familyCutoffDate = self::fechaCorteIngresoPeriodo($year, $periodId);
+        $familyDataAtDate = static function (int $familyId) use ($familyMembers, $familyCutoffDate): array {
             if ($familyId <= 0) return ['count' => 1, 'members' => [], 'targets' => []];
             $eligible = [];
             $targets = [];
             foreach ($familyMembers[$familyId] ?? [] as $member) {
-                if ($member['ingreso'] > $referenceDate) continue;
+                if ($member['ingreso'] > $familyCutoffDate) continue;
                 $unknownHistoricalExit = !$member['activo']
                     && !$member['es_egresado']
                     && (
-                        ($member['actualizado_en'] !== null && $member['actualizado_en'] > $referenceDate)
-                        || ($member['actualizado_en'] === null && $referenceDate < date('Y-01-01'))
+                        ($member['actualizado_en'] !== null && $member['actualizado_en'] > $familyCutoffDate)
+                        || ($member['actualizado_en'] === null && $familyCutoffDate < date('Y-01-01'))
                     );
                 $wasPresent = $member['activo']
-                    || ($member['fecha_egreso'] !== null && $member['fecha_egreso'] >= $referenceDate)
+                    || ($member['fecha_egreso'] !== null && $member['fecha_egreso'] >= $familyCutoffDate)
                     || $unknownHistoricalExit;
                 if ($wasPresent) $eligible[] = (int)$member['id_alumno'];
                 if ($member['activo']) $targets[] = (int)$member['id_alumno'];
@@ -676,12 +685,15 @@ abstract class CuotasConsultas extends CuotasSoporte
         $paymentsByStudent = self::pagosAnioMap($db, $year, $studentIds, false);
 
         foreach ($students as $student) {
-            if (!self::alumnoElegible($student, $periodId, $year)) continue;
-
             $payments = $paymentsByStudent[(int)$student['id_alumno']] ?? [];
             $status = self::estadoPeriodo($payments, $periodId);
             $resolvedState = $status['estado'];
             $payment = $status['pago'];
+
+            // Los meses anteriores al ingreso no generan deudores, pero los
+            // pagos/condonaciones históricos sí cuentan en los badges y listados.
+            if (!self::alumnoElegible($student, $periodId, $year)
+                && $resolvedState === 'deudor') continue;
 
             if (!self::periodoAplicaAlumno($student, $periodId)) {
                 $hasExactHistoricalPayment = $payment && (int)$payment['id_mes'] === $periodId;
@@ -867,11 +879,17 @@ abstract class CuotasConsultas extends CuotasSoporte
                 'pagado' => $status['estado'] === 'pagado',
                 'condonado' => $status['estado'] === 'condonado',
                 'puede_pagar' => $canPay,
+                // El frontend oculta cajas anteriores al ingreso sólo cuando
+                // nunca se pagaron. Los pagos/condonaciones históricos se ven.
+                'ocultar_por_ingreso' => self::esMensual($periodId)
+                    && !$eligibleForPeriod && $status['estado'] === 'deudor',
                 'monto_sugerido' => $suggested,
                 'monto_base' => $base,
                 'porcentaje_descuento_familiar' => self::porcentajeDescuento($base, $suggested),
                 'cantidad_familia_elegible' => (int)($amounts['family_count_by_period'][$periodId] ?? 1),
                 'cantidad_familia_aplicable' => max(1, count($amounts['family_target_ids_by_period'][$periodId] ?? [])),
+                'ids_familia_aplicable' => array_values($amounts['family_target_ids_by_period'][$periodId] ?? []),
+                'ids_familia_reparto' => array_values($amounts['family_member_ids_by_period'][$periodId] ?? []),
                 'descuento_familiar_aplicado' => (bool)($amounts['family_discount_by_period'][$periodId] ?? false),
                 'id_pago_real' => $payment ? (int)$payment['id_pago'] : null,
                 'id_mes_pago' => $payment ? (int)$payment['id_mes'] : null,

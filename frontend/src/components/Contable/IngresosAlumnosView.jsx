@@ -40,6 +40,11 @@ function AmountCell({ item }) {
           {label}
         </small>
       ) : null}
+      {item?.etiqueta_cobrador ? (
+        <small className="ct-student-amount-tag is-collector">
+          {item.etiqueta_cobrador}
+        </small>
+      ) : null}
     </div>
   );
 }
@@ -81,6 +86,8 @@ export default function IngresosAlumnosView({
           { label: "Medio", key: "medio" },
           { label: "Monto", key: "monto" },
           { label: "Detalle del monto", key: "etiqueta_monto" },
+          { label: "Cobrador", key: "etiqueta_cobrador" },
+          { label: "Comisión del cobrador", key: "comision_cobrador" },
         ],
         registros: items,
       },

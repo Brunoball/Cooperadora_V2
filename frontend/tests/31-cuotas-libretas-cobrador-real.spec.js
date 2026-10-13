@@ -2,7 +2,7 @@
 const { test, expect } = require("./helpers/playwright.helper");
 const { authenticatePage, token } = require("./helpers/auth.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
-const { ok } = require("./helpers/api.helper");
+const { ok, apiFetch } = require("./helpers/api.helper");
 const { suffix, today, currentYear } = require("./helpers/data.helper");
 const { baseCatalogs, createStudent } = require("./helpers/entities.helper");
 
@@ -15,7 +15,7 @@ test.beforeEach(() => {
     "Fixtures de Cuotas: no se crean alumnos ni pagos en producción sin autorización E2E aislada.");
 });
 
-async function collectorFixture(request, type) {
+async function collectorFixture(request, type, ingreso = `${currentYear()}-01-01`) {
   const t = token();
   const [catalogs, amountCategories] = await Promise.all([
     baseCatalogs(request, t),
@@ -28,7 +28,7 @@ async function collectorFixture(request, type) {
   const student = await createStudent(request, t, {
     marker: suffix(), catalogs,
     esCobrador: true,
-    ingreso: `${currentYear()}-01-01`,
+    ingreso,
     category: { id_categoria: named.id_categoria, id_cat_monto: amount.id_cat_monto },
   });
   return { t, student, catalogs };
@@ -111,6 +111,142 @@ test("API cobrador: imprimir todos sigue generando el mes pagado y no registra n
     token: f.t, query: { anio: currentYear(), mes: 3, estado: "PAGADOS", id_alumno: f.student.id_alumno },
   });
   expect(payments.items.filter(x => Number(x.id_alumno) === Number(f.student.id_alumno))).toHaveLength(1);
+});
+
+
+// Los nuevos ingresos a mitad de mes ya adeudan ESE mes, nunca los anteriores.
+test("Ingreso 25/04: lista, formulario y libreta incluyen abril; interno nunca imprime diciembre", async ({ request }) => {
+  test.setTimeout(110_000);
+  for (const type of ["INTERNO", "EXTERNO"]) {
+    const f = await collectorFixture(request, type, `${currentYear()}-04-25`);
+    const months = type === "INTERNO" ? SCHOOL_MONTHS.slice(1, 9) : SCHOOL_MONTHS.slice(1);
+    const book = await fullBook(request, f, { mes: 3 });
+    verifyBook(book, f.student, months);
+    expect(Number(book.cantidad_cupones)).toBe(months.length);
+
+    const march = await ok(request, "cuotas_listar", {
+      token: f.t,
+      query: { anio: currentYear(), mes: 3, estado: "DEUDORES", id_alumno: f.student.id_alumno },
+    });
+    expect(march.items || []).toHaveLength(0);
+
+    const april = await ok(request, "cuotas_listar", {
+      token: f.t,
+      query: { anio: currentYear(), mes: 4, estado: "DEUDORES", id_alumno: f.student.id_alumno },
+    });
+    expect((april.items || []).map(x => Number(x.id_alumno))).toContain(Number(f.student.id_alumno));
+
+    const context = await ok(request, "cuotas_contextos_pago", {
+      token: f.t, query: { id_alumno: f.student.id_alumno, anio: currentYear(), fecha_pago: today() },
+    });
+    const byMonth = new Map(context.periodos.map(x => [Number(x.id_mes), x]));
+    expect(byMonth.get(3).ocultar_por_ingreso).toBe(true);
+    expect(byMonth.get(3).puede_pagar).toBe(false);
+    expect(byMonth.get(4).ocultar_por_ingreso).toBe(false);
+    expect(byMonth.get(4).puede_pagar).toBe(true);
+    if (type === "INTERNO") expect(book.items.every(x => Number(x.id_mes) !== 12)).toBe(true);
+
+    const backPayment = await apiFetch(request, "cuotas_registrar_pago", {
+      token: f.t, method: "POST", data: {
+        id_alumno: f.student.id_alumno, anio: currentYear(), periodos: [3],
+        fecha_pago: today(), id_medio_pago: f.catalogs.medio.id_medio_pago,
+      },
+    });
+    expect(backPayment.status).toBe(422);
+    expect(backPayment.body.codigo).toBe("ALUMNO_NO_ELEGIBLE_PERIODO");
+
+    // Abril es pagable incluso si su ingreso fue después del día 1.
+    const paid = await ok(request, "cuotas_registrar_pago", {
+      token: f.t, method: "POST", data: {
+        id_alumno: f.student.id_alumno, anio: currentYear(), periodos: [4],
+        fecha_pago: today(), id_medio_pago: f.catalogs.medio.id_medio_pago,
+      },
+    });
+    expect(paid.insertados_total).toBe(1);
+    expect(Number(paid.items[0].id_mes)).toBe(4);
+    // Libreta del cobrador mantiene abril sin generar cobros nuevos.
+    verifyBook(await fullBook(request, f), f.student, months);
+  }
+});
+
+test("Pago histórico anterior a la fecha de ingreso corregida permanece visible y contabilizado", async ({ request }) => {
+  test.setTimeout(90_000);
+  const f = await collectorFixture(request, "EXTERNO", `${currentYear()}-03-01`);
+  const original = await ok(request, "cuotas_registrar_pago", {
+    token: f.t, method: "POST", data: {
+      id_alumno: f.student.id_alumno, anio: currentYear(), periodos: [3],
+      fecha_pago: today(), id_medio_pago: f.catalogs.medio.id_medio_pago,
+    },
+  });
+  const idPago = Number(original.items[0].id_pago);
+  await ok(request, "alumnos_guardar", {
+    token: f.t, method: "POST",
+    data: { ...f.student, id_alumno: f.student.id_alumno, ingreso: `${currentYear()}-04-25` },
+  });
+
+  const paidMarch = await ok(request, "cuotas_listar", {
+    token: f.t, query: { anio: currentYear(), mes: 3, estado: "PAGADOS", id_alumno: f.student.id_alumno },
+  });
+  expect(paidMarch.items.map(x => Number(x.id_pago))).toContain(idPago);
+  const debtMarch = await ok(request, "cuotas_listar", {
+    token: f.t, query: { anio: currentYear(), mes: 3, estado: "DEUDORES", id_alumno: f.student.id_alumno },
+  });
+  expect(debtMarch.items).toHaveLength(0);
+  const summary = await ok(request, "cuotas_totales_estado", {
+    token: f.t, query: { anio: currentYear(), mes: 3, id_alumno: f.student.id_alumno },
+  });
+  expect(Number(summary.PAGADOS)).toBe(1);
+  expect(Number(summary.DEUDORES)).toBe(0);
+  const context = await ok(request, "cuotas_contextos_pago", {
+    token: f.t, query: { id_alumno: f.student.id_alumno, anio: currentYear(), fecha_pago: today() },
+  });
+  const march = context.periodos.find(x => Number(x.id_mes) === 3);
+  expect(march.estado).toBe("PAGADO");
+  expect(march.ocultar_por_ingreso).toBe(false);
+  expect(march.puede_pagar).toBe(false);
+  verifyBook(await fullBook(request, f), f.student, SCHOOL_MONTHS.slice(1));
+});
+
+test("Interfaz: oculta meses anteriores al ingreso sin ocultar el primer mes adeudado", async ({ request, page }) => {
+  test.setTimeout(90_000);
+  const f = await collectorFixture(request, "EXTERNO", `${currentYear()}-04-25`);
+  await authenticatePage(page);
+  await page.goto("/cuotas");
+  await page.getByRole("textbox", { name: /buscar/i }).fill(f.student.num_documento);
+  await page.locator(".cuotas-month-filter select").selectOption("4");
+  const gridRow = page.locator(".cuotas-page .cuotas-grid-v2[role='row']")
+    .filter({ hasText: f.student.num_documento });
+  await expect(gridRow).toHaveCount(1, { timeout: 25_000 });
+  await gridRow.getByRole("button", { name: /registrar pago/i }).click();
+  const months = page.locator(".cuotas-v2-period-grid .cuotas-v2-period");
+  await expect(months).toHaveCount(9, { timeout: 25_000 });
+  await expect(months.first()).toContainText(/abril/i);
+  await expect(months.filter({ hasText: /^marzo/i })).toHaveCount(0);
+  await expect(months.last()).toContainText(/diciembre/i);
+});
+
+test("Interfaz: Imprimir todos omite los cupones previos al ingreso de abril", async ({ context, page, request }) => {
+  test.setTimeout(110_000);
+  const f = await collectorFixture(request, "EXTERNO", `${currentYear()}-04-25`);
+  await context.addInitScript(() => { window.print = () => { window.__pw_print_called = true; }; });
+  await authenticatePage(page);
+  await page.goto("/cuotas");
+  await page.getByRole("button", { name: /^cobrador$/i }).first().click();
+  await page.getByRole("textbox", { name: /buscar/i }).fill(f.student.num_documento);
+  await page.locator(".cuotas-month-filter select").selectOption("4");
+  const row = page.locator(".cuotas-page .cuotas-grid-v2[role='row']")
+    .filter({ hasText: f.student.num_documento });
+  await expect(row).toHaveCount(1, { timeout: 25_000 });
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup", { timeout: 20_000 }),
+    page.getByRole("button", { name: /imprimir todos/i }).first().click(),
+  ]);
+  await expect(popup.locator(".cupon")).toHaveCount(27, { timeout: 30_000 });
+  await expect(popup.locator(".cupon").filter({ hasText: new RegExp(`Marzo\\s+${currentYear()}`, "i") })).toHaveCount(0);
+  for (const name of MONTH_NAMES.slice(1)) {
+    await expect(popup.locator(".cupon").filter({ hasText: new RegExp(`${name}\\s+${currentYear()}`, "i") })).toHaveCount(3);
+  }
+  await popup.close();
 });
 
 test("Interfaz: Imprimir todos abre los 30 cupones externos reales, no solo el mes del filtro", async ({ context, page, request }) => {

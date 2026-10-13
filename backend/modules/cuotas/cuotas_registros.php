@@ -229,11 +229,11 @@ abstract class CuotasRegistros extends CuotasConsultas
             $insert = $db->prepare(
                 'INSERT INTO pagos
                  (id_alumno, id_mes, anio_aplicado, fecha_pago, estado,
-                  monto_base, monto_pago, id_medio_pago, tipo_pago,
+                  monto_base, monto_pago, monto_pago_es_bruto, id_medio_pago, tipo_pago,
                   porcentaje_descuento_familiar)
                  VALUES
                  (:alumno, :mes, :anio, :fecha, :estado, :monto_base,
-                  :monto_pago, :medio, :tipo_pago, :descuento)'
+                  :monto_pago, 1, :medio, :tipo_pago, :descuento)'
             );
 
             foreach ($targets as $targetIndex => $targetId) {
@@ -380,7 +380,7 @@ abstract class CuotasRegistros extends CuotasConsultas
                         'fecha' => $date,
                         'estado' => $condone ? 'condonado' : 'pagado',
                         'monto_base' => number_format($baseForTarget, 2, '.', ''),
-                        'monto_pago' => number_format($net, 2, '.', ''),
+                        'monto_pago' => number_format($gross, 2, '.', ''),
                         'medio' => $condone ? null : $paymentMediumId,
                         'tipo_pago' => $type,
                         'descuento' => $discount !== null ? number_format($discount, 2, '.', '') : null,
@@ -406,7 +406,7 @@ abstract class CuotasRegistros extends CuotasConsultas
                             'id_mes' => $realPeriod,
                             'anio_aplicado' => $year,
                             'estado' => $condone ? 'condonado' : 'pagado',
-                            'monto_pago' => $net,
+                            'monto_pago' => $gross,
                         ]
                     );
 
@@ -418,8 +418,9 @@ abstract class CuotasRegistros extends CuotasConsultas
                         'fecha_pago' => $date,
                         'estado' => $condone ? 'condonado' : 'pagado',
                         'monto_base' => $baseForTarget,
-                        'monto_pago' => $net,
+                        'monto_pago' => $gross,
                         'id_medio_pago' => $paymentMediumId,
+                        'monto_pago_es_bruto' => 1,
                         'periodo' => '',
                         'medio_pago' => '',
                     ];
