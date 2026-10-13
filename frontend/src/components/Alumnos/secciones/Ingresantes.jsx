@@ -221,7 +221,6 @@ export default function Ingresantes() {
       const response = await ingresantesApi.pasarAlumnos({ ciclo_lectivo: cycle, ids_ingresantes: selectedIds });
       setBulkModalOpen(false);
       setSelectedIds([]);
-      setFeedback({ type: "success", message: response?.mensaje || "Los ingresantes seleccionados se pasaron a Alumnos correctamente." });
       await cargar({ silent: true });
       return response;
     } catch (requestError) {
@@ -516,6 +515,7 @@ export default function Ingresantes() {
           { label: "Seleccionados", value: selectedCount },
         ]}
         onConfirm={passToStudents}
+        onToast={(tipo, mensaje) => setFeedback({ type: tipo, message: mensaje })}
       />
 
       <ModalEliminarGlobal
@@ -547,6 +547,7 @@ export default function Ingresantes() {
           { label: "Estado", value: stateModal?.target === "CANCELADO" ? "CANCELADO" : "PENDIENTE" },
         ]}
         onConfirm={confirmStateChange}
+        onToast={(tipo, mensaje) => setFeedback({ type: tipo, message: mensaje })}
       />
 
       <ModuleFeedback type={feedback?.type} message={feedback?.message} onClose={() => setFeedback(null)} />

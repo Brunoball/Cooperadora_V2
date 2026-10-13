@@ -23,6 +23,7 @@ export default function ModuleFeedback({
       tipo={toastType}
       mensaje={message}
       duracion={duration ?? TOAST_DURATION[type] ?? 3200}
+      cerrarConInteraccion={false}
       onClose={onClose}
     />
   );

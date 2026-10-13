@@ -1930,6 +1930,21 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   background: var(--entity-modal-bg, #fff);
 }
 
+/* Productos y conceptos: las pestañas deben quedar pegadas al header.
+   El padding superior del body dejaba una franja donde asomaban inputs
+   al desplazarse el contenido por detrás de la navegación sticky. */
+.ventas-concepts-modal .entity-modal__body {
+  padding-top: 0;
+}
+
+.ventas-concepts-modal .ventas-modal-tabs {
+  top: 0;
+  z-index: 5;
+  margin: 0 0 8px;
+  padding: 0 2px;
+  background: var(--entity-modal-bg, #fff);
+}
+
 .ventas-modal-validation {
   margin: 0 0 12px;
   padding: 10px 12px;

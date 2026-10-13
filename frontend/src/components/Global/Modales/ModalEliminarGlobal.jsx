@@ -15,7 +15,7 @@ import {
   faUserCheck,
   faUserSlash,
 } from "@fortawesome/free-solid-svg-icons";
-import Toast from "../Toast";
+import { showGlobalNotification } from "../notifications";
 import useAnimatedModalSize from "./useAnimatedModalSize";
 import { upperLimitedText } from "../Formularios/inputSanitizers";
 import "../Global_css/Global_ModalEliminar.css";
@@ -157,7 +157,6 @@ export default function ModalEliminarGlobal({
   const reasonRef = useRef(null);
   const [processing, setProcessing] = useState(false);
   const [reason, setReason] = useState(upper(initialReason));
-  const [localToast, setLocalToast] = useState(null);
 
   const config = OPERATION_CONFIG[operacion] || OPERATION_CONFIG.advertencia;
   const isLoading = loading || processing;
@@ -199,7 +198,6 @@ export default function ModalEliminarGlobal({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     setReason(upper(initialReason));
-    setLocalToast(null);
     return () => {
       document.body.style.overflow = previousOverflow;
     };
@@ -212,7 +210,9 @@ export default function ModalEliminarGlobal({
         onToast(tipo, mensaje, duracion);
         return;
       }
-      setLocalToast({ id: Date.now(), tipo, mensaje, duracion });
+      // El modal puede desmontarse dentro del mismo onConfirm; el aviso debe
+      // permanecer visible en la aplicación, no dentro del modal.
+      showGlobalNotification(tipo, mensaje, duracion);
     },
     [onToast],
   );
@@ -317,15 +317,6 @@ export default function ModalEliminarGlobal({
 
   return createPortal(
     <>
-      {localToast ? (
-        <Toast
-          key={localToast.id}
-          tipo={localToast.tipo}
-          mensaje={localToast.mensaje}
-          duracion={localToast.duracion}
-          onClose={() => setLocalToast(null)}
-        />
-      ) : null}
       <div
         className="gdel-overlay"
         role="dialog"

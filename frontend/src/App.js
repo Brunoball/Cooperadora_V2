@@ -17,6 +17,7 @@ import Usuarios from "./components/Configuracion/secciones/Usuarios";
 import CatalogosConfiguracion from "./components/Configuracion/secciones/CatalogosConfiguracion";
 import Ventas from "./components/Ventas/Ventas";
 import BotPanel from "./components/BotPanel/BotPanel";
+import GlobalToastHost from "./components/Global/GlobalToastHost";
 import notificationSound from "./components/BotPanel/notificacion/notificacion.mp3";
 import { BOT_PANEL_URL } from "./config/config";
 import {
@@ -144,6 +145,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <GlobalUrgentBotNotifier />
+      <GlobalToastHost />
 
       <Routes>
         <Route

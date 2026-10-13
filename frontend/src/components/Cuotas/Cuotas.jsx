@@ -225,7 +225,12 @@ export default function Cuotas() {
     paginacion?.hasta || Math.min(remotePage * remotePageSize, totalFiltered),
   );
 
-  const showFeedback = useCallback((type, message) => setFeedback({ type, message }), []);
+  const feedbackSequence = useRef(0);
+  const showFeedback = useCallback((type, message, duration) => {
+    if (!message) return;
+    feedbackSequence.current += 1;
+    setFeedback({ id: feedbackSequence.current, type, message, duration });
+  }, []);
 
   const loadTotals = useCallback(async () => {
     const currentRequest = ++totalsRequestId.current;
@@ -307,7 +312,11 @@ export default function Cuotas() {
       const result = paymentModal.mode === "condonar"
         ? await cuotasApi.condonarPago(payload)
         : await cuotasApi.registrarPagos(payload);
-      closePayment();
+      // No usar closePayment(): mientras se está guardando, ese handler
+      // bloquea el cierre. Después del éxito debe cerrar sin dejar un modal
+      // de pago abierto por detrás del comprobante.
+      setPaymentModal({ open: false, mode: "pago", row: null });
+      setPaymentContext(null);
       await refreshData();
       if (paymentModal.mode === "condonar") {
         showFeedback("success", "Condonación registrada correctamente.");
@@ -754,7 +763,7 @@ export default function Cuotas() {
         onClose={() => setDeleteModal({ open: false, row: null, resolved: null })}
         onConfirm={deletePayment}
         successMessage={estado === "CONDONADOS" ? "Condonación eliminada correctamente." : "Pago eliminado correctamente."}
-        onToast={(toast) => toast?.mensaje && showFeedback(toast.tipo === "exito" ? "success" : "error", toast.mensaje)}
+        onToast={(tipo, mensaje, duracion) => showFeedback(tipo, mensaje, duracion)}
       />
 
       <ModalExportarGlobal
@@ -781,9 +790,11 @@ export default function Cuotas() {
       />
 
       <ModuleFeedback
+        key={feedback?.id || "sin-feedback"}
         type={feedback?.type}
         message={feedback?.message}
-        onClose={() => setFeedback(null)}
+        duration={feedback?.duration}
+        onClose={() => setFeedback((prev) => prev?.id === feedback?.id ? null : prev)}
       />
     </>
   );
