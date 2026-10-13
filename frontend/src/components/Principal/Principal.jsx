@@ -324,7 +324,13 @@ export default function Principal() {
   };
 
   const openBotPanel = () => {
-    navigate("/bot/panel");
+    // Se usa window.open sin 'noopener' al CREAR la pestaña: la autenticación
+    // vive en sessionStorage y el navegador la copia a la pestaña hija.
+    // Después desconectamos opener: el Bot no necesita manejar esta ventana.
+    const botTab = window.open("/bot/panel", "_blank");
+    if (botTab) {
+      try { botTab.opener = null; } catch { /* Restricciones del navegador. */ }
+    }
   };
 
   const logout = async () => {

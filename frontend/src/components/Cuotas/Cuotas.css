@@ -2750,3 +2750,17 @@ html[data-theme="oscuro"] .cuotas-page .cuotas-v2-category.is-externo {
     width: 100%;
   }
 }
+
+/* El encabezado de Cuotas no se desplaza ni parpadea al buscar, alternar
+   Deudores/Pagados/Condonados o recibir una lista sin resultados.
+   Tanto el encabezado como el cuerpo reservan el mismo gutter estable. */
+.cuotas-page .cuotas-table > .global-divTable__head {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  padding-inline-end: 0 !important; /* Evita duplicar la compensación global JS. */
+}
+
+.cuotas-page .cuotas-table > .global-divTable__wrap {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}

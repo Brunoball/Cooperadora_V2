@@ -1,5 +1,5 @@
 import TableEmptyIcon from "../Global/TableEmptyIcon";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBan,
@@ -161,6 +161,15 @@ export default function Cuotas() {
   const [anio, setAnio] = useState(String(CURRENT_YEAR));
   const [mes, setMes] = useState(String(DEFAULT_PERIOD));
   const [buscar, setBuscar] = useState("");
+  const [buscarAplicado, setBuscarAplicado] = useState("");
+  const totalsRequestId = useRef(0);
+
+  // El texto se refleja en el buscador inmediatamente, pero no enviamos
+  // una solicitud al backend por cada tecla presionada.
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setBuscarAplicado(buscar), 320);
+    return () => window.clearTimeout(timeout);
+  }, [buscar]);
   const [categoria, setCategoria] = useState("");
   const [anioLectivo, setAnioLectivo] = useState("");
   const [division, setDivision] = useState("");
@@ -184,7 +193,7 @@ export default function Cuotas() {
       estado,
       anio,
       mes,
-      buscar,
+      buscar: buscarAplicado,
       categoria,
       id_anio: anioLectivo,
       division,
@@ -193,10 +202,13 @@ export default function Cuotas() {
       pagina,
       por_pagina: PAGE_SIZE,
     }),
-    [estado, anio, mes, buscar, categoria, anioLectivo, division, cobrador, medioPago, pagina],
+    [estado, anio, mes, buscarAplicado, categoria, anioLectivo, division, cobrador, medioPago, pagina],
   );
 
-  const { items, catalogos, paginacion, loading, error, cargar } = useCuotas(filtros);
+  const { items, catalogos, paginacion, loading, hasLoaded, error, cargar } = useCuotas(filtros);
+  // Luego de la primera carga, conservar las filas anteriores durante cada
+  // búsqueda evita desmontar/recrear el cuerpo y desalinear su encabezado.
+  const mostrarSkeleton = loading && !hasLoaded;
 
   const totalFiltered = Number(paginacion?.total || 0);
   const remotePage = Number(paginacion?.pagina || pagina);
@@ -216,21 +228,25 @@ export default function Cuotas() {
   const showFeedback = useCallback((type, message) => setFeedback({ type, message }), []);
 
   const loadTotals = useCallback(async () => {
+    const currentRequest = ++totalsRequestId.current;
     try {
       const result = await cuotasApi.totalesEstado({
         anio,
         mes,
-        buscar,
+        buscar: buscarAplicado,
         categoria,
         id_anio: anioLectivo,
         division,
         cobrador,
       });
-      setTotales(result.totales || result || {});
+      // Respuestas viejas no deben cambiar los contadores de las pestañas.
+      if (currentRequest === totalsRequestId.current) {
+        setTotales(result.totales || result || {});
+      }
     } catch {
       // La grilla conserva su propio error; los contadores no deben bloquear la pantalla.
     }
-  }, [anio, mes, buscar, categoria, anioLectivo, division, cobrador]);
+  }, [anio, mes, buscarAplicado, categoria, anioLectivo, division, cobrador]);
 
   const changeFilter = useCallback((setter) => (value) => {
     setPagina(1);
@@ -239,6 +255,7 @@ export default function Cuotas() {
 
   useEffect(() => {
     loadTotals();
+    return () => { totalsRequestId.current += 1; };
   }, [loadTotals]);
 
   useEffect(() => {
@@ -434,7 +451,7 @@ export default function Cuotas() {
     try {
       const result = await cuotasApi.cuponesCobrador({
         anio,
-        buscar,
+        buscar: buscarAplicado,
         categoria,
         id_anio: anioLectivo,
         division,
@@ -582,12 +599,12 @@ export default function Cuotas() {
           className="cuotas-table has-bottom-pagination"
           bodyClassName="entity-table-wrap cuotas-table__body"
           columns={columns}
-          loading={loading}
-          empty={!loading && items.length === 0}
+          loading={mostrarSkeleton}
+          empty={!mostrarSkeleton && items.length === 0}
           gridClassName="cuotas-grid-v2"
           skeletonRows={8}
         >
-          {!loading && items.length === 0 ? (
+          {!mostrarSkeleton && items.length === 0 ? (
             <div className="cuotas-v2-empty"><TableEmptyIcon />No hay registros que coincidan con los filtros actuales.</div>
           ) : (
             items.map((item) => {

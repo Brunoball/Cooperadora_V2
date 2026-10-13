@@ -31,6 +31,7 @@ export function useCuotas(filtros = {}) {
   const [response, setResponse] = useState(initialResponse);
   const [catalogos, setCatalogos] = useState(emptyCatalogs);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState("");
 
   const cargar = useCallback(async () => {
@@ -54,7 +55,10 @@ export function useCuotas(filtros = {}) {
       }
       return null;
     } finally {
-      if (currentRequest === requestId.current) setLoading(false);
+      if (currentRequest === requestId.current) {
+        setHasLoaded(true);
+        setLoading(false);
+      }
     }
   }, [listQuery]);
 
@@ -88,5 +92,5 @@ export function useCuotas(filtros = {}) {
     };
   }, [cargarCatalogos]);
 
-  return { ...response, catalogos, loading, error, cargar, cargarCatalogos };
+  return { ...response, catalogos, loading, hasLoaded, error, cargar, cargarCatalogos };
 }
