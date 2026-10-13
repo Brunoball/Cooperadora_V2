@@ -149,7 +149,7 @@ trait VentasPlanillas
                    SELECT id_orden,
                           SUM(CASE WHEN id_producto={$principalId} THEN cantidad ELSE 0 END) AS cantidad_ven,
                           SUM(CASE WHEN id_producto IS NULL OR id_producto<>{$principalId} THEN cantidad ELSE 0 END) AS cantidad_gan,
-                          SUM(cantidad) AS cantidad_vendida
+                          SUM(CASE WHEN id_producto={$principalId} THEN cantidad ELSE 0 END) AS cantidad_vendida
                      FROM ventas_orden_items GROUP BY id_orden
                ) oi ON oi.id_orden=o.id_orden
               ".($where?'WHERE '.implode(' AND ',$where):'')."

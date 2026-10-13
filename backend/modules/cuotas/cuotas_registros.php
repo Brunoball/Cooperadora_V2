@@ -143,6 +143,9 @@ abstract class CuotasRegistros extends CuotasConsultas
                 api_error('El medio de pago seleccionado no existe.', 'MEDIO_PAGO_INVALIDO', 422);
             }
         }
+        // La aplicación puede optar por la tarifa familiar vigente del año actual
+        // al cobrar meses pendientes de ese mismo año. Se revalida en la BD.
+        $useCurrentFamilyRate = !empty($body['usar_tarifa_familiar_actual']) && $year === (int)date('Y');
         $applyFamily = !empty($body['aplicar_familia']) || !empty($body['aplicar_a_familia']);
         $explicitFamilyIds = id_list($body['ids_familia'] ?? []);
         $targets = self::activeFamilyTargets($db, $student, $applyFamily, $explicitFamilyIds);
@@ -202,7 +205,7 @@ abstract class CuotasRegistros extends CuotasConsultas
 
         transaction($db, function () use (
             $db, $auth, $studentId, $year, $date, $periods, $requestedAmounts,
-            $paymentMediumId, $condone, $targets, $principalAmounts, $applyFamily,
+            $paymentMediumId, $condone, $targets, $principalAmounts, $applyFamily, $useCurrentFamilyRate,
             &$insertedIds, &$details, &$skipped, &$groupAllocations,
             &$totalGross, &$totalNet, &$totalCommission
         ): void {
@@ -286,10 +289,25 @@ abstract class CuotasRegistros extends CuotasConsultas
                     $normalForTarget = (float)($targetAmounts['montos_por_periodo'][$realPeriod] ?? $normalForPrincipal);
                     $baseForTarget = (float)($targetAmounts['montos_base_por_periodo'][$realPeriod] ?? $normalForTarget);
 
-                    $custom = !$condone && abs($requestedGross - $normalForPrincipal) >= 0.005;
-                    $familyDiscount = !$condone
-                        && !$custom
-                        && (bool)($targetAmounts['family_discount_by_period'][$realPeriod] ?? false);
+                    $hasFamilyRule = (bool)($targetAmounts['family_discount_by_period'][$realPeriod] ?? false);
+                    $currentFamilyRateApplied = false;
+                    if (!$condone && $useCurrentFamilyRate && self::esMensual($realPeriod)
+                        && $requestedPeriod === $realPeriod && $hasFamilyRule) {
+                        $familyCountAtDate = (int)($targetAmounts['family_count_by_period'][$realPeriod] ?? 1);
+                        if ($familyCountAtDate >= 2) {
+                            $rateStatement = $db->prepare(
+                                'SELECT monto_mensual FROM categoria_hermanos
+                                 WHERE id_cat_monto = ? AND cantidad_hermanos = ? AND activo = 1 LIMIT 1'
+                            );
+                            $rateStatement->execute([(int)$targetStudent['id_cat_monto'], $familyCountAtDate]);
+                            $currentRate = $rateStatement->fetchColumn();
+                            $currentFamilyRateApplied = $currentRate !== false
+                                && abs((float)$currentRate - $requestedGross) <= 0.011;
+                        }
+                    }
+                    $custom = !$condone && abs($requestedGross - $normalForPrincipal) >= 0.005
+                        && !$currentFamilyRateApplied;
+                    $familyDiscount = !$condone && !$custom && $hasFamilyRule;
 
                     // Para operaciones familiares se excluyen automáticamente los alumnos
                     // que todavía no habían ingresado en el período solicitado. Si el monto
@@ -319,6 +337,12 @@ abstract class CuotasRegistros extends CuotasConsultas
                     if (count($allocationIds) > 1 && in_array($targetId, $allocationIds, true)) {
                         if (!isset($groupAllocations[$allocationKey])) {
                             $groupTotal = (int)round(max(0.0, $requestedGross) * count($allocationIds));
+                            if ($currentFamilyRateApplied) {
+                                $millar = (int)round($groupTotal / 1000) * 1000;
+                                if (abs($millar - $groupTotal) <= min(3, count($allocationIds))) {
+                                    $groupTotal = $millar;
+                                }
+                            }
                             $basePart = intdiv($groupTotal, count($allocationIds));
                             $remainder = $groupTotal - ($basePart * count($allocationIds));
                             $allocation = [];
@@ -337,7 +361,7 @@ abstract class CuotasRegistros extends CuotasConsultas
                         ? 'NORMAL'
                         : ($custom ? 'MONTO_PERSONALIZADO' : ($familyDiscount ? 'DESCUENTO_FAMILIAR' : 'NORMAL'));
                     $discount = $familyDiscount
-                        ? self::porcentajeDescuento($baseForTarget, $normalForTarget)
+                        ? self::porcentajeDescuento($baseForTarget, $currentFamilyRateApplied ? $requestedGross : $normalForTarget)
                         : null;
 
                     $commission = 0.0;

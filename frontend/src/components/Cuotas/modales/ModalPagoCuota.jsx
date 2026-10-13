@@ -85,6 +85,33 @@ export default function ModalPagoCuota({
     [periods],
   );
 
+  // Los meses del año en curso usan la tarifa familiar VIGENTE para una
+  // misma composición familiar. El histórico se conserva en la BD para
+  // consultar pagos anteriores; no modifica los precios guardados.
+  const tarifaFamiliarActual = useMemo(() => {
+    if (Number(anio) !== new Date().getFullYear() || !context?.familia?.tiene_familia) return null;
+    const candidatos = (context?.periodos || [])
+      .filter((item) => PERIODOS_MENSUALES.has(Number(item.id_mes))
+        && Number(item.cantidad_familia_elegible || 0) >= 2
+        && Number(item.monto_sugerido || 0) > 0)
+      .sort((a, b) => Number(b.id_mes) - Number(a.id_mes));
+    const vigente = candidatos[0];
+    if (!vigente) return null;
+    return {
+      importe: Number(vigente.monto_sugerido),
+      integrantes: Number(vigente.cantidad_familia_elegible),
+    };
+  }, [anio, context?.periodos, context?.familia?.tiene_familia]);
+
+  const montoSugeridoFormulario = (period) => {
+    if (tarifaFamiliarActual && PERIODOS_MENSUALES.has(Number(period.id_mes))
+      && Number(period.cantidad_familia_elegible || 0) === tarifaFamiliarActual.integrantes
+      && Number(period.monto_sugerido || 0) > 0) {
+      return tarifaFamiliarActual.importe;
+    }
+    return Number(period.monto_sugerido || 0);
+  };
+
   useEffect(() => {
     if (!open) return;
     setFecha(today());
@@ -104,12 +131,12 @@ export default function ModalPagoCuota({
     if (!open || !context) return;
     const defaults = {};
     (context.periodos || []).forEach((item) => {
-      defaults[String(item.id_mes)] = String(Number(item.monto_sugerido || 0));
+      defaults[String(item.id_mes)] = String(montoSugeridoFormulario(item));
     });
     setAmounts(defaults);
     const registration = (context.periodos || []).find((item) => Number(item.id_mes) === MATRICULA);
     setMatriculaGlobal(String(Number(registration?.monto_sugerido || 0)));
-  }, [context, open]);
+  }, [context, open, tarifaFamiliarActual]);
 
   const years = useMemo(() => {
     const all = new Set((catalogos?.anios || []).map(String));
@@ -187,7 +214,18 @@ export default function ModalPagoCuota({
         const applicableFamily = family
           ? Math.max(1, Number(period?.cantidad_familia_aplicable || 1))
           : 1;
-        return sum + Number(amounts[String(id)] || 0) * applicableFamily;
+        // Debe coincidir con CuotasRegistros: cada período se distribuye
+        // al peso entre los integrantes (6.666,67 × 3 = $20.000).
+        const parcial = Math.round(Number(amounts[String(id)] || 0) * applicableFamily);
+        const usaTarifaFamiliar = Boolean(family && tarifaFamiliarActual && !freeMode
+          && PERIODOS_MENSUALES.has(Number(id))
+          && Number(period?.cantidad_familia_elegible || 0) === tarifaFamiliarActual.integrantes
+          && Math.abs(Number(amounts[String(id)] || 0) - tarifaFamiliarActual.importe) < 0.01);
+        if (usaTarifaFamiliar && applicableFamily > 1) {
+          const millar = Math.round(parcial / 1000) * 1000;
+          if (Math.abs(millar - parcial) <= Math.min(3, applicableFamily)) return sum + millar;
+        }
+        return sum + parcial;
       }, 0);
 
   const applyFreeAmount = (raw) => {
@@ -213,7 +251,7 @@ export default function ModalPagoCuota({
     setAmounts((current) => {
       const next = { ...current };
       monthly.forEach((period) => {
-        next[String(period.id_mes)] = String(Number(period.monto_sugerido || 0));
+        next[String(period.id_mes)] = String(montoSugeridoFormulario(period));
       });
       return next;
     });
@@ -249,6 +287,13 @@ export default function ModalPagoCuota({
             .map((member) => Number(member.id_alumno || member.id_socio))
         : [],
       montos_por_periodo: payloadAmounts,
+      // La API revalida contra categoria_hermanos antes de aplicar esta marca.
+      usar_tarifa_familiar_actual: Boolean(tarifaFamiliarActual && !freeMode && selected.some((id) => {
+        const period = periodMap.get(Number(id));
+        return period && PERIODOS_MENSUALES.has(Number(id))
+          && Number(period.cantidad_familia_elegible || 0) === tarifaFamiliarActual.integrantes
+          && Math.abs(Number(amounts[String(id)] || 0) - tarifaFamiliarActual.importe) < 0.01;
+      })),
     });
   };
 
@@ -372,7 +417,7 @@ export default function ModalPagoCuota({
                       }))}
                     />
                   </label>
-                  <small className="cuotas-v2-monthly-amount-suggested">Sugerido: {money(period.monto_sugerido)}</small>
+                  <small className="cuotas-v2-monthly-amount-suggested">Tarifa aplicada: {money(montoSugeridoFormulario(period))}{Math.abs(montoSugeridoFormulario(period) - Number(period.monto_sugerido || 0)) > 0.01 ? " (familiar actual; precio histórico conservado)" : ""}</small>
                 </div>
               );
             })}
