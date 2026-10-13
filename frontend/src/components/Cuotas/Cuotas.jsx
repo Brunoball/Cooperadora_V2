@@ -464,18 +464,26 @@ export default function Cuotas() {
   const pdfNewPayment = async () => {
     const receipts = receiptResult?.comprobantes || [];
     if (!receipts.length) return;
-    const names = Array.from(new Set(receipts.map((item) => item.nombre_completo).filter(Boolean)));
-    const periods = Array.from(new Set(receipts.map((item) => item.periodo_texto).filter(Boolean)));
-    const total = receipts.reduce((sum, item) => sum + Number(item.importe_total || 0), 0);
+    const names = Array.from(new Set(receipts
+      .map((item) => item.nombre_completo || item.apellido_nombre || item.denominacion || item.nombre)
+      .filter(Boolean)));
+    const periods = Array.from(new Set(receipts
+      .map((item) => item.periodo_texto || item.periodo)
+      .filter(Boolean)));
+    const total = receipts.reduce((sum, item) =>
+      sum + Number(item.importe_total ?? item.precio_total ?? item.monto_total ?? item.monto ?? 0), 0);
+    const nombreGrupo = names.join(" / ");
     const base = {
       ...receipts[0],
-      nombre_completo: names.join(" / "),
+      // El PDF original muestra un solo comprobante por operación familiar.
+      // Sobreescribir ambos nombres evita que el primero tape al grupo.
+      ...(nombreGrupo ? { nombre_completo: nombreGrupo, apellido_nombre: nombreGrupo } : {}),
       importe_total: total,
     };
     try {
       await generarComprobanteAlumnoPDF(base, {
         anio: Number(receipts[0].anio || anio),
-        periodoTexto: periods.join(" + "),
+        periodoTexto: periods.join(" + ") || receipts[0]?.periodo_texto || "",
         importeTotal: total,
         precioUnitario: total,
       });

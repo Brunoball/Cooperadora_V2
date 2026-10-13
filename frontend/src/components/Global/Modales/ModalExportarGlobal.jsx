@@ -1668,6 +1668,7 @@ const ModalExportarGlobal = ({
   note = "",
   pdfVariant = "",
   logoPdfUrl = "",
+  onExportPdf,
   importLabel = "Importar",
   importTitle = "Abrir importación",
   importDisabled = false,
@@ -1799,15 +1800,19 @@ const ModalExportarGlobal = ({
       const subtitulo = alcance === ALCANCE_TODOS ? subtituloArchivoTodos : subtituloArchivoActual;
       const sufijoNombre = alcance === ALCANCE_TODOS ? "todos" : "actual";
 
-      await exportarDesdeModalGlobal({
-        formato,
-        titulo: tituloArchivo || title,
-        subtitulo,
-        secciones,
-        nombreArchivo: `${nombreArchivo}_${sufijoNombre}`,
-        pdfVariant,
-        logoPdfUrl,
-      });
+      if (formato === "pdf" && typeof onExportPdf === "function") {
+        await onExportPdf({ secciones, subtitulo, nombreArchivo: `${nombreArchivo}_${sufijoNombre}` });
+      } else {
+        await exportarDesdeModalGlobal({
+          formato,
+          titulo: tituloArchivo || title,
+          subtitulo,
+          secciones,
+          nombreArchivo: `${nombreArchivo}_${sufijoNombre}`,
+          pdfVariant,
+          logoPdfUrl,
+        });
+      }
 
       onSuccess?.(
         formato === "pdf"

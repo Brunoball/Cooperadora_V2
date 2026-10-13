@@ -7,7 +7,7 @@ import { apiGet } from '../components/_shared/api/apiClient';
  */
 export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   // Helpers
-  const NORMALIZAR = (s = '') => String(s || '').trim();
+  const NORMALIZAR = (s = '') => String(s ?? '').trim();
   const UPPER = (s = '') => NORMALIZAR(s).toUpperCase();
   const escapeHtml = (value) =>
     String(value ?? '').replace(/[&<>'"]/g, (character) => ({
@@ -24,7 +24,8 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
     return m[i] || String(idMes || '');
   };
 
-  const getIdAlumno = (s) => s?.id_alumno ?? s?.id ?? s?.id_socio ?? null;
+  const getIdAlumno = (s) => s?.id_alumno ?? s?.id_socio ?? s?.id ?? null;
+  const primerValor = (...values) => values.find((value) => NORMALIZAR(value) !== '') ?? '';
 
   // ✅ Evita duplicados como "PÉREZ, PÉREZ, JUAN"
   const compactarApellidoNombre = (texto) => {
@@ -39,7 +40,7 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
 
   // ✅ Construye nombre completo sin duplicar
   const getNombreCompleto = (s) => {
-    const apNom = NORMALIZAR(s?.apellido_nombre || s?.nombre_completo);
+    const apNom = NORMALIZAR(primerValor(s?.apellido_nombre, s?.nombre_completo, s?.denominacion));
     const nombre = NORMALIZAR(s?.nombre);
     const apellido = NORMALIZAR(s?.apellido);
 
@@ -59,7 +60,7 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   };
 
   const getDni = (s) =>
-    s?.num_documento ?? s?.dni ?? s?.documento ?? s?.numDocumento ?? '';
+    primerValor(s?.num_documento, s?.documento, s?.dni, s?.numDocumento);
 
   const fechaImpresion = new Date().toLocaleDateString('es-AR');
 
@@ -69,8 +70,9 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   if (idAlu) {
     try {
       const j = await apiGet('cuotas_comprobante', { id_alumno: idAlu });
-      if (j?.exito && (j?.alumno || j?.socio)) {
-        // backend primero; props/opts pueden sobreescribir
+      if (j?.exito !== false && (j?.alumno || j?.socio)) {
+        // Los datos recién consultados rellenan los campos ausentes, pero
+        // importes y períodos registrados siempre vienen del resultado del pago.
         alumnoFull = { ...(j.alumno || j.socio), ...alumnoFull };
       }
     } catch {
@@ -81,7 +83,8 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   // 2) Datos derivados
   const anio = Number(opts?.anio ?? alumno?.anio ?? new Date().getFullYear());
   const periodoId = Number(opts?.periodoId ?? alumno?.id_periodo ?? 0);
-  const periodoTexto = NORMALIZAR(opts?.periodoTexto) || `${nombreMes(periodoId)} ${anio}`;
+  const periodoTexto = NORMALIZAR(primerValor(opts?.periodoTexto, alumno?.periodo_texto))
+    || `${nombreMes(periodoId)} ${anio}`;
 
   const precioUnitario = Number(
     opts?.precioUnitario ??
@@ -93,27 +96,30 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   const importeTotal = Number(
     opts?.importeTotal ??
     alumno?.importe_total ??
+    alumno?.precio_total ??
+    alumno?.monto_total ??
     (precioUnitario > 0 ? precioUnitario : 0)
   );
 
   const nombreCompleto = getNombreCompleto(alumnoFull);
   const dni            = getDni(alumnoFull);
-  const domicilio      = NORMALIZAR(alumnoFull?.domicilio);
+  const domicilio      = NORMALIZAR(primerValor(alumnoFull?.domicilio, alumnoFull?.direccion));
   const localidad      = NORMALIZAR(alumnoFull?.localidad);   // sólo localidad
 
   // Curso / División
   const nombreAnio =
-    NORMALIZAR(alumnoFull?.nombre_año) ||
-    NORMALIZAR(alumnoFull?.anio_nombre) ||
-    NORMALIZAR(alumnoFull?.nombre_anio) ||
-    '';
+    NORMALIZAR(primerValor(
+      alumnoFull?.nombre_año,
+      alumnoFull?.anio_nombre,
+      alumnoFull?.nombre_anio,
+      alumnoFull?.anio_lectivo
+    ));
 
   const nombreDivision =
-    NORMALIZAR(alumnoFull?.nombre_division) ||
-    NORMALIZAR(alumnoFull?.division) ||
-    '';
+    NORMALIZAR(primerValor(alumnoFull?.nombre_division, alumnoFull?.division));
 
-  const curso = [nombreAnio, nombreDivision].filter(Boolean).join(' ');
+  const curso = [nombreAnio, nombreDivision].filter(Boolean).join(' ')
+    || NORMALIZAR(alumnoFull?.curso);
 
   // 3) Plantilla
   const css = `
@@ -205,24 +211,36 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
   document.body.appendChild(wrapper);
 
   try {
-    const ensureScript = (src) =>
-      new Promise((resolve, reject) => {
-        if ([...document.scripts].some(s => s.src.includes(src))) return resolve();
-        const sc = document.createElement('script');
-        sc.src = src;
-        sc.onload = resolve;
-        sc.onerror = () => reject(new Error('No se pudo cargar ' + src));
-        document.body.appendChild(sc);
+    // Los comprobantes pueden generarse mientras otra exportación todavía está
+    // descargando las mismas librerías. La mera presencia del <script> no
+    // significa que haya terminado de cargar.
+    const ensureScript = (src, isReady) => {
+      if (isReady()) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const current = [...document.scripts].find((script) => script.src === src);
+        const script = current || document.createElement('script');
+        const onLoad = () => isReady()
+          ? resolve()
+          : reject(new Error('No se pudo inicializar la librería PDF.'));
+        const onError = () => reject(new Error('No se pudo cargar la librería PDF. Revisá tu conexión.'));
+        script.addEventListener('load', onLoad, { once: true });
+        script.addEventListener('error', onError, { once: true });
+        if (!current) {
+          script.src = src;
+          document.head.appendChild(script);
+        }
       });
+    };
 
-    await ensureScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js');
-    await ensureScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+    await ensureScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js', () => typeof window.html2canvas === 'function');
+    await ensureScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js', () => typeof window.jspdf?.jsPDF === 'function');
 
     const h2c = window.html2canvas;
     const { jsPDF } = window.jspdf;
 
     const nodo = wrapper.querySelector('#cmp-alumno');
-    const canvas = await h2c(nodo, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    if (document.fonts?.ready) await document.fonts.ready;
+    const canvas = await h2c(nodo, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
     const imgData = canvas.toDataURL('image/png');
 
     const pdf = new jsPDF('p', 'mm', 'a4');
@@ -233,9 +251,13 @@ export async function generarComprobanteAlumnoPDF(alumno, opts = {}) {
     const imgH = (canvas.height * imgW) / canvas.width;
     const y = 18;
 
+    // El original usa un comprobante centrado de 175 mm en hoja A4.
+    // No se escala ni se sustituye por el recibo rotado de impresión.
     pdf.addImage(imgData, 'PNG', x, y, imgW, imgH, undefined, 'FAST');
-    const nombreArchivo = `Comprobante - ${nombreCompleto || 'Alumno'}.pdf`;
-    pdf.save(nombreArchivo);
+    const archivoSeguro = (nombreCompleto || 'Alumno').replace(/[\/:*?"<>|]/g, '-');
+    pdf.save(`Comprobante - ${archivoSeguro}.pdf`);
+    canvas.width = 0;
+    canvas.height = 0;
   } finally {
     document.body.removeChild(wrapper);
   }
