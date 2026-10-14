@@ -169,6 +169,29 @@ function loadTestEnv(rootDir = process.cwd()) {
  * Debe terminar antes de abrir sesiones o escribir datos.
  */
 function verifyPreRunSafety(env = loadTestEnv()) {
+  // Si Playwright ejecuta setup pero NO registra globalTeardown, los tests
+  // pueden terminar verdes y dejar todos los registros en la base.
+  // Examinar el config que usa el comando normal sin modificarlo.
+  const root = process.cwd();
+  const config = ["playwright.config.ts", "playwright.config.js", "playwright.config.mjs",
+    "playwright.config.cjs", "playwright.config.mts", "playwright.config.cts"]
+    .map((name) => path.resolve(root, name))
+    .find((file) => fs.existsSync(file));
+  if ((env.isLocal || env.allowRemoteWrites) && config) {
+    const contents = fs.readFileSync(config, "utf8");
+    if (!/globalTeardown\s*:/.test(contents) || !/auth[.]teardown/.test(contents)) {
+      throw new Error(
+        'TESTING BLOQUEADO: playwright.config no declara globalTeardown ' +
+        'apuntando a tests/auth.teardown.js. Sin este hook NO se limpian los datos.'
+      );
+    }
+  }
+  if ((env.isLocal || env.allowRemoteWrites) && (!env.finalCleanup || !env.verifyIntegrity)) {
+    throw new Error(
+      'TESTING BLOQUEADO: una suite con escrituras requiere PW_FINAL_CLEANUP=true ' +
+      'y PW_VERIFY_INTEGRITY=true. Se detuvo ANTES de modificar la base.'
+    );
+  }
   if (env.productionE2E) {
     if (env.preflightKey.length < 24) {
       throw new Error(

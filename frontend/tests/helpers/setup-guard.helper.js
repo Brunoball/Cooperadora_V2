@@ -67,7 +67,11 @@ function claimCurrentRun(env) {
   // globalTeardown también se invoca después de un setup fallido. Nunca puede
   // reclamar el marker E2E que pertenecía a la ejecución anterior.
   if (marker.runId !== attempt.runId || marker.target !== env.target ||
-      attempt.pid !== marker.pid || attempt.pid !== process.pid) return false;
+      attempt.pid !== marker.pid) return false;
+  // Playwright puede ejecutar globalSetup y globalTeardown en procesos
+  // diferentes. El PID del setup no tiene que ser el del teardown, pero
+  // SI debe haber terminado; nunca reclamar un runner que siga vivo.
+  if (attempt.pid !== process.pid && livePid(Number(attempt.pid)) !== false) return false;
   const authSha256 = crypto.createHash("sha256").update(fs.readFileSync(env.authFile)).digest("hex");
   if (marker.version !== 2 || marker.authSha256 !== authSha256) {
     throw new Error("Estado E2E incongruente. Se conserva para auditoría; NO se limpió.");
@@ -76,11 +80,13 @@ function claimCurrentRun(env) {
   return true;
 }
 
-function endAttempt(env) {
+function endAttempt(env, verifiedClaim = false) {
   const file = attemptPath(env);
   if (!fs.existsSync(file)) return;
   try {
-    if (readJson(file).pid === process.pid) fs.rmSync(file, { force: true });
+    // verifiedClaim solo se recibe luego de verificar runId, firma del estado
+    // y muerte del proceso dueño en claimCurrentRun().
+    if (verifiedClaim || readJson(file).pid === process.pid) fs.rmSync(file, { force: true });
   } catch { /* Preservar estado ilegible para diagnóstico. */ }
 }
 
