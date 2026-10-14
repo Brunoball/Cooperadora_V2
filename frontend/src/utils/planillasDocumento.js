@@ -1,7 +1,7 @@
 /**
  * Plantilla única de Planillas de ventas.
  * La impresión y la exportación PDF comparten exactamente las mismas hojas,
- * encabezados, anchos, bordes y espacios para completar a mano.
+ * encabezados, anchos, bordes y valores obtenidos de las ventas aprobadas.
  */
 import { escapeHtml, money } from "../components/Ventas/ventasUtils";
 
@@ -19,9 +19,32 @@ const separarEnHojas = (rows, cantidad) => {
 const cursoSinSimbolo = (value) => String(value || "").replace(/[°º]/g, "").trim();
 const nombreAlumno = (row) => `${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`;
 
-function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPaginas, totalCurso) {
+// Las tres salidas (pantalla, impresión y Excel) usan estas proyecciones.
+// El cálculo de las cifras corresponde exclusivamente al backend.
+export function filaPlanilla(row, tipo, indice = 0) {
+  const comunes = {
+    vendidas: Number(row.cantidad_vendida || 0),
+    faltantes: Number(row.cantidad_faltante || 0),
+    ganancia: Number(row.ganancia_pendiente || 0),
+    gananciaCobrada: Number(row.ganancia_cobrada || 0),
+    cobrado: Number(row.importe_cobrado || 0),
+    productos: Number(row.importe_productos || 0),
+    observaciones: String(row.observaciones || ""),
+  };
+  if (tipo === "docentes") return {
+    ...comunes, orden: indice + 1,
+    nombre: String(row.nombre_completo || ""), dni: String(row.dni || ""),
+  };
+  return {
+    ...comunes, nombre: nombreAlumno(row), dni: String(row.num_documento || ""),
+    anio: cursoSinSimbolo(row.nombre_anio || ""), division: String(row.nombre_division || ""),
+  };
+}
+
+function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPaginas, totalCurso, totalCursoCobrado, totalGeneral = null) {
   const cursoTexto = `${curso || "SIN AÑO"} ${division || ""}`.trim();
   const paginaTexto = totalPaginas > 1 ? ` · Hoja ${nroPagina} de ${totalPaginas}` : "";
+  const subtotal = rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
   return `<section class="legacy-sheet">
     <div class="legacy-meta"><span>Curso: ${escapeHtml(cursoTexto)} · Alumnos: ${totalCurso}${paginaTexto}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docente responsable: _______________________________</span></div>
     <table class="legacy-grid legacy-grid--course">
@@ -29,30 +52,44 @@ function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPagina
       <tbody>
         <tr><th class="legacy-school" colspan="9">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
         <tr class="legacy-top"><th colspan="2">ALUMNOS</th><th colspan="6">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
-        <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(cursoTexto)}</th><th colspan="5">COMPLETAR A MANO</th></tr>
+        <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(cursoTexto)}</th><th colspan="5">DATOS ACTUALIZADOS DE VENTAS</th></tr>
         <tr class="legacy-columns"><th rowspan="2">APELLIDO Y NOMBRES</th><th rowspan="2">DNI</th><th colspan="2">CURSO</th><th colspan="2">UNIDADES</th><th rowspan="2">GANANCIA<br>A PAGAR</th><th rowspan="2">IMPORTE<br>COBRADO</th><th rowspan="2">OBSERVACIONES</th></tr>
         <tr class="legacy-columns legacy-columns--sub"><th>AÑO</th><th>DIV.</th><th>VEND.</th><th>FALT.</th></tr>
-        ${rows.map((row) => `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(nombreAlumno(row))}</td><td>${escapeHtml(row.num_documento || "")}</td><td>${escapeHtml(cursoSinSimbolo(curso))}</td><td>${escapeHtml(division || "")}</td><td></td><td></td><td></td><td></td><td></td></tr>`).join("")}
+        ${rows.map((row) => {
+          const f = filaPlanilla(row, "cursos");
+          return `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${escapeHtml(f.anio)}</td><td>${escapeHtml(f.division)}</td><td>${f.vendidas}</td><td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td><td class="legacy-amount">${escapeHtml(money(f.cobrado))}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
+        }).join("")}
       </tbody>
     </table>
-    <div class="legacy-total">TOTAL COBRADO: ______________</div>
+    <div class="legacy-total">${totalPaginas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${escapeHtml(money(subtotal))}</strong></div>
+    ${nroPagina === totalPaginas && totalPaginas > 1 ? `<div class="legacy-final-total">TOTAL DEL CURSO: <strong>${escapeHtml(money(totalCursoCobrado))}</strong></div>` : ""}
+    ${totalGeneral !== null ? `<div class="legacy-final-total">TOTAL GENERAL DE PLANILLA: <strong>${escapeHtml(money(totalGeneral))}</strong></div>` : ""}
   </section>`;
 }
 
-function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTexto, anio) {
+function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTexto, anio, conObjetivo, totalDocentes) {
+  const subtotal = rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
+  const span = conObjetivo ? 8 : 6;
+  const columnas = conObjetivo
+    ? `<colgroup><col class="t-order"><col class="t-name t-name--objective"><col class="t-dni"><col class="t-qty"><col class="t-qty"><col class="t-gain"><col class="t-paid"><col class="t-notes"></colgroup>`
+    : `<colgroup><col class="t-order"><col class="t-name"><col class="t-dni"><col class="t-qty"><col class="t-paid"><col class="t-notes"></colgroup>`;
   return `<section class="legacy-sheet">
     <div class="legacy-meta"><span>Listado de docentes · Página ${pagina} de ${cantidadHojas}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docentes en esta hoja: ${rows.length}</span></div>
-    <table class="legacy-grid legacy-grid--teachers">
-      <colgroup><col class="t-order"><col class="t-name"><col class="t-dni"><col class="t-qty"><col class="t-paid"><col class="t-notes"></colgroup>
+    <table class="legacy-grid legacy-grid--teachers ${conObjetivo ? "legacy-grid--teachers-objective" : ""}">
+      ${columnas}
       <tbody>
-        <tr><th class="legacy-school" colspan="6">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
-        <tr class="legacy-top"><th colspan="2">PROFESORES / DOCENTES</th><th colspan="3">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
-        <tr class="legacy-course-line"><th colspan="3">PRODUCTO: ${escapeHtml(producto.toLocaleUpperCase("es-AR"))}</th><th colspan="3">PRECIO UNITARIO: ${precioTexto ? escapeHtml(precioTexto) : "____________"}</th></tr>
-        <tr class="legacy-columns"><th>ORDEN</th><th>DOCENTE</th><th>DNI</th><th>CANT.</th><th>COBRADO</th><th>OBSERVACIONES</th></tr>
-        ${rows.map((row, index) => `<tr class="legacy-data-row"><td>${((pagina - 1) * DOCENTES_POR_HOJA) + index + 1}</td><td class="legacy-name">${escapeHtml(row.nombre_completo || "")}</td><td>${escapeHtml(row.dni || "")}</td><td></td><td></td><td></td></tr>`).join("")}
+        <tr><th class="legacy-school" colspan="${span}">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
+        <tr class="legacy-top"><th colspan="2">PROFESORES / DOCENTES</th><th colspan="${span - 3}">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
+        <tr class="legacy-course-line"><th colspan="${Math.floor(span / 2)}">PRODUCTO: ${escapeHtml(producto.toLocaleUpperCase("es-AR"))}</th><th colspan="${span - Math.floor(span / 2)}">PRECIO UNITARIO: ${precioTexto ? escapeHtml(precioTexto) : "SIN VENTAS"}</th></tr>
+        <tr class="legacy-columns"><th>ORDEN</th><th>DOCENTE</th><th>DNI</th><th>CANT.</th>${conObjetivo ? "<th>FALT.</th><th>GANANCIA A PAGAR</th>" : ""}<th>COBRADO</th><th>OBSERVACIONES</th></tr>
+        ${rows.map((row, index) => {
+          const f = filaPlanilla(row, "docentes", (pagina - 1) * DOCENTES_POR_HOJA + index);
+          return `<tr class="legacy-data-row"><td>${f.orden}</td><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${f.vendidas}</td>${conObjetivo ? `<td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td>` : ""}<td class="legacy-amount">${escapeHtml(money(f.cobrado))}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
+        }).join("")}
       </tbody>
     </table>
-    <div class="legacy-total">TOTAL COBRADO: ______________</div>
+    <div class="legacy-total">${cantidadHojas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${escapeHtml(money(subtotal))}</strong></div>
+    ${cantidadHojas > 1 && pagina === cantidadHojas ? `<div class="legacy-final-total">TOTAL DOCENTES: <strong>${escapeHtml(money(totalDocentes))}</strong></div>` : ""}
   </section>`;
 }
 
@@ -75,9 +112,14 @@ const ESTILOS = `
   .legacy-columns th{font-size:8px;height:7mm}.legacy-columns--sub th{height:5.7mm;font-size:7.5px}
   .legacy-data-row td{height:5.2mm;font-size:7.6px;padding-top:.8mm;padding-bottom:.8mm}
   .legacy-data-row .legacy-name{text-align:left;font-weight:700;padding-left:1.3mm;white-space:nowrap;overflow:hidden;text-overflow:clip}
-  .legacy-total{margin:4mm 0 0 auto;width:74mm;height:11mm;border:0.75px solid #000;display:flex;align-items:center;padding:0 3mm;font-size:8px;font-weight:700}
+  .legacy-total{margin:4mm 0 0 auto;width:74mm;height:11mm;border:0.75px solid #000;display:flex;justify-content:space-between;gap:3mm;align-items:center;padding:0 3mm;font-size:8px;font-weight:700}
+  .legacy-total strong{font-size:10px;text-align:right}
+  .legacy-final-total{width:74mm;height:7mm;margin:1mm 0 0 auto;border:0.75px solid #000;display:flex;align-items:center;justify-content:space-between;gap:2mm;padding:0 3mm;font-size:7.5px;font-weight:700}
+  .legacy-grid .legacy-amount{white-space:nowrap;font-size:7.3px}
+  .legacy-grid .legacy-notes{font-size:7px;overflow:hidden;max-width:0;text-overflow:ellipsis;white-space:nowrap}
   .legacy-grid--course .c-name{width:58mm}.legacy-grid--course .c-dni{width:23mm}.legacy-grid--course .c-year{width:12mm}.legacy-grid--course .c-div{width:12mm}.legacy-grid--course .c-qty{width:13mm}.legacy-grid--course .c-gain{width:21mm}.legacy-grid--course .c-paid{width:21mm}.legacy-grid--course .c-notes{width:auto}
   .legacy-grid--course .legacy-data-row td{height:6mm;font-size:8px}
+  .legacy-grid--teachers-objective .t-name--objective{width:61mm}.legacy-grid--teachers-objective .t-gain{width:22mm}
   .legacy-grid--teachers .t-order{width:11mm}.legacy-grid--teachers .t-name{width:80mm}.legacy-grid--teachers .t-dni{width:25mm}.legacy-grid--teachers .t-qty{width:17mm}.legacy-grid--teachers .t-paid{width:26mm}.legacy-grid--teachers .t-notes{width:auto}
   @media print{.legacy-sheet{margin:0;width:200mm;height:287mm;min-height:287mm}}
 `;
@@ -93,7 +135,9 @@ export function crearDocumentoPlanillas(data, tipo) {
 
   if (tipo === "docentes") {
     const grupos = separarEnHojas(items, DOCENTES_POR_HOJA);
-    paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio));
+    const conObjetivo = Number(data?.campania?.cantidad_minima_persona || 0) > 0;
+    const totalDocentes = items.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
+    paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio, conObjetivo, totalDocentes));
   } else {
     const cursos = new Map();
     items.forEach((row) => {
@@ -103,9 +147,14 @@ export function crearDocumentoPlanillas(data, tipo) {
       if (!cursos.has(key)) cursos.set(key, { curso, division, rows: [] });
       cursos.get(key).rows.push(row);
     });
-    paginas = [...cursos.values()].flatMap((grupo) => {
+    const valoresCurso = [...cursos.values()];
+    const totalGeneral = items.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
+    paginas = valoresCurso.flatMap((grupo, grupoIndex) => {
       const hojas = separarEnHojas(grupo.rows, ALUMNOS_POR_HOJA);
-      return hojas.map((rows, i) => hojaCurso(rows, grupo.curso, grupo.division, campania, anio, i + 1, hojas.length, grupo.rows.length));
+      const totalCurso = grupo.rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
+      return hojas.map((rows, i) => hojaCurso(rows, grupo.curso, grupo.division, campania, anio,
+        i + 1, hojas.length, grupo.rows.length, totalCurso,
+        (valoresCurso.length > 1 && grupoIndex === valoresCurso.length - 1 && i === hojas.length - 1) ? totalGeneral : null));
     });
   }
 
@@ -154,7 +203,7 @@ export async function exportarDocumentoPlanillasPdf(documento, nombreArchivo = "
 
   try {
     // La impresión muestra una hoja por página y la descarga PDF conserva el
-    // mismo tamaño A4, la cuadrícula y todos los campos sin rellenar.
+    // mismo tamaño A4, la cuadrícula y los importes efectivamente calculados.
     if (document.fonts?.ready) await document.fonts.ready;
     const pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
     const hojas = [...host.querySelectorAll(".legacy-sheet")];

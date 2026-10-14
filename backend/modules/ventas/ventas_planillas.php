@@ -72,101 +72,282 @@ trait VentasPlanillas
         ]);
     }
 
+    /** Los DNI se comparan sólo si contienen entre 6 y 12 dígitos. */
+    private static function planillasDni(mixed $value): string
+    {
+        $digits = preg_replace('/[^0-9]/', '', (string)($value ?? ''));
+        return strlen($digits) >= 6 && strlen($digits) <= 12 ? $digits : '';
+    }
+
+    private static function planillasTotales(array $rows): array
+    {
+        $totals = [
+            'cantidad_vendida' => 0, 'cantidad_faltante' => 0,
+            'ganancia_determinada' => 0.0, 'ganancia_cobrada' => 0.0,
+            'ganancia_pendiente' => 0.0, 'importe_productos' => 0.0,
+            'importe_cobrado' => 0.0, 'ordenes_aprobadas' => 0,
+        ];
+        foreach ($rows as $row) {
+            foreach ($totals as $field => $initial) {
+                $totals[$field] += $row[$field] ?? 0;
+            }
+        }
+        foreach (['ganancia_determinada', 'ganancia_cobrada', 'ganancia_pendiente', 'importe_productos', 'importe_cobrado'] as $key) {
+            $totals[$key] = round($totals[$key], 2);
+        }
+        return $totals;
+    }
+
     public static function datosPlanillas(): never
     {
-        $db=self::db();
-        $type=strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));
+        $db = self::db();
+        $type = strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));
         if (!in_array($type, ['cursos', 'docentes'], true)) {
             api_error('El tipo de planilla no es válido.', 'VALIDATION_ERROR');
         }
-
-        $campaignId=positive_id($_GET['id_campania'] ?? null,'campaña');
-        $campaign=self::campaign($db,$campaignId);
-
-        // Metadatos históricos de impresión. El año sale de la propia campaña y
-        // el precio usa las ventas aprobadas cuando existe un único valor real.
-        // Si hubo más de un precio se informa como múltiple en vez de mostrar el
-        // precio actual del producto como si fuera histórico.
+        $campaignId = positive_id($_GET['id_campania'] ?? null, 'campaña');
+        $campaign = self::campaign($db, $campaignId); // Incluye campañas inactivas históricas.
+        $principalId = (int)($campaign['id_producto_principal'] ?? 0);
         $yearSource = $campaign['fecha_inicio'] ?: ($campaign['fecha_fin'] ?: ($campaign['creado_en'] ?? null));
         $sheetYear = $yearSource ? (int)substr((string)$yearSource, 0, 4) : (int)date('Y');
-        $principalId=(int)($campaign['id_producto_principal'] ?? 0);
-        $priceMeta = ['precios_distintos'=>0, 'precio_min'=>null, 'precio_max'=>null];
+
+        $year = self::nullablePositiveId($_GET['id_anio'] ?? null);
+        $division = self::nullablePositiveId($_GET['id_division'] ?? null);
+        if ($type === 'cursos') {
+            if ($year !== null && !self::fetchOne($db, 'SELECT id_anio FROM anio WHERE id_anio=? LIMIT 1', [$year])) {
+                api_error('El año seleccionado no existe.', 'VALIDATION_ERROR');
+            }
+            if ($division !== null && !self::fetchOne($db, 'SELECT id_division FROM division WHERE id_division=? LIMIT 1', [$division])) {
+                api_error('La división seleccionada no existe.', 'VALIDATION_ERROR');
+            }
+        }
+
+        // Los listados completos permiten reconocer DNI históricos sin asignar
+        // por error una venta de otro curso a la planilla filtrada.
+        $students = $db->query(
+            'SELECT a.id_alumno,a.apellido,a.nombre,a.num_documento,a.id_anio,a.id_division,
+                    an.nombre_anio,d.nombre_division
+               FROM alumnos a
+               LEFT JOIN anio an ON an.id_anio=a.id_anio
+               LEFT JOIN division d ON d.id_division=a.id_division
+              WHERE a.eliminado=0 AND a.activo=1 AND a.ingreso<=CURDATE()
+              ORDER BY a.id_anio,a.id_division,a.apellido,a.nombre'
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $teachers = $db->query(
+            'SELECT id_docente,docente AS nombre_completo,dni,email,activo FROM docentes WHERE activo=1 ORDER BY docente'
+        )->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $studentIds = [];
+        $teacherIds = [];
+        $dniOwners = [];
+        foreach ($students as $row) {
+            $id = (int)$row['id_alumno'];
+            $studentIds[$id] = true;
+            $dni = self::planillasDni($row['num_documento']);
+            if ($dni !== '') $dniOwners[$dni]['alumnos'][] = $id;
+        }
+        foreach ($teachers as $row) {
+            $id = (int)$row['id_docente'];
+            $teacherIds[$id] = true;
+            $dni = self::planillasDni($row['dni']);
+            if ($dni !== '') $dniOwners[$dni]['docentes'][] = $id;
+        }
+
+        // Una fila por orden: no sumar o.total sobre un JOIN directo de ítems.
+        // El historial de precios se obtiene sólo de los ítems aprobados.
+        $sql = 'SELECT o.id_orden,o.codigo_orden,o.origen,o.id_venta_persona,
+                       o.total,o.ganancia_objetivo,o.observacion,
+                       vp.id_alumno AS persona_id_alumno,vp.dni AS persona_dni,
+                       vp.nombre_apellido AS persona_nombre,
+                       COALESCE(oi.cantidad_principal,0) AS cantidad_principal,
+                       COALESCE(oi.importe_productos,0) AS importe_productos
+                  FROM ventas_ordenes o
+                  LEFT JOIN ventas_personas vp ON vp.id_persona=o.id_venta_persona
+                  LEFT JOIN (
+                      SELECT oi.id_orden,
+                             SUM(CASE WHEN oi.id_producto=? THEN oi.cantidad ELSE 0 END) AS cantidad_principal,
+                             SUM(oi.subtotal) AS importe_productos
+                        FROM ventas_orden_items oi
+                        INNER JOIN ventas_ordenes filtered ON filtered.id_orden=oi.id_orden
+                       WHERE filtered.id_campania=? AND filtered.estado=\'aprobada\'
+                       GROUP BY oi.id_orden
+                  ) oi ON oi.id_orden=o.id_orden
+                 WHERE o.id_campania=? AND o.estado=\'aprobada\'
+                 ORDER BY o.id_orden';
+        $stmt = $db->prepare($sql);
+        $stmt->execute([$principalId, $campaignId, $campaignId]);
+        $orders = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        $byStudent = [];
+        $byTeacher = [];
+        $unassigned = [];
+        $campaignTotal = 0.0;
+        $campaignUnits = 0;
+        $campaignGain = 0.0;
+        $campaignProducts = 0.0;
+        $campaignApproved = 0;
+
+        foreach ($orders as $order) {
+            $amount = (float)$order['total'];
+            $units = (int)$order['cantidad_principal'];
+            $gain = (float)$order['ganancia_objetivo'];
+            $products = (float)$order['importe_productos'];
+            $campaignTotal += $amount;
+            $campaignUnits += $units;
+            $campaignGain += $gain;
+            $campaignProducts += $products;
+            ++$campaignApproved;
+
+            $studentId = (int)($order['persona_id_alumno'] ?? 0);
+            $kind = null;
+            $ownerId = 0;
+            $reason = 'Persona no identificada';
+            if ($studentId > 0) {
+                // Asociación explícita: tiene prioridad sobre el DNI del pagador.
+                if (isset($studentIds[$studentId])) {
+                    $kind = 'alumnos';
+                    $ownerId = $studentId;
+                } else {
+                    $reason = 'Alumno asociado fuera del listado activo';
+                }
+            } else {
+                $dni = self::planillasDni($order['persona_dni'] ?? null);
+                if ($dni !== '') {
+                    $owners = $dniOwners[$dni] ?? [];
+                    $studentsMatching = $owners['alumnos'] ?? [];
+                    $teachersMatching = $owners['docentes'] ?? [];
+                    if (count($studentsMatching) + count($teachersMatching) === 1) {
+                        $kind = count($studentsMatching) === 1 ? 'alumnos' : 'docentes';
+                        $ownerId = (int)($studentsMatching[0] ?? $teachersMatching[0]);
+                    } else {
+                        $reason = count($studentsMatching) + count($teachersMatching) > 1
+                            ? 'DNI ambiguo entre alumnos y/o docentes'
+                            : 'DNI sin coincidencia validada';
+                    }
+                } elseif ($order['id_venta_persona'] !== null) {
+                    $reason = 'DNI ausente o inválido';
+                }
+            }
+
+            if ($kind === null) {
+                $unassigned[] = [
+                    'id_orden' => (int)$order['id_orden'],
+                    'codigo_orden' => $order['codigo_orden'],
+                    'nombre_persona' => $order['persona_nombre'] ?? '',
+                    'dni' => $order['persona_dni'] ?? '',
+                    'origen' => $order['origen'],
+                    'motivo' => $reason,
+                    'cantidad_vendida' => $units,
+                    'importe_cobrado' => round($amount, 2),
+                ];
+                continue;
+            }
+            // La agregación se realiza por persona, nunca por nombre ni por orden.
+            if ($kind === 'alumnos') $bucket = &$byStudent;
+            else $bucket = &$byTeacher;
+            if (!isset($bucket[$ownerId])) {
+                $bucket[$ownerId] = [
+                    'cantidad_vendida' => 0, 'importe_productos' => 0.0,
+                    'ganancia_cobrada' => 0.0, 'importe_cobrado' => 0.0,
+                    'ordenes_aprobadas' => 0, 'observaciones' => [],
+                ];
+            }
+            $bucket[$ownerId]['cantidad_vendida'] += $units;
+            $bucket[$ownerId]['importe_productos'] += $products;
+            $bucket[$ownerId]['ganancia_cobrada'] += $gain;
+            $bucket[$ownerId]['importe_cobrado'] += $amount;
+            $bucket[$ownerId]['ordenes_aprobadas']++;
+            // Se conservan notas efectivamente registradas, sin inventar estados.
+            $note = trim((string)($order['observacion'] ?? ''));
+            if ($note !== '' && count($bucket[$ownerId]['observaciones']) < 3) {
+                $bucket[$ownerId]['observaciones'][] = $note;
+            }
+            unset($bucket);
+        }
+
+        $source = $type === 'docentes' ? $teachers : $students;
+        $stats = $type === 'docentes' ? $byTeacher : $byStudent;
+        $rows = [];
+        $courseTotals = [];
+        foreach ($source as $row) {
+            if ($type === 'cursos') {
+                if ($year !== null && (int)$row['id_anio'] !== $year) continue;
+                if ($division !== null && (int)$row['id_division'] !== $division) continue;
+            }
+            $id = (int)$row[$type === 'docentes' ? 'id_docente' : 'id_alumno'];
+            $summary = $stats[$id] ?? [];
+            $sold = (int)($summary['cantidad_vendida'] ?? 0);
+            $objective = self::objectiveForSold($campaign, $sold);
+            $determined = (float)$objective['ganancia_pendiente'];
+            $collected = (float)($summary['ganancia_cobrada'] ?? 0);
+            $row = array_merge($row, $objective, [
+                // Compatibilidad con consumers previos.
+                'cantidad_ven' => $sold, 'cantidad_gan' => 0,
+                'cantidad_vendida' => $sold,
+                'ganancia_determinada' => round($determined, 2),
+                'ganancia_cobrada' => round($collected, 2),
+                'ganancia_pendiente' => round(max(0.0, $determined - $collected), 2),
+                'importe_productos' => round((float)($summary['importe_productos'] ?? 0), 2),
+                'importe_cobrado' => round((float)($summary['importe_cobrado'] ?? 0), 2),
+                'importe_vendido' => round((float)($summary['importe_cobrado'] ?? 0), 2),
+                'ordenes_aprobadas' => (int)($summary['ordenes_aprobadas'] ?? 0),
+                'observaciones' => implode(' | ', $summary['observaciones'] ?? []),
+            ]);
+            $rows[] = $row;
+            if ($type === 'cursos') {
+                $key = (string)$row['id_anio'] . ':' . (string)$row['id_division'];
+                if (!isset($courseTotals[$key])) {
+                    $courseTotals[$key] = [
+                        'id_anio' => $row['id_anio'], 'id_division' => $row['id_division'],
+                        'nombre_anio' => $row['nombre_anio'], 'nombre_division' => $row['nombre_division'],
+                        'items' => [],
+                    ];
+                }
+                $courseTotals[$key]['items'][] = $row;
+            }
+        }
+        foreach ($courseTotals as &$group) {
+            $group['totales'] = self::planillasTotales($group['items']);
+            unset($group['items']);
+        }
+        unset($group);
+
+        $priceMeta = ['precios_distintos' => 0, 'precio_min' => null, 'precio_max' => null];
         if ($principalId > 0) {
-            $priceMeta = self::fetchOne(
-                $db,
-                "SELECT COUNT(DISTINCT oi.precio_unitario) AS precios_distintos,
-                        MIN(oi.precio_unitario) AS precio_min,
-                        MAX(oi.precio_unitario) AS precio_max
-                   FROM ventas_ordenes o
-                   INNER JOIN ventas_orden_items oi ON oi.id_orden=o.id_orden
-                  WHERE o.id_campania=? AND o.estado='aprobada' AND oi.id_producto=?",
+            $priceMeta = self::fetchOne($db,
+                'SELECT COUNT(DISTINCT oi.precio_unitario) AS precios_distintos,
+                        MIN(oi.precio_unitario) AS precio_min, MAX(oi.precio_unitario) AS precio_max
+                   FROM ventas_ordenes o JOIN ventas_orden_items oi ON oi.id_orden=o.id_orden
+                  WHERE o.id_campania=? AND o.estado=\'aprobada\' AND oi.id_producto=?',
                 [$campaignId, $principalId]
             ) ?: $priceMeta;
         }
-        $distinctPrices = (int)($priceMeta['precios_distintos'] ?? 0);
-        $sheetPrice = $distinctPrices === 1
-            ? $priceMeta['precio_min']
-            : ($distinctPrices === 0 ? ($campaign['producto_principal_precio_anticipada'] ?? null) : null);
+        $different = (int)($priceMeta['precios_distintos'] ?? 0);
         $meta = [
-            'anio_planilla'=>$sheetYear,
-            'precio_unitario_referencia'=>$sheetPrice,
-            'precio_unitario_multiple'=>$distinctPrices > 1,
+            'anio_planilla' => $sheetYear,
+            'precio_unitario_referencia' => $different === 1 ? $priceMeta['precio_min'] :
+                ($different === 0 ? ($campaign['producto_principal_precio_anticipada'] ?? null) : null),
+            'precio_unitario_multiple' => $different > 1,
         ];
-
-        if($type==='docentes'){
-            $sql='SELECT id_docente, docente AS nombre_completo, dni, email, activo FROM docentes WHERE activo=1 ORDER BY docente';
-            $rows=$db->query($sql)->fetchAll(PDO::FETCH_ASSOC)?:[];
-            api_success(['tipo'=>'docentes','campania'=>$campaign,'meta'=>$meta,'items'=>$rows]);
-        }
-
-        $year=self::nullablePositiveId($_GET['id_anio'] ?? null);
-        $division=self::nullablePositiveId($_GET['id_division'] ?? null);
-        if ($year !== null && !self::fetchOne($db, 'SELECT id_anio FROM anio WHERE id_anio=? LIMIT 1', [$year])) {
-            api_error('El año seleccionado no existe.', 'VALIDATION_ERROR');
-        }
-        if ($division !== null && !self::fetchOne($db, 'SELECT id_division FROM division WHERE id_division=? LIMIT 1', [$division])) {
-            api_error('La división seleccionada no existe.', 'VALIDATION_ERROR');
-        }
-
-        $where=['a.eliminado=0','a.activo=1','a.ingreso<=CURDATE()'];
-        $params=[];
-        if($year){$where[]='a.id_anio=?';$params[]=$year;}
-        if($division){$where[]='a.id_division=?';$params[]=$division;}
-        // Preagrupar ítems por orden evita multiplicar o.total y
-        // ganancia_objetivo cuando una venta contiene varios conceptos.
-        // El importe cobrado incluye productos + ganancias (total real).
-        $sql="SELECT a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad_ven ELSE 0 END),0) AS cantidad_ven,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad_gan ELSE 0 END),0) AS cantidad_gan,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN oi.cantidad_vendida ELSE 0 END),0) AS cantidad_vendida,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN o.total ELSE 0 END),0) AS importe_vendido,
-                    COALESCE(SUM(CASE WHEN o.estado='aprobada' THEN o.ganancia_objetivo ELSE 0 END),0) AS ganancia_cobrada
-               FROM alumnos a
-               LEFT JOIN anio an ON an.id_anio=a.id_anio LEFT JOIN division d ON d.id_division=a.id_division
-               LEFT JOIN ventas_personas vp ON vp.id_alumno=a.id_alumno
-               LEFT JOIN ventas_ordenes o ON o.id_venta_persona=vp.id_persona AND o.id_campania=?
-               LEFT JOIN (
-                   SELECT id_orden,
-                          SUM(CASE WHEN id_producto={$principalId} THEN cantidad ELSE 0 END) AS cantidad_ven,
-                          SUM(CASE WHEN id_producto IS NULL OR id_producto<>{$principalId} THEN cantidad ELSE 0 END) AS cantidad_gan,
-                          SUM(CASE WHEN id_producto={$principalId} THEN cantidad ELSE 0 END) AS cantidad_vendida
-                     FROM ventas_orden_items GROUP BY id_orden
-               ) oi ON oi.id_orden=o.id_orden
-              ".($where?'WHERE '.implode(' AND ',$where):'')."
-              GROUP BY a.id_alumno,a.apellido,a.nombre,a.num_documento,an.nombre_anio,d.nombre_division
-              ORDER BY a.id_anio,a.id_division,a.apellido,a.nombre";
-        $statement=$db->prepare($sql);$statement->execute(array_merge([$campaignId],$params));
-        $rows=$statement->fetchAll(PDO::FETCH_ASSOC)?:[];
-
-        foreach ($rows as &$row) {
-            $objective=self::objectiveForSold($campaign,(int)($row['cantidad_ven'] ?? 0));
-            $objective['ganancia_pendiente']=round(max(0.0,
-                (float)$objective['ganancia_pendiente'] - (float)($row['ganancia_cobrada'] ?? 0)
-            ),2);
-            $row=array_merge($row,$objective);
-        }
-        unset($row);
-
-        api_success(['tipo'=>'cursos','campania'=>$campaign,'meta'=>$meta,'items'=>$rows]);
+        $unassignedTotal = round(array_sum(array_column($unassigned, 'importe_cobrado')), 2);
+        $assignedTotal = round(array_sum(array_column($byStudent, 'importe_cobrado')) +
+            array_sum(array_column($byTeacher, 'importe_cobrado')), 2);
+        api_success([
+            'tipo' => $type, 'campania' => $campaign, 'meta' => $meta,
+            'items' => $rows, 'totales' => self::planillasTotales($rows),
+            'totales_por_curso' => array_values($courseTotals),
+            'ventas_sin_asignar' => ['cantidad' => count($unassigned), 'importe_cobrado' => $unassignedTotal, 'items' => $unassigned],
+            // Conciliación de TODA la campaña, no sólo del curso filtrado.
+            'conciliacion' => [
+                'ordenes_aprobadas' => $campaignApproved,
+                'cantidad_vendida' => $campaignUnits,
+                'importe_productos' => round($campaignProducts, 2),
+                'ganancia_cobrada' => round($campaignGain, 2),
+                'total_aprobado' => round($campaignTotal, 2),
+                'total_atribuido' => $assignedTotal,
+                'total_sin_asignar' => $unassignedTotal,
+                'diferencia' => round($campaignTotal - $assignedTotal - $unassignedTotal, 2),
+            ],
+        ]);
     }
 }
