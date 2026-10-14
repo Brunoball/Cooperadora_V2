@@ -541,12 +541,13 @@ export default function ModalPagoCuota({
         <div className="cuotas-v2-footer-totals">
           <div className="cuotas-payment-footer-total">
             <span>{condoning ? "Importe condonado" : "Total operación"}</span>
-            <small>{selected.length} período(s) seleccionado(s)</small>
+            <small>{selected.length} {selected.length === 1 ? "período seleccionado" : "períodos seleccionados"}</small>
             <strong>{money(operationTotal)}</strong>
           </div>
           {!condoning && collectorTotal > 0 ? (
-            <div className="cuotas-v2-footer-collector-box" aria-label="Comisión del cobrador del 15 por ciento">
-              <span>15% para cobrador</span>
+            <div className="cuotas-v2-footer-collector-box" aria-label={`Comisión del cobrador del ${COBRADOR_PORCENTAJE} por ciento: ${money(collectorTotal)}`}>
+              <span>Comisión del cobrador</span>
+              <small>{COBRADOR_PORCENTAJE}% del total</small>
               <strong>{money(collectorTotal)}</strong>
             </div>
           ) : null}

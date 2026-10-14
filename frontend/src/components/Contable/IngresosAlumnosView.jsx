@@ -32,18 +32,43 @@ function amountTone(value) {
 
 function AmountCell({ item }) {
   const label = String(item?.etiqueta_monto || "").trim();
+  const collectorLabel = String(item?.etiqueta_cobrador || "").trim();
+  const hasMultipleTags = Boolean(label && collectorLabel);
+
+  // Cuando hay dos indicadores, abreviamos su texto visible sin perder el
+  // detalle original: cada chip conserva su etiqueta íntegra en el tooltip.
+  const amountText = hasMultipleTags
+    ? label.replace(/^monto\s+/i, "")
+    : label;
+  const collectorRate = collectorLabel.match(/\d+(?:[.,]\d+)?\s*%/);
+  const collectorText = hasMultipleTags
+    ? `Cobrador${collectorRate ? ` · ${collectorRate[0]}` : ""}`
+    : collectorLabel;
+
   return (
     <div className="mov-gridCell is-right ct-student-money">
       <strong>{money(item?.monto)}</strong>
-      {label ? (
-        <small className={`ct-student-amount-tag ${amountTone(item?.ajuste_monto)}`}>
-          {label}
-        </small>
-      ) : null}
-      {item?.etiqueta_cobrador ? (
-        <small className="ct-student-amount-tag is-collector">
-          {item.etiqueta_cobrador}
-        </small>
+      {label || collectorLabel ? (
+        <div className="ct-student-money-tags">
+          {label ? (
+            <small
+              className={`ct-student-amount-tag ${amountTone(item?.ajuste_monto)}`}
+              title={label}
+              aria-label={label}
+            >
+              {amountText}
+            </small>
+          ) : null}
+          {collectorLabel ? (
+            <small
+              className="ct-student-amount-tag is-collector"
+              title={collectorLabel}
+              aria-label={collectorLabel}
+            >
+              {collectorText}
+            </small>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

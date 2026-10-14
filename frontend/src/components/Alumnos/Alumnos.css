@@ -760,9 +760,7 @@
   margin-right: 6px;
 }
 
-/* Formulario */
-.socios-modal--form .entity-modal__body {
-}
+
 
 .socios-form {
   display: grid;
@@ -1371,6 +1369,42 @@
   }
 }
 
+
+/* El botón Importar necesita 100px adicionales de margen responsive:
+   de 1500 a 1599px Exportar y Nuevo alumno siguen arriba, pero Importar
+   queda junto a la paginación. A partir de 1600px, los tres van arriba. */
+@media (min-width: 1500px) and (max-width: 1600px) {
+  .socios-page .module-card__actions > .alumnos-headAction--import {
+    display: none !important;
+  }
+
+  .alumnos-tableFooter.is-single-page {
+    display: grid;
+  }
+
+  .alumnos-footerActions {
+    display: flex;
+  }
+
+  .alumnos-footerActions > .alumnos-footerAction--nuevo,
+  .alumnos-footerActions > .alumnos-footerAction--exportar {
+    display: none;
+  }
+
+  .alumnos-tableFooter .global-pagination__left {
+    justify-content: flex-start;
+    gap: 12px;
+  }
+
+  .alumnos-tableFooter .global-pagination__summary {
+    margin-left: auto;
+  }
+
+  .socios-page .module-card .socios-table > .global-divTable__body {
+    height: calc(100vh - 288px);
+    max-height: calc(100vh - 288px);
+  }
+}
 
 /* Header flexible: cuando el sidebar resta ancho, primero ceden los campos. */
 @media (min-width: 1021px) and (max-width: 1450px) {
