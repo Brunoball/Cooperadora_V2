@@ -232,16 +232,47 @@ test("Interfaz: Imprimir todos omite los cupones previos al ingreso de abril", a
   await authenticatePage(page);
   await page.goto("/cuotas");
   await page.getByRole("button", { name: /^cobrador$/i }).first().click();
+
+  // La lista conserva las filas anteriores mientras solicita los filtros nuevos.
+  // No basta con ver una fila: Playwright puede intentar hacer click cuando la
+  // grilla sigue cargando y el botón está cambiando de disabled a enabled.
+  const monthFilter = page.locator(".cuotas-month-filter select");
+  if (await monthFilter.inputValue() !== "4") {
+    const monthResponse = page.waitForResponse((res) => {
+      const url = new URL(res.url());
+      return url.searchParams.get("action") === "cuotas_listar"
+        && url.searchParams.get("mes") === "4"
+        && url.searchParams.get("cobrador") === "1"
+        && res.ok();
+    }, { timeout: 25_000 });
+    await monthFilter.selectOption("4");
+    await monthResponse;
+  }
+  await expect(monthFilter).toHaveValue("4");
+  await expect(page.locator('.cuotas-page .global-divTable[role="table"]'))
+    .toHaveAttribute("aria-busy", "false", { timeout: 25_000 });
+  const printButton = page.getByRole("button", { name: /^imprimir todos$/i }).first();
+  await expect(printButton).toBeEnabled({ timeout: 25_000 });
+
+  // Prueba específica del debounce: escribir el DNI e IMPRIMIR inmediatamente,
+  // sin esperar la búsqueda diferida de 320 ms ni una fila del listado. Así
+  // comprobamos que la impresión usa el valor VISIBLE, no buscarAplicado.
+  const calls = [];
+  page.on("request", (req) => {
+    const url = new URL(req.url());
+    if (url.searchParams.get("action") === "cuotas_cupones_cobrador") calls.push(url);
+  });
   await page.getByRole("textbox", { name: /buscar/i }).fill(f.student.num_documento);
-  await page.locator(".cuotas-month-filter select").selectOption("4");
-  const row = page.locator(".cuotas-page .cuotas-grid-v2[role='row']")
-    .filter({ hasText: f.student.num_documento });
-  await expect(row).toHaveCount(1, { timeout: 25_000 });
   const [popup] = await Promise.all([
     page.waitForEvent("popup", { timeout: 20_000 }),
-    page.getByRole("button", { name: /imprimir todos/i }).first().click(),
+    printButton.click(),
   ]);
+
   await expect(popup.locator(".cupon")).toHaveCount(27, { timeout: 30_000 });
+  expect(calls, "Solo una llamada para imprimir la libreta filtrada").toHaveLength(1);
+  expect(calls[0].searchParams.get("buscar"), "La impresión NO puede perder el DNI del buscador")
+    .toBe(f.student.num_documento);
+  await expect(popup.locator(".cupon").first()).toContainText(f.student.num_documento);
   await expect(popup.locator(".cupon").filter({ hasText: new RegExp(`Marzo\\s+${currentYear()}`, "i") })).toHaveCount(0);
   for (const name of MONTH_NAMES.slice(1)) {
     await expect(popup.locator(".cupon").filter({ hasText: new RegExp(`${name}\\s+${currentYear()}`, "i") })).toHaveCount(3);

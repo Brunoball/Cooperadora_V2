@@ -71,7 +71,7 @@ function xlsxSnapshot(bytes) {
   return { sheetCount: sheets.length, sheetPaths: sheets.map(([name]) => name), texts, entries };
 }
 
-function pdfSnapshot(bytes) {
+function pdfSnapshot(bytes, { allowImageOnly = false } = {}) {
   const buf = Buffer.from(bytes);
   assert.ok(buf.length > 500, "PDF vacío o demasiado corto");
   assert.equal(buf.subarray(0, 5).toString("latin1"), "%PDF-", "Cabecera PDF inválida");
@@ -88,17 +88,32 @@ function pdfSnapshot(bytes) {
       return {n:"\n",r:"\r",t:"\t",b:"\b",f:"\f"}[value] || value;
     })
   ).join(" ");
-  assert.ok(content.length > 0 && text.length > 0, "PDF sin contenido textual extraíble");
-  return { text, pages: (source.match(/\/Type\s*\/Page\b/g) || []).length };
+  const pages = (source.match(/\/Type\s*\/Page\b/g) || []).length;
+  const images = (source.match(/\/Subtype\s*\/Image\b/g) || []).length;
+  const imageOnly = text.length === 0;
+  if (imageOnly && allowImageOnly) {
+    // Las planillas de ventas se construyen con html2canvas + jsPDF:
+    // una imagen JPEG por hoja, sin operadores PDF Tj/TJ. No exigir texto
+    // inexistente, pero sí un PDF completo con imágenes reales incrustadas.
+    assert.ok(pages > 0 && images >= pages,
+      `PDF raster: ${pages} páginas pero solo ${images} imágenes`);
+    assert.match(source, /\/DCTDecode\b/, "PDF raster sin imágenes JPEG");
+    assert.ok(source.includes("\xff\xd8\xff") || /\/ASCII85Decode\b/.test(source),
+      "PDF raster sin datos JPEG válidos (binarios o ASCII85)");
+    assert.ok(buf.length > 5000, "PDF raster sospechosamente pequeño");
+  } else {
+    assert.ok(content.length > 0 && text.length > 0, "PDF sin contenido textual extraíble");
+  }
+  return { text, pages, images, imageOnly };
 }
 
-async function downloadSnapshot(download) {
+async function downloadSnapshot(download, options = {}) {
   const name = download.suggestedFilename();
   assert.match(name, /\.(xlsx|pdf)$/i, "Extensión inesperada de la descarga");
   const problem = await download.failure();
   assert.equal(problem, null, `Descarga interrumpida: ${problem}`);
   const bytes = fs.readFileSync(await download.path());
-  return { name, bytes, detail: /\.xlsx$/i.test(name) ? xlsxSnapshot(bytes) : pdfSnapshot(bytes) };
+  return { name, bytes, detail: /\.xlsx$/i.test(name) ? xlsxSnapshot(bytes) : pdfSnapshot(bytes, options) };
 }
 
 module.exports = { zipEntries, xlsxSnapshot, pdfSnapshot, downloadSnapshot };

@@ -16,7 +16,18 @@ test.describe("Login y sesión", () => {
   test("login real desde la UI", async ({ page, request }) => {
     const auth = authState();
     const credentials = loginCredentials(auth);
-    await page.goto("/");
+    // El navegador puede recibir ERR_NETWORK_CHANGED al iniciar el servidor
+    // local. Reintentar SOLO ese error de red transitorio, nunca un login malo.
+    for (let intento = 0; intento < 3; intento += 1) {
+      try {
+        await page.goto("/", { waitUntil: "domcontentloaded" });
+        break;
+      } catch (error) {
+        const transient = /net::ERR_NETWORK_CHANGED/.test(String(error));
+        if (!transient || intento === 2) throw error;
+        await page.waitForTimeout(250 * (intento + 1));
+      }
+    }
     await page.getByPlaceholder("Usuario").fill(credentials.usuario);
     await page.getByPlaceholder("Contraseña").fill(credentials.contrasena);
     await page.getByRole("button", { name: /ingresar/i }).click();

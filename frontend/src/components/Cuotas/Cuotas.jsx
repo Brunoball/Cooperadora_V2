@@ -460,7 +460,10 @@ export default function Cuotas() {
     try {
       const result = await cuotasApi.cuponesCobrador({
         anio,
-        buscar: buscarAplicado,
+        // La busqueda del listado tiene debounce (320 ms). Al imprimir hay
+        // que usar el texto visible YA escrito: de otro modo el click rapido
+        // genera libretas para todos los alumnos en vez del DNI filtrado.
+        buscar: buscar.trim(),
         categoria,
         id_anio: anioLectivo,
         division,

@@ -69,21 +69,33 @@ test('Ventas: filtros de MES VENTAS, ORIGEN y modal global para exportar', async
   expect(component).toContain('ganancia_objetivo');
 });
 
-test('planilla imprimible: columnas de ganancias y faltantes se completan a mano, exportación sin esos cálculos', async () => {
+test('Planillas: impresion y PDF comparten plantilla; faltantes/ganancias se completan a mano', async () => {
   const component = read('components', 'Ventas', 'secciones', 'Planillas.jsx');
-  const start = component.indexOf('const courseSheet =');
-  const end = component.indexOf('const teacherSheet =', start);
-  expect(start).toBeGreaterThan(0);
-  expect(end).toBeGreaterThan(start);
-  const sheet = component.slice(start, end);
-  // Se muestra alumno, DNI, año, división, y las columnas numéricas en blanco.
-  expect(sheet).toContain('row.num_documento');
-  expect(sheet).toContain('normalizeCourse(courseYear)');
-  expect(sheet).toContain('<td></td><td></td><td></td><td></td><td></td>');
-  expect(sheet).not.toContain('${row.ganancia_');
-  expect(sheet).not.toContain('${row.cantidad_faltante');
+  const document = read('utils', 'planillasDocumento.js');
+  // La plantilla se extrajo a planillasDocumento: no buscar constantes que ya
+  // dejaron de existir en Planillas.jsx.
+  expect(component).toContain('crearDocumentoPlanillas(data, type)');
+  expect(component).toContain('imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type), popup)');
+  expect(component).toContain('exportarDocumentoPlanillasPdf(documento, exportFileName)');
+  expect(document).toContain('function hojaCurso(');
+  expect(document).toContain('function hojaDocentes(');
+  const course = document.slice(document.indexOf('function hojaCurso('), document.indexOf('function hojaDocentes('));
+  const teachers = document.slice(document.indexOf('function hojaDocentes('), document.indexOf('// Mantiene la estética'));
+  expect(course).toContain('row.num_documento');
+  expect(course).toContain('cursoSinSimbolo(curso)');
+  expect(course).toContain('legacy-data-row');
+  expect(course).toContain('<td></td><td></td><td></td><td></td><td></td>');
+  expect(course).not.toContain('row.ganancia_');
+  expect(course).not.toContain('row.cantidad_faltante');
+  expect(teachers).toContain('row.dni');
+  expect(teachers).toContain('<td></td><td></td><td></td>');
+  // Excel se descarga con los campos de identificación, no con cifras de
+  // ganancia/cantidad calculadas por el backend.
   expect(component).toContain('{ label: "Apellido y nombres", key: "alumno" }');
   expect(component).toContain('{ label: "División", key: "division" }');
+  expect(component).toContain('{ label: "DNI", key: "dni" }');
+  expect(component).not.toContain('key: "ganancia_objetivo"');
+  expect(component).not.toContain('key: "cantidad_faltante"');
 });
 
 test('interfaz: listado de Ventas ofrece nueva venta, filtros y navegación sin errores de JavaScript', async ({ page }) => {
