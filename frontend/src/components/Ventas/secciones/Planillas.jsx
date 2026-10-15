@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronDown, faFileLines, faPrint, faUsers } from "@fortawesome/free-solid-svg-icons";
+import { faChevronDown, faFileLines, faPrint, faUsers, faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalPagination from "../../Global/GlobalPagination";
 import BotonExportarGlobal from "../../Global/Botones/BotonExportarGlobal";
@@ -8,7 +8,32 @@ import ModalExportarGlobal from "../../Global/Modales/ModalExportarGlobal";
 import { crearDocumentoPlanillas, imprimirDocumentoPlanillas, exportarDocumentoPlanillasPdf, filaPlanilla } from "../../../utils/planillasDocumento";
 import ventasApi from "../api/ventasApi";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
-import { money, upper, yes } from "../ventasUtils";
+import { campaniaOpcion, ordenarCampanias, money, upper, yes, today } from "../ventasUtils";
+
+// Busca en toda la planilla, independientemente de la página, año o división visible.
+const normalizarBusqueda = (value) => String(value ?? "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLocaleLowerCase("es-AR");
+
+function TextoResaltado({ texto, busqueda }) {
+  const original = String(texto ?? "");
+  const needle = normalizarBusqueda(busqueda.trim());
+  if (!needle) return original;
+  const text = normalizarBusqueda(original);
+  const partes = [];
+  let desde = 0;
+  while (desde < original.length) {
+    const inicio = text.indexOf(needle, desde);
+    if (inicio === -1) break;
+    if (inicio > desde) partes.push(original.slice(desde, inicio));
+    partes.push(<mark className="ventas-planillas-match" key={`${inicio}-${partes.length}`}>{original.slice(inicio, inicio + needle.length)}</mark>);
+    desde = inicio + needle.length;
+  }
+  if (desde < original.length) partes.push(original.slice(desde));
+  return partes.length ? <>{partes}</> : original;
+}
+
+const filaId = (row, tipo) => String(tipo === "docentes" ? row.id_docente : row.id_alumno);
 
 export default function Planillas({ feedback, showFeedback }) {
   const [options, setOptions] = useState({ campanias: [], anios: [], divisiones: [], total_docentes: 0 });
@@ -16,6 +41,13 @@ export default function Planillas({ feedback, showFeedback }) {
   const [type, setType] = useState("cursos");
   const [year, setYear] = useState("");
   const [division, setDivision] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [buscarAbierto, setBuscarAbierto] = useState(true);
+  const [busquedaCompleta, setBusquedaCompleta] = useState({ key: "", items: [], loading: false, error: "" });
+  const [filaLocalizada, setFilaLocalizada] = useState(null);
+  const [revisionBusqueda, setRevisionBusqueda] = useState(0);
+  const busquedaActivaRef = useRef(false);
+  const filaMarcadaRef = useRef(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportData, setExportData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,15 +60,14 @@ export default function Planillas({ feedback, showFeedback }) {
   const previewBodyRef = useRef(null);
   const sequenceRef = useRef(0);
 
-  const resetPage = (setter) => (value) => {
-    setter(value);
-    setPage(1);
-  };
+  const campaignOptions = useMemo(() => ordenarCampanias(options.campanias || []).map((item) => ({
+    value: String(item.id_campania), label: campaniaOpcion(item),
+  })), [options.campanias]);
 
   useEffect(() => {
     const body = previewBodyRef.current?.querySelector(".ventas-planillas-sheetScroll");
     if (body) { body.scrollTop = 0; body.scrollLeft = 0; }
-  }, [page, campaign, type, year, division]);
+  }, [campaign, type, year, division]);
 
   const requestParams = useMemo(() => ({
     tipo: type,
@@ -51,6 +82,63 @@ export default function Planillas({ feedback, showFeedback }) {
   const previewData = previewResult.key === requestKey ? previewResult.data : null;
   const isPreviewPending = loading || (Boolean(campaign) && previewResult.key !== requestKey);
 
+  const claveBusqueda = `${campaign}:${type}`;
+  const busquedaActiva = Boolean(busqueda.trim());
+  busquedaActivaRef.current = busquedaActiva;
+  useEffect(() => {
+    if (!campaign || !busqueda.trim()) return;
+    let cancelada = false;
+    setBusquedaCompleta({ key: claveBusqueda, items: [], loading: true, error: "" });
+    ventasApi.planillasDatos({ tipo: type, id_campania: campaign, id_anio: "", id_division: "" })
+      .then((data) => {
+        if (cancelada) return;
+        const items = data.items || [];
+        setBusquedaCompleta({ key: claveBusqueda, items, loading: false, error: "" });
+      }).catch((err) => {
+        if (!cancelada) setBusquedaCompleta({ key: claveBusqueda, items: [], loading: false, error: err.message });
+      });
+    return () => { cancelada = true; };
+  }, [campaign, type, claveBusqueda, busquedaActiva, revisionBusqueda]);
+
+  const resultadosBusqueda = useMemo(() => {
+    if (!busqueda.trim() || busquedaCompleta.key !== claveBusqueda || busquedaCompleta.loading) return [];
+    const q = normalizarBusqueda(busqueda.trim());
+    return busquedaCompleta.items.filter((row) => {
+      const f = filaPlanilla(row, type);
+      return normalizarBusqueda(f.nombre).includes(q) || normalizarBusqueda(f.dni).includes(q);
+    });
+  }, [busqueda, busquedaCompleta, claveBusqueda, type]);
+
+  const cambiarConsulta = (setter) => (valor) => {
+    setter(valor);
+    setPage(1);
+    setFilaLocalizada(null);
+    setBusqueda("");
+  };
+
+  const buscarPersona = (row) => {
+    const encontrada = { id: filaId(row, type), campaign, type };
+    setFilaLocalizada(encontrada);
+    setBuscarAbierto(false);
+    if (type === "cursos") {
+      setYear(row.id_anio == null ? "" : String(row.id_anio));
+      setDivision(row.id_division == null ? "" : String(row.id_division));
+    }
+    setPage(1);
+  };
+
+  useEffect(() => {
+    if (!filaLocalizada || filaLocalizada.campaign !== campaign || filaLocalizada.type !== type || !previewData) return;
+    const indice = (previewData.items || []).findIndex((row) => filaId(row, type) === filaLocalizada.id);
+    if (indice >= 0) setPage(Math.floor(indice / 20) + 1);
+  }, [filaLocalizada, previewData, campaign, type]);
+
+  useEffect(() => {
+    if (!filaLocalizada || !previewData) return;
+    const node = filaMarcadaRef.current;
+    if (node) node.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+  }, [filaLocalizada, page, previewData]);
+
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
@@ -58,8 +146,9 @@ export default function Planillas({ feedback, showFeedback }) {
       setOptions(data);
       setCampaign((current) => {
         if (current) return current;
-        const active = data.campanias?.find((item) => yes(item.activo));
-        return String(active?.id_campania || data.campanias?.[0]?.id_campania || "");
+        const sorted = ordenarCampanias(data.campanias || []);
+        const active = sorted.find((item) => yes(item.activo) && item.estado_cierre !== "cerrada" && (!item.fecha_inicio || item.fecha_inicio <= today()) && (!item.fecha_fin || item.fecha_fin >= today()));
+        return String(active?.id_campania || sorted[0]?.id_campania || "");
       });
     } catch (err) { showFeedback("error", err.message); }
     finally { if (!silent) setLoading(false); }
@@ -74,6 +163,11 @@ export default function Planillas({ feedback, showFeedback }) {
       const data = await ventasApi.planillasDatos(requestParams);
       if (sequence !== sequenceRef.current || currentRequestKeyRef.current !== requestKey) return;
       setPreviewResult({ key: requestKey, data });
+      // La planilla se refresca sola. Volver a consultar la búsqueda integral
+      // cuando hay cambios, sin conservar un padrón viejo en memoria.
+      if (silent && busquedaActivaRef.current) {
+        setRevisionBusqueda((revision) => revision + 1);
+      }
     } catch (err) {
       if (sequence !== sequenceRef.current || currentRequestKeyRef.current !== requestKey) return;
       // Durante el refresco silencioso conservamos la última planilla válida.
@@ -93,7 +187,7 @@ export default function Planillas({ feedback, showFeedback }) {
 
   const fetchCurrentData = async () => {
     if (!campaign) {
-      showFeedback("warning", "Seleccioná una campaña.");
+      showFeedback("warning", "Seleccioná una venta.");
       return null;
     }
     return ventasApi.planillasDatos(requestParams);
@@ -218,7 +312,7 @@ export default function Planillas({ feedback, showFeedback }) {
   }, [exportItems, exportCampaignName, exportProductName, exportSourceData, type]);
 
   const exportSubtitle = useMemo(() => {
-    const parts = [type === "docentes" ? "DOCENTES ACTIVOS" : "ALUMNOS ACTIVOS"];
+    const parts = [type === "docentes" ? "DOCENTES" : "ALUMNOS"];
     if (type === "cursos") {
       const selectedYear = (options.anios || []).find((item) => String(item.id_anio) === String(year));
       const selectedDivision = (options.divisiones || []).find((item) => String(item.id_division) === String(division));
@@ -244,13 +338,20 @@ export default function Planillas({ feedback, showFeedback }) {
       title="Planillas de ventas"
       tabsInTitle
       filters={[
-        { key: "tipo", type: "tabs", label: "Tipo de planilla", value: type, onChange: resetPage(setType),
+        { key: "tipo", type: "tabs", label: "Tipo de planilla", value: type, onChange: cambiarConsulta(setType),
           options: [{ value: "cursos", label: "Cursos y alumnos" }, { value: "docentes", label: "Docentes" }] },
-        { key: "campania", type: "select", label: "Venta / campaña", value: campaign, onChange: resetPage(setCampaign), includeEmptyOption: false,
-          options: [{ value: "", label: "SELECCIONAR..." }, ...(options.campanias || []).map((item) => ({ value: String(item.id_campania), label: `${upper(item.nombre, 150)}${yes(item.activo) ? " · ACTIVA" : " · DADA DE BAJA"}` }))] },
+        { key: "buscar-persona", type: "search", label: type === "docentes" ? "Buscar docente o DNI" : "Buscar alumno o DNI",
+          value: busqueda, placeholder: "Nombre o DNI", onChange: (value) => {
+            setBusqueda(value);
+            setBuscarAbierto(true);
+            if (!value.trim()) setFilaLocalizada(null);
+          }, className: "ventas-planillas-personaFilter" },
+        { key: "venta", type: "select", label: "Venta (mes y año)", value: campaign,
+          onChange: cambiarConsulta(setCampaign), includeEmptyOption: false,
+          options: campaignOptions },
         ...(type === "cursos" ? [
-          { key: "anio", type: "select", label: "Año", value: year, onChange: resetPage(setYear), options: (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) })), placeholder: "TODOS" },
-          { key: "division", type: "select", label: "División", value: division, onChange: resetPage(setDivision), options: (options.divisiones || []).map((item) => ({ value: String(item.id_division), label: upper(item.nombre_division, 80) })), placeholder: "TODAS" },
+          { key: "anio", type: "select", label: "Año", value: year, onChange: cambiarConsulta(setYear), options: (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) })), placeholder: "TODOS" },
+          { key: "division", type: "select", label: "División", value: division, onChange: cambiarConsulta(setDivision), options: (options.divisiones || []).map((item) => ({ value: String(item.id_division), label: upper(item.nombre_division, 80) })), placeholder: "TODAS" },
         ] : []),
       ]}
       canCreate={false}
@@ -266,12 +367,43 @@ export default function Planillas({ feedback, showFeedback }) {
         { key: "imprimir", label: "Imprimir", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || previewLoading || !campaign },
       ]}
     >
+      {busqueda.trim() && buscarAbierto && campaign && (
+        <div className="ventas-planillas-searchResults" role="region" aria-label="Resultados de búsqueda en la planilla">
+          <div className="ventas-planillas-searchResults__head">
+            <FontAwesomeIcon icon={faMagnifyingGlass} aria-hidden="true" />
+            {busquedaCompleta.loading || busquedaCompleta.key !== claveBusqueda
+              ? "Buscando en toda la planilla..."
+              : busquedaCompleta.error
+                ? `No se pudo buscar: ${busquedaCompleta.error}`
+                : `${resultadosBusqueda.length} coincidencia(s) en la venta seleccionada`}
+          </div>
+          {!busquedaCompleta.loading && busquedaCompleta.key === claveBusqueda && !busquedaCompleta.error && (
+            <div className="ventas-planillas-searchResults__list">
+              {resultadosBusqueda.slice(0, 8).map((row) => {
+                const f = filaPlanilla(row, type);
+                return <button type="button" key={`${type}-${filaId(row, type)}`} className="ventas-planillas-searchChoice" onClick={() => buscarPersona(row)}>
+                  <span><TextoResaltado texto={upper(f.nombre, 180)} busqueda={busqueda} /></span>
+                  <small>DNI <TextoResaltado texto={f.dni} busqueda={busqueda} />{type === "cursos" ? ` · ${f.anio}° ${f.division}` : ""}</small>
+                </button>;
+              })}
+              {resultadosBusqueda.length > 8 && <span className="ventas-planillas-searchResults__more">Mostrando 8 de {resultadosBusqueda.length}. Escribí más caracteres para precisar.</span>}
+              {resultadosBusqueda.length === 0 && <span className="ventas-planillas-searchResults__more">No se encontró esa persona en la venta seleccionada.</span>}
+            </div>
+          )}
+        </div>
+      )}
+      {filaLocalizada && !buscarAbierto && (
+        <div className="ventas-planillas-foundNotice" role="status">
+          <strong>Persona localizada.</strong> Se seleccionó su {type === "cursos" ? "año y división" : "página"} y se resaltó la fila.
+          <button type="button" onClick={() => { setFilaLocalizada(null); setBusqueda(""); setBuscarAbierto(true); }}>Limpiar búsqueda</button>
+        </div>
+      )}
       <div className={`ventas-planillas-panel${!campaign && !isPreviewPending ? " ventas-planillas-panel--empty" : ""}`}>
         <section className="ventas-planillas-tableCard" aria-label="Planilla de ventas">
           <div className="ventas-planillas-tableWrap" ref={previewBodyRef}>
             {!campaign ? (
               <div className="ventas-planillas-empty"><FontAwesomeIcon icon={faFileLines} />
-                <strong>Seleccioná una venta / campaña</strong><span>La planilla aparecerá acá antes de imprimirla o exportarla.</span>
+                <strong>Seleccioná una venta</strong><span>La planilla aparecerá acá antes de imprimirla o exportarla.</span>
               </div>
             ) : isPreviewPending ? (
               <div className="ventas-planillas-sheetSkeleton" aria-label="Preparando planilla">
@@ -286,14 +418,15 @@ export default function Planillas({ feedback, showFeedback }) {
                 <div
                   className={`ventas-planillas-paperGrid ${type === "docentes" ? `is-docentes${tieneObjetivo ? " has-objective" : ""}` : "is-alumnos"}`}
                   role="table"
+                  aria-busy={isPreviewPending || previewLoading}
                   aria-label={`Planilla de ${type === "docentes" ? "docentes" : "alumnos"} · ${previewCampaignName}`}
                 >
                   <div className="ventas-planillas-paperHeader" role="rowgroup">
                     <div className="ventas-planillas-school" role="row">
-                      <div role="columnheader" aria-colspan={type === "docentes" ? (tieneObjetivo ? 8 : 6) : 9}>I.P.E.T. Nº 50 &quot;Ing. Emilio F. Olmos&quot;</div>
+                      <div role="columnheader" aria-colspan={type === "docentes" ? (tieneObjetivo ? 10 : 6) : 11}>I.P.E.T. Nº 50 &quot;Ing. Emilio F. Olmos&quot;</div>
                     </div>
                     <div className="ventas-planillas-paperTitle" role="row">
-                      <div role="columnheader" aria-colspan={type === "docentes" ? (tieneObjetivo ? 8 : 6) : 9}>
+                      <div role="columnheader" aria-colspan={type === "docentes" ? (tieneObjetivo ? 10 : 6) : 11}>
                         {type === "docentes" ? "PROFESORES / DOCENTES" : "ALUMNOS"} · {previewCampaignName} · {previewData?.meta?.anio_planilla}
                       </div>
                     </div>
@@ -304,8 +437,10 @@ export default function Planillas({ feedback, showFeedback }) {
                           <div className="ventas-planillas-headCell head--dni" role="columnheader" aria-rowspan={2}>DNI</div>
                           <div className="ventas-planillas-headCell head--curso" role="columnheader" aria-colspan={2}>CURSO</div>
                           <div className="ventas-planillas-headCell head--unidades" role="columnheader" aria-colspan={2}>UNIDADES</div>
-                          <div className="ventas-planillas-headCell head--ganancia" role="columnheader" aria-rowspan={2}>GANANCIA A PAGAR</div>
-                          <div className="ventas-planillas-headCell head--cobrado" role="columnheader" aria-rowspan={2}>IMPORTE COBRADO</div>
+                          <div className="ventas-planillas-headCell head--ganancia" role="columnheader" aria-rowspan={2}>GANANCIA PENDIENTE</div>
+                          <div className="ventas-planillas-headCell head--gananciaCobrada" role="columnheader" aria-rowspan={2}>GANANCIA COBRADA</div>
+                          <div className="ventas-planillas-headCell head--productos" role="columnheader" aria-rowspan={2}>PRODUCTOS COBRADOS</div>
+                          <div className="ventas-planillas-headCell head--cobrado" role="columnheader" aria-rowspan={2}>TOTAL COBRADO</div>
                           <div className="ventas-planillas-headCell head--observaciones" role="columnheader" aria-rowspan={2}>OBSERVACIONES</div>
                         </div>
                         <div className="ventas-planillas-groupLevel" role="row">
@@ -317,7 +452,7 @@ export default function Planillas({ feedback, showFeedback }) {
                       </div>
                     ) : (
                       <div className="ventas-planillas-paperGroup ventas-planillas-paperGroup--docentes" role="row">
-                        {["ORDEN", "DOCENTE", "DNI", "CANT.", ...(tieneObjetivo ? ["FALT.", "GANANCIA A PAGAR"] : []), "COBRADO", "OBSERVACIONES"].map((label) => (
+                        {["ORDEN", "DOCENTE", "DNI", "CANT.", ...(tieneObjetivo ? ["FALT.", "GANANCIA PENDIENTE", "GANANCIA COBRADA", "PRODUCTOS COBRADOS"] : []), "TOTAL COBRADO", "OBSERVACIONES"].map((label) => (
                           <div className="ventas-planillas-headCell" role="columnheader" key={label}>{label}</div>
                         ))}
                       </div>
@@ -326,27 +461,33 @@ export default function Planillas({ feedback, showFeedback }) {
                   <div className="ventas-planillas-paperBody" role="rowgroup">
                     {visiblePreviewItems.map((row, index) => {
                       const f = filaPlanilla(row, type, previewStart + index);
-                      return <div className="ventas-planillas-paperRow" role="row" key={type === "docentes" ? row.id_docente : row.id_alumno}>
+                      const marcada = filaLocalizada?.id === filaId(row, type) && filaLocalizada?.type === type && filaLocalizada?.campaign === campaign;
+                      return <div className={`ventas-planillas-paperRow${marcada ? " is-located" : ""}`} role="row"
+                        ref={marcada ? filaMarcadaRef : null} key={type === "docentes" ? row.id_docente : row.id_alumno}>
                         {type === "docentes" ? <>
                           <div className="ventas-planillas-paperCell" role="cell">{f.orden}</div>
-                          <div className="ventas-planillas-paperCell ventas-planillas-paperName" role="cell" title={upper(f.nombre, 180)}><span>{upper(f.nombre, 180)}</span></div>
-                          <div className="ventas-planillas-paperCell" role="cell">{f.dni}</div>
+                          <div className="ventas-planillas-paperCell ventas-planillas-paperName" role="cell" title={upper(f.nombre, 180)}><span><TextoResaltado texto={upper(f.nombre, 180)} busqueda={busqueda} /></span></div>
+                          <div className="ventas-planillas-paperCell" role="cell"><TextoResaltado texto={f.dni} busqueda={busqueda} /></div>
                           <div className="ventas-planillas-paperCell" role="cell">{f.vendidas}</div>
                           {tieneObjetivo && <>
                             <div className="ventas-planillas-paperCell" role="cell">{f.faltantes}</div>
-                            <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell" title={`Ganancia cobrada: ${money(f.gananciaCobrada)}`}>{money(f.ganancia)}</div>
+                            <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell">{money(f.ganancia)}</div>
+                            <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell">{money(f.gananciaCobrada)}</div>
+                            <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell">{money(f.productos)}</div>
                           </>}
-                          <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell" title={`Productos: ${money(f.productos)} · Ganancia cobrada: ${money(f.gananciaCobrada)}`}>{money(f.cobrado)}</div>
+                          <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell" title={`Productos: ${money(f.productos)} + ganancia cobrada: ${money(f.gananciaCobrada)}`}>{money(f.cobrado)}</div>
                           <div className="ventas-planillas-paperCell ventas-planillas-paperNotes" role="cell" title={f.observaciones || ""}><span>{f.observaciones}</span></div>
                         </> : <>
-                          <div className="ventas-planillas-paperCell ventas-planillas-paperName" role="cell" title={upper(f.nombre, 180)}><span>{upper(f.nombre, 180)}</span></div>
-                          <div className="ventas-planillas-paperCell" role="cell">{f.dni}</div>
+                          <div className="ventas-planillas-paperCell ventas-planillas-paperName" role="cell" title={upper(f.nombre, 180)}><span><TextoResaltado texto={upper(f.nombre, 180)} busqueda={busqueda} /></span></div>
+                          <div className="ventas-planillas-paperCell" role="cell"><TextoResaltado texto={f.dni} busqueda={busqueda} /></div>
                           <div className="ventas-planillas-paperCell" role="cell">{upper(f.anio, 80)}</div>
                           <div className="ventas-planillas-paperCell" role="cell">{upper(f.division, 80)}</div>
                           <div className="ventas-planillas-paperCell" role="cell">{f.vendidas}</div>
                           <div className="ventas-planillas-paperCell" role="cell">{f.faltantes}</div>
-                          <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell" title={`Ganancia cobrada: ${money(f.gananciaCobrada)}`}>{money(f.ganancia)}</div>
-                          <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell" title={`Productos: ${money(f.productos)} · Ganancia cobrada: ${money(f.gananciaCobrada)}`}>{money(f.cobrado)}</div>
+                          <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell">{money(f.ganancia)}</div>
+                            <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell">{money(f.gananciaCobrada)}</div>
+                            <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell">{money(f.productos)}</div>
+                          <div className="ventas-planillas-paperCell ventas-planillas-paperAmount" role="cell" title={`Productos: ${money(f.productos)} + ganancia cobrada: ${money(f.gananciaCobrada)}`}>{money(f.cobrado)}</div>
                           <div className="ventas-planillas-paperCell ventas-planillas-paperNotes" role="cell" title={f.observaciones || ""}><span>{f.observaciones}</span></div>
                         </>}
                       </div>;
@@ -362,7 +503,11 @@ export default function Planillas({ feedback, showFeedback }) {
             totalRecords={isPreviewPending ? 0 : previewItems.length}
             from={!isPreviewPending && previewItems.length ? previewStart + 1 : 0}
             to={isPreviewPending ? 0 : Math.min(previewStart + previewPageSize, previewItems.length)}
-            onPageChange={setPage}
+            onPageChange={(nuevaPagina) => {
+              setPage(nuevaPagina);
+              const scroll = previewBodyRef.current?.querySelector(".ventas-planillas-sheetScroll");
+              if (scroll) scroll.scrollTop = 0;
+            }}
             loading={isPreviewPending}
             showSummary={false}
             itemLabel={type === "docentes" ? "docentes" : "alumnos"}

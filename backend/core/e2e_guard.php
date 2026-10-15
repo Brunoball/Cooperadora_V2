@@ -134,8 +134,21 @@ function e2e_target_state(PDO $db, string $kind, int $id): ?bool
             "UPPER(nombre) LIKE 'PW E2E VTA CAMP %'",
         ],
         'ventas_persona' => [
-            'ventas_personas', 'id_persona',
-            "UPPER(nombre_apellido) LIKE 'PW E2E VTA PERSONA %'",
+            'ventas_personas vp LEFT JOIN alumnos a ON a.id_alumno = vp.id_alumno',
+            'vp.id_persona',
+            // resolvePerson() reemplaza el nombre del comprador por el del alumno
+            // cuando el DNI corresponde a un alumno. Aceptar ese caso SOLO si
+            // se prueban origen, DNI, nombre y marcador del alumno E2E; es la
+            // misma regla estricta que usa TestingSafety/TestingCleanup.
+            "UPPER(vp.nombre_apellido) LIKE 'PW E2E VTA PERSONA %'
+             OR (vp.origen = 'alumno'
+                 AND vp.dni = a.num_documento
+                 AND (UPPER(a.apellido) LIKE 'PW E2E ALUMNO %'
+                   OR UPPER(a.apellido) LIKE 'PW EEE ALUMNO %'
+                   OR UPPER(a.apellido) LIKE 'PW E2E INGRESANTE %'
+                   OR UPPER(a.apellido) LIKE 'PW EEE INGRESANTE %')
+                 AND UPPER(TRIM(vp.nombre_apellido)) =
+                     UPPER(TRIM(CONCAT(a.apellido, ' ', COALESCE(a.nombre, '')))))",
         ],
         'ventas_orden' => [
             'ventas_ordenes', 'id_orden',
@@ -409,6 +422,47 @@ function e2e_assert_sales_product_side_effect_safe(PDO $db, string $action, int 
     }
 }
 
+/**
+ * El cierre guarda snapshots de la campaña. Sólo una campaña y sus órdenes
+ * íntegramente E2E pueden atravesar el guard; no autoriza cierres reales.
+ */
+function e2e_assert_sales_campaign_close_safe(PDO $db, string $action, mixed $rawId): void
+{
+    e2e_assert_target($db, $action, 'ventas_campania', $rawId);
+    if (!is_scalar($rawId) || !preg_match('/^\d+$/', (string)$rawId) || (int)$rawId <= 0) return;
+    $id = (int)$rawId;
+
+    // Si no existe, el controlador funcional devolverá 404.
+    $statement = $db->prepare('SELECT id_producto_principal FROM ventas_campanias WHERE id_campania = ? LIMIT 1');
+    $statement->execute([$id]);
+    $campaign = $statement->fetch(PDO::FETCH_ASSOC);
+    if (!$campaign) return;
+
+    if (!empty($campaign['id_producto_principal'])) {
+        e2e_assert_target($db, $action, 'ventas_producto', $campaign['id_producto_principal']);
+    }
+
+    // Tampoco se archiva una campaña marcada E2E si alguien enlazó una venta
+    // o un producto real. El teardown borrará únicamente registros aislados.
+    $statement = $db->prepare(
+        "SELECT o.id_orden
+           FROM ventas_ordenes o
+          WHERE o.id_campania = ?
+            AND (UPPER(COALESCE(o.observacion, '')) NOT LIKE 'PW E2E VTA ORDEN %'
+                 OR EXISTS (
+                     SELECT 1 FROM ventas_orden_items i
+                     LEFT JOIN ventas_productos p ON p.id_producto = i.id_producto
+                      WHERE i.id_orden = o.id_orden
+                        AND (p.id_producto IS NULL OR UPPER(p.nombre) NOT LIKE 'PW E2E VTA PROD %')
+                 ))
+          LIMIT 1"
+    );
+    $statement->execute([$id]);
+    if ($statement->fetchColumn() !== false) {
+        e2e_scope_error($action, 'La campaña E2E contiene órdenes o productos ajenos a su namespace.');
+    }
+}
+
 function e2e_assert_sales_person_payload(PDO $db, string $action, array $body): void
 {
     $existingId = $body['id_venta_persona'] ?? $body['id_persona'] ?? null;
@@ -445,14 +499,11 @@ function e2e_assert_sales_person_payload(PDO $db, string $action, array $body): 
     }
 
     $person = $db->prepare(
-        "SELECT id_persona, nombre_apellido
-           FROM ventas_personas
-          WHERE dni = ?
-          LIMIT 1"
+        'SELECT id_persona FROM ventas_personas WHERE dni = ? LIMIT 1'
     );
     $person->execute([$dni]);
-    $personRow = $person->fetch(PDO::FETCH_ASSOC);
-    if ($personRow && !e2e_sales_creation_marker((string)$personRow['nombre_apellido'], 'PW E2E VTA PERSONA ')) {
+    $personId = $person->fetchColumn();
+    if ($personId !== false && e2e_target_state($db, 'ventas_persona', (int)$personId) !== true) {
         e2e_scope_error($action, 'El DNI E2E coincide con una persona real de Ventas.');
     }
 }
@@ -769,8 +820,20 @@ function e2e_scope_guard(string $action, array $auth): void
             $campaignId = (int)($body['id_campania'] ?? $body['id'] ?? 0);
             e2e_assert_target($db, $action, 'ventas_campania', $campaignId);
             if (!empty($body['activo'])) {
-                e2e_assert_sales_campaign_activation_safe($db, $action, $campaignId > 0 ? $campaignId : null);
+                // Si ya está cerrada, el controlador rechazará la reactivación
+                // sin tocar campañas reales. No anticipar un bloqueo de scope.
+                $closed = false;
+                if ($campaignId > 0) {
+                    $statement = $db->prepare('SELECT estado_cierre FROM ventas_campanias WHERE id_campania = ? LIMIT 1');
+                    $statement->execute([$campaignId]);
+                    $closed = $statement->fetchColumn() === 'cerrada';
+                }
+                if (!$closed) e2e_assert_sales_campaign_activation_safe($db, $action, $campaignId > 0 ? $campaignId : null);
             }
+            return;
+
+        case 'ventas_campania_cerrar':
+            e2e_assert_sales_campaign_close_safe($db, $action, $body['id_campania'] ?? $body['id'] ?? null);
             return;
 
         case 'ventas_campania_eliminar':

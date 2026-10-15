@@ -232,17 +232,20 @@ test.describe("Ventas - cobertura extendida", () => {
     expect(productDeleted.modo).toBe("eliminado");
   });
 
-  test("campaña/producto usados se archivan y preservan trazabilidad", async ({ request }) => {
+  test("campaña con ventas exige cierre manual; el producto usado se archiva", async ({ request }) => {
     const f = await salesFixture(request);
     const sale = await createOrder(request, f, { cantidad: 1 });
     expect(sale.item.id_orden).toBeTruthy();
 
-    const archivedCampaign = await ok(request, "ventas_campania_eliminar", {
+    const rejectedCampaign = await apiFetch(request, "ventas_campania_eliminar", {
       token: f.t,
       method: "POST",
       data: { id_campania: f.campaign.id_campania },
     });
-    expect(archivedCampaign.modo).toBe("archivada");
+    expect(rejectedCampaign.status).toBe(409);
+    expect(rejectedCampaign.body.codigo).toBe("VENTA_CAMPANIA_CON_VENTAS");
+    const campaigns = await ok(request, "ventas_campanias_listar", { token: f.t });
+    expect((campaigns.items || []).some((c) => Number(c.id_campania) === Number(f.campaign.id_campania))).toBe(true);
 
     const archivedProduct = await ok(request, "ventas_producto_eliminar", {
       token: f.t,

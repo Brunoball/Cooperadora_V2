@@ -46,6 +46,7 @@ test("Interfaz: etiqueta COBRADOR y recuadro pequeño están conectados a los im
   expect(modal).toContain("cuotas-v2-footer-collector-box");
   expect(modal).toContain("money(collectorTotal)");
   expect(modal).toContain("money(operationTotal)");
-  expect(view).toContain("item.etiqueta_cobrador");
+  expect(view).toContain("item?.etiqueta_cobrador");
+  expect(view).toContain('className="ct-student-amount-tag is-collector"');
   expect(view).toContain("item?.monto");
 });

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faClipboardList, faCommentDots, faPen, faPowerOff } from "@fortawesome/free-solid-svg-icons";
+import { faCheckCircle, faClipboardList, faCommentDots, faPen, faPowerOff, faArchive, faCopy } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -9,17 +9,18 @@ import ventasApi from "../api/ventasApi";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import ConfiguracionVentaModal from "../modales/ConfiguracionVentaModal";
 import { ActionButton } from "../VentasUI";
-import { money, upper, yes } from "../ventasUtils";
+import { campaniaOpcion, money, ordenarCampanias, upper, yes, today } from "../ventasUtils";
 
+/** Un solo espacio de trabajo; el historial se consulta en Registradas/Planillas. */
 export default function ConfiguracionVentas({ writable, feedback, showFeedback }) {
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
-  const [view, setView] = useState("activas");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingStateId, setChangingStateId] = useState(null);
   const [modal, setModal] = useState({ open: false, row: null });
   const [stateConfirm, setStateConfirm] = useState(null);
+  const [closeConfirm, setCloseConfirm] = useState(null);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -27,51 +28,32 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
       const [campaignsData, catalogs] = await Promise.all([ventasApi.campanias(), ventasApi.catalogos()]);
       setRows(campaignsData.items || []);
       setProducts(catalogs.productos || []);
-    } catch (err) { showFeedback("error", err.message); }
+    } catch (error) { showFeedback("error", error.message); }
     finally { if (!silent) setLoading(false); }
   }, [showFeedback]);
 
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load({ silent: true }), 30000);
 
+  const openRows = useMemo(() => ordenarCampanias(rows.filter((row) => row.estado_cierre !== "cerrada")), [rows]);
   const save = async (payload) => {
     setSaving(true);
     try {
-      const isNew = !payload.id_campania;
       const result = await ventasApi.guardarCampania(payload);
       setModal({ open: false, row: null });
       showFeedback("success", result.mensaje);
-      if (isNew) setView("activas");
-      await load();
-    } catch (err) { showFeedback("error", err.message); }
+      await load({ silent: true });
+    } catch (error) { showFeedback("error", error.message); }
     finally { setSaving(false); }
-  };
-
-  const filteredRows = useMemo(
-    () => rows.filter((row) => view === "activas" ? yes(row.activo) : !yes(row.activo)),
-    [rows, view],
-  );
-
-  const viewTabs = {
-    key: "vista",
-    type: "tabs",
-    label: "Configuración",
-    value: view,
-    onChange: setView,
-    options: [
-      { value: "activas", label: "Activas", count: rows.filter((row) => yes(row.activo)).length },
-      { value: "bajas", label: "Dadas de baja", count: rows.filter((row) => !yes(row.activo)).length },
-    ],
   };
 
   return (
     <ModulePage
       className="ventas-page ventas-page--campaigns"
       title="Configuración de ventas"
-      tabsInTitle
-      filters={[viewTabs]}
-      canCreate={view === "activas" && writable}
-      primaryActionLabel="Nueva configuración"
+      description="Administrá las ventas vigentes y programadas. Las cerradas quedan disponibles en Ventas registradas y Planillas."
+      canCreate={writable}
+      primaryActionLabel="Nueva venta"
       onPrimaryAction={() => setModal({ open: true, row: null })}
     >
       <GlobalDivTable
@@ -79,159 +61,113 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
         bodyClassName="entity-table-wrap"
         gridClassName="ventas-grid ventas-grid--campaigns"
         columns={[
-          "Venta / campaña",
-          "Producto principal",
-          "Objetivo por persona",
-          { label: "Vigencia", align: "center", className: "ventas-validity-head" },
+          "Venta", "Producto principal", "Objetivo por persona",
+          { label: "Fechas", align: "center", className: "ventas-validity-head" },
           { label: "WhatsApp", align: "center" },
-          { label: "Ventas", align: "center" },
+          { label: "Registros", align: "center" },
           { label: "Acciones", align: "center" },
         ]}
         loading={loading}
         loadingLabel=""
         skeletonActionColumn
-        ariaLabel={view === "activas" ? "Configuraciones activas de ventas" : "Configuraciones de ventas dadas de baja"}
-        empty={!filteredRows.length}
+        ariaLabel="Ventas vigentes, programadas y pausadas"
+        empty={!openRows.length}
       >
-        {!loading && !filteredRows.length ? (
+        {!loading && !openRows.length ? (
           <div className="module-empty">
             <FontAwesomeIcon icon={faClipboardList} />
-            <strong>{view === "activas" ? "Sin configuración activa" : "Sin configuraciones dadas de baja"}</strong>
-            <span>{view === "activas"
-              ? "Solo puede haber una configuración activa al mismo tiempo."
-              : "Las configuraciones nuevas o desactivadas aparecerán acá."}</span>
+            <strong>No hay ventas pendientes de cierre</strong>
+            <span>Creá una nueva venta o copiá la configuración de una venta anterior.</span>
           </div>
         ) : null}
-
-        {filteredRows.map((row) => (
-          <div
-            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns ventas-campaign-row ${changingStateId === row.id_campania ? "is-changing" : ""}`.trim()}
-            role="row"
-            key={row.id_campania}
-          >
+        {openRows.map((row) => (
+          <div className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns ventas-campaign-row ${changingStateId === row.id_campania ? "is-changing" : ""}`.trim()} role="row" key={row.id_campania}>
             <div className="mov-gridCell entity-main-cell">
               <strong>{upper(row.nombre, 150)}</strong>
-              <small>{row.pregunta_persona || "Sin mensaje de identificación"}</small>
+              <small>{row.etapa === "finalizada" ? "FINALIZADA · CIERRE PENDIENTE" : !yes(row.activo) ? "PAUSADA" : row.etapa === "programada" ? "PROGRAMADA" : "EN CURSO"}</small>
             </div>
             <div className="mov-gridCell entity-main-cell">
-              <strong>{row.producto_principal_nombre ? upper(row.producto_principal_nombre, 150) : "—"}</strong>
-              {row.precio_anticipada != null ? <small>ANT. {money(row.precio_anticipada)} · PUERTA {money(row.precio_puerta)}</small> : null}
+              <strong>{upper(row.producto_principal_nombre || "SIN PRODUCTO", 150)}</strong>
+              {row.precio_anticipada != null ? <small>{Number(row.precio_anticipada) === Number(row.precio_puerta) ? `PRECIO ÚNICO ${money(row.precio_anticipada)}` : `PRINCIPAL ${money(row.precio_anticipada)} · ALTERNATIVO ${money(row.precio_puerta)}`}</small> : null}
             </div>
             <div className="mov-gridCell entity-main-cell ventas-objective-cell">
-              {Number(row.cantidad_minima_persona || 0) > 0 ? (
-                <>
-                  <strong>MÍN. {Number(row.cantidad_minima_persona)} UNIDADES</strong>
-                  <small>
-                    {money(row.ganancia_unidad_faltante)} / FALTANTE · {money(row.ganancia_total_sin_ventas)} SIN VENTAS
-                  </small>
-                </>
-              ) : (
-                <>
-                  <strong>SIN OBJETIVO</strong>
-                  <small>NO GENERA GANANCIA POR FALTANTES</small>
-                </>
-              )}
+              {Number(row.cantidad_minima_persona || 0) ? <>
+                <strong>MÍN. {Number(row.cantidad_minima_persona)} UNIDADES</strong>
+                <small>{money(row.ganancia_unidad_faltante)} / FALTANTE · {money(row.ganancia_total_sin_ventas)} SIN VENTAS</small>
+              </> : <strong>SIN OBJETIVO</strong>}
             </div>
             <div className="mov-gridCell is-center entity-main-cell ventas-validity-cell">
-              <strong>{row.fecha_inicio || "SIN INICIO"}</strong>
-              <small>HASTA {row.fecha_fin || "SIN FIN"}</small>
+              <strong>{row.fecha_inicio || "SIN FECHA"} AL {row.fecha_fin || "SIN FECHA"}</strong>
+              <small>ENTREGA: {row.fecha_entrega || "SIN DEFINIR"}</small>
             </div>
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${yes(row.disponible_bot) ? "whatsapp" : "neutral"}`}>
-                <FontAwesomeIcon icon={faCommentDots} /> {
-                  !yes(row.activo)
-                    ? "NO DISPONIBLE"
-                    : yes(row.disponible_bot)
-                      ? "DISPONIBLE"
-                      : yes(row.visible_menu)
-                        ? "FUERA DE VIGENCIA"
-                        : "OCULTA"
-                }
+                <FontAwesomeIcon icon={faCommentDots} /> {yes(row.disponible_bot) ? "VISIBLE" : "NO DISPONIBLE"}
               </span>
             </div>
             <div className="mov-gridCell is-center is-strong">{Number(row.cantidad_ordenes || 0)}</div>
             <div className="mov-gridCell mov-gridCell--actions">
               <div className="mov-actionsInline">
-                {writable ? (
-                  <>
-                    <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, row })} />
-                    <ActionButton
-                      icon={view === "activas" ? faPowerOff : faCheckCircle}
-                      title={view === "activas" ? "Dar de baja" : "Activar"}
-                      tone={view === "activas" ? "danger" : ""}
-                      disabled={changingStateId !== null}
-                      onClick={() => setStateConfirm(row)}
-                    />
-                  </>
-                ) : null}
+                {writable && <>
+                  <ActionButton icon={faPen} title="Editar venta" onClick={() => setModal({ open: true, row })} />
+                  <ActionButton icon={faCopy} title="Repetir esta venta con otras fechas" onClick={() => setModal({ open: true, row: { ...row, id_campania: "", fecha_inicio: "", fecha_fin: "", fecha_entrega: "", activo: 1, visible_menu: 1 } })} />
+                  <ActionButton icon={faArchive} title="Cerrar y enviar al historial" disabled={Boolean(row.fecha_fin && row.fecha_fin >= today())} onClick={() => setCloseConfirm(row)} />
+                  <ActionButton icon={yes(row.activo) ? faPowerOff : faCheckCircle} title={yes(row.activo) ? "Pausar" : "Reactivar"} tone={yes(row.activo) ? "danger" : ""} disabled={changingStateId !== null} onClick={() => setStateConfirm(row)} />
+                </>}
               </div>
             </div>
           </div>
         ))}
       </GlobalDivTable>
+      <GlobalPagination currentPage={1} totalPages={openRows.length ? 1 : 0} totalRecords={openRows.length} from={openRows.length ? 1 : 0} to={openRows.length} loading={loading} loadingLabel="" itemLabel="ventas" ariaLabel="Configuración de ventas" className="ventas-tableFooter" showControls={false} showWhenEmpty />
 
-      <GlobalPagination
-        currentPage={1}
-        totalPages={filteredRows.length ? 1 : 0}
-        totalRecords={filteredRows.length}
-        from={filteredRows.length ? 1 : 0}
-        to={filteredRows.length}
-        loading={loading}
-        loadingLabel=""
-        itemLabel="configuraciones"
-        ariaLabel="Configuración de ventas"
-        className="ventas-tableFooter"
-        showControls={false}
-        showWhenEmpty
+      <ConfiguracionVentaModal
+        open={modal.open} initial={modal.row} products={products} campaigns={rows}
+        saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save}
       />
-
-      <ConfiguracionVentaModal open={modal.open} initial={modal.row} products={products} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} />
-
       <ModalEliminarGlobal
-        open={Boolean(stateConfirm)}
-        row={stateConfirm}
-        operacion="advertencia"
-        showLoadingEffect={false}
-        tone={view === "activas" ? "warning" : "success"}
-        icon={view === "activas" ? faPowerOff : faCheckCircle}
-        title={view === "activas" ? "Dar de baja configuración" : "Activar configuración"}
-        message={view === "activas"
-          ? "¿Confirmás que querés dar de baja esta configuración de venta?"
-          : "¿Confirmás que querés activar esta configuración de venta?"}
-        warning={view === "activas"
-          ? "Dejará de estar disponible para nuevas ventas y para el bot hasta que vuelva a activarse."
-          : "Solo puede existir una configuración activa. Al confirmar, cualquier otra configuración activa se dará de baja automáticamente."}
-        confirmLabel={view === "activas" ? "Dar de baja" : "Activar configuración"}
-        loadingLabel={view === "activas" ? "Dando de baja..." : "Activando..."}
-        details={stateConfirm ? [
-          { label: "Configuración", value: stateConfirm.nombre },
-          { label: "Producto principal", value: stateConfirm.producto_principal_nombre || "SIN PRODUCTO" },
-          {
-            label: "Objetivo por persona",
-            value: Number(stateConfirm.cantidad_minima_persona || 0) > 0
-              ? `MÍN. ${Number(stateConfirm.cantidad_minima_persona)} · ${money(stateConfirm.ganancia_unidad_faltante)} POR FALTANTE · ${money(stateConfirm.ganancia_total_sin_ventas)} SIN VENTAS`
-              : "SIN OBJETIVO",
-          },
-          { label: "Ventas asociadas", value: stateConfirm.cantidad_ordenes || 0 },
-        ] : []}
+        open={Boolean(stateConfirm)} row={stateConfirm} operacion="advertencia" showLoadingEffect={false}
+        tone={yes(stateConfirm?.activo) ? "warning" : "success"}
+        icon={yes(stateConfirm?.activo) ? faPowerOff : faCheckCircle}
+        title={yes(stateConfirm?.activo) ? "Pausar venta" : "Reactivar venta"}
+        message={yes(stateConfirm?.activo) ? "¿Querés pausar temporalmente esta venta?" : "¿Querés volver a habilitar esta venta?"}
+        warning="No se modifica ni se elimina ningún registro existente."
+        confirmLabel={yes(stateConfirm?.activo) ? "Pausar" : "Reactivar"}
+        details={stateConfirm ? [{ label: "Venta", value: campaniaOpcion(stateConfirm) }] : []}
         onClose={() => setStateConfirm(null)}
         onConfirm={async () => {
           const target = stateConfirm;
           setChangingStateId(target.id_campania);
           try {
-            const result = await ventasApi.estadoCampania({
-              id_campania: target.id_campania,
-              activo: view !== "activas",
-            });
+            const result = await ventasApi.estadoCampania({ id_campania: target.id_campania, activo: !yes(target.activo) });
             setStateConfirm(null);
-            await load();
+            await load({ silent: true });
             return { mensaje: result.mensaje };
-          } finally {
-            setChangingStateId(null);
-          }
+          } finally { setChangingStateId(null); }
         }}
       />
-
+      <ModalEliminarGlobal
+        open={Boolean(closeConfirm)} row={closeConfirm} operacion="advertencia" showLoadingEffect={false}
+        tone="warning" icon={faArchive}
+        title="Cerrar venta y conservar historial"
+        message="El cierre es definitivo: los registros siguen asociados a esta venta y sus planillas quedan disponibles desde Planillas."
+        warning={`Cobros pendientes: ${closeConfirm?.cobros_pendientes || 0}. Retiros pendientes: ${closeConfirm?.retiros_pendientes || 0}. Revisalos antes de confirmar.`}
+        confirmLabel="Cerrar definitivamente"
+        details={closeConfirm ? [
+          { label: "Venta", value: campaniaOpcion(closeConfirm) },
+          { label: "Vigencia", value: `${closeConfirm.fecha_inicio || "—"} al ${closeConfirm.fecha_fin || "—"}` },
+          { label: "Entrega", value: closeConfirm.fecha_entrega || "SIN DEFINIR" },
+          { label: "Órdenes", value: closeConfirm.cantidad_ordenes || 0 },
+        ] : []}
+        onClose={() => setCloseConfirm(null)}
+        onConfirm={async () => {
+          const id = closeConfirm.id_campania;
+          const result = await ventasApi.cerrarCampania({ id_campania: id });
+          setCloseConfirm(null);
+          await load({ silent: true });
+          return { mensaje: result.mensaje };
+        }}
+      />
       {feedback}
     </ModulePage>
   );

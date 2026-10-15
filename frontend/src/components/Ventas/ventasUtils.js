@@ -39,3 +39,22 @@ export const blankItem = () => ({
   precio_unitario: "",
   cantidad: 1,
 });
+
+const MESES_VENTA = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+
+export const campaniaPeriodo = (campaign) => {
+  const date = String(campaign?.fecha_inicio || campaign?.fecha_referencia || campaign?.fecha_fin || "").slice(0, 10);
+  const match = /^(\d{4})-(\d{2})/.exec(date);
+  if (!match) return "SIN FECHA";
+  const i = Number(match[2]) - 1;
+  return `${MESES_VENTA[i] || match[2]} ${match[1]}`;
+};
+
+export const campaniaOpcion = (campaign) =>
+  `${campaniaPeriodo(campaign)} · ${upper(campaign?.nombre || "VENTA", 150)}${campaign?.estado_cierre === "cerrada" ? " · CERRADA" : ""}`;
+
+export const ordenarCampanias = (campaigns = []) => [...campaigns].sort((a, b) => {
+  const da = String(a.fecha_inicio || a.fecha_referencia || a.fecha_fin || "");
+  const db = String(b.fecha_inicio || b.fecha_referencia || b.fecha_fin || "");
+  return db.localeCompare(da) || Number(b.id_campania || 0) - Number(a.id_campania || 0);
+});

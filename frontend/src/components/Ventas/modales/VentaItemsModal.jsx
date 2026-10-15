@@ -27,16 +27,13 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
       setDraftItem(index, { id_producto: "" });
       return;
     }
-    const current = draft[index];
-    const type = current?.tipo_precio || "anticipada";
-    const price = type === "puerta"
-      ? product.precio_puerta
-      : type === "normal"
-        ? product.precio
-        : product.precio_anticipada;
+    const multiple = Number(product.precio_anticipada) !== Number(product.precio_puerta);
+    const type = multiple && draft[index]?.tipo_precio === "puerta" ? "puerta" : multiple ? "anticipada" : "normal";
+    const price = type === "puerta" ? product.precio_puerta : product.precio_anticipada;
     setDraftItem(index, {
       id_producto: String(id),
       producto_nombre: product.nombre,
+      tipo_precio: type,
       precio_unitario: price,
     });
   };
@@ -173,10 +170,18 @@ export default function VentaItemsModal({ open, items, products, campaign, initi
               </span>
               <FloatingField label="Tipo de precio" className="ventas-item-field">
                 <select value={item.tipo_precio || "personalizado"} onChange={(e) => chooseDraftPriceType(index, e.target.value)}>
-                  <option value="anticipada">ANTICIPADA</option>
-                  <option value="puerta">PUERTA</option>
-                  <option value="normal">NORMAL</option>
-                  <option value="personalizado">PERSONALIZADO</option>
+                  {(() => {
+                    const product = products.find((p) => String(p.id_producto) === String(item.id_producto));
+                    const multiple = product && Number(product.precio_anticipada) !== Number(product.precio_puerta);
+                    return <>
+                      {multiple && <option value="anticipada">PRINCIPAL</option>}
+                      {multiple && <option value="puerta">ALTERNATIVO</option>}
+                      {(!multiple || item.tipo_precio === "normal") && <option value="normal">{product ? multiple ? "NORMAL (HISTÓRICO)" : "PRECIO ÚNICO" : "PRECIO DEL CONCEPTO"}</option>}
+                      {!multiple && item.tipo_precio === "anticipada" && <option value="anticipada">PRINCIPAL (HISTÓRICO)</option>}
+                      {!multiple && item.tipo_precio === "puerta" && <option value="puerta">ALTERNATIVO (HISTÓRICO)</option>}
+                      <option value="personalizado">PERSONALIZADO</option>
+                    </>;
+                  })()}
                 </select>
               </FloatingField>
               <FloatingField label="Precio unitario" className="ventas-item-field">

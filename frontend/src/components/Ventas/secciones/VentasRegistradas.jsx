@@ -12,21 +12,7 @@ import ventasApi from "../api/ventasApi";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import VentaModal from "../modales/VentaModal";
 import { ActionButton } from "../VentasUI";
-import { money, stateLabel, today, upper, yes } from "../ventasUtils";
-
-const MONTH_NAMES = [
-  "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
-  "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
-];
-
-const currentMonth = () => today().slice(0, 7);
-
-const monthLabel = (value) => {
-  const match = /^(\d{4})-(\d{2})$/.exec(String(value || ""));
-  if (!match) return upper(value || "—", 80);
-  const monthIndex = Number(match[2]) - 1;
-  return `${MONTH_NAMES[monthIndex] || match[2]} ${match[1]}`;
-};
+import { campaniaOpcion, ordenarCampanias, money, stateLabel, today, upper, yes } from "../ventasUtils";
 
 const dateText = (value) => {
   const raw = String(value || "").slice(0, 10);
@@ -61,8 +47,8 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [campaign, setCampaign] = useState("");
-  const [month, setMonth] = useState(currentMonth);
-  const [state, setState] = useState("aprobada");
+  const [catalogInitialized, setCatalogInitialized] = useState(false);
+  const [state, setState] = useState("");
   const [retreat, setRetreat] = useState("");
   const [origin, setOrigin] = useState("");
   const [loading, setLoading] = useState(true);
@@ -76,21 +62,27 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     try {
       const data = await ventasApi.catalogos();
       setCatalogs(data);
+      if (!catalogInitialized) {
+        const sorted = ordenarCampanias(data.campanias || []);
+        const current = sorted.find((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()));
+        setCampaign(String(current?.id_campania || sorted[0]?.id_campania || ""));
+        setCatalogInitialized(true);
+      }
     } catch (err) {
       showFeedback("error", err.message);
     }
-  }, [showFeedback]);
+  }, [showFeedback, catalogInitialized]);
 
   useEffect(() => { loadCatalogs(); }, [loadCatalogs]);
 
   const queryFilters = useMemo(() => ({
     buscar: search,
     id_campania: campaign,
-    estado: state || "vigentes",
+    estado: state || "todos",
+    solo_actual: !campaign ? 1 : 0,
     retiro: retreat,
     origen: origin,
-    mes: month,
-  }), [campaign, month, origin, retreat, search, state]);
+  }), [campaign, origin, retreat, search, state]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -114,13 +106,13 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
       const result = await ventasApi.guardarOrden(payload);
       setModal({ open: false, id: null });
       showFeedback("success", result.mensaje);
-      const savedMonth = String(payload?.fecha_venta || "").slice(0, 7);
-      if (savedMonth && savedMonth !== month) {
+      const savedCampaign = String(payload?.id_campania || "");
+      await loadCatalogs();
+      if (savedCampaign && savedCampaign !== String(campaign)) {
         setPage(1);
-        setMonth(savedMonth);
-        await loadCatalogs();
+        setCampaign(savedCampaign);
       } else {
-        await Promise.all([load(), loadCatalogs()]);
+        await load();
       }
     } catch (err) {
       showFeedback("error", err.message);
@@ -134,18 +126,15 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     window.open(row.comprobante_url, "_blank", "noopener,noreferrer");
   };
 
-  const monthOptions = useMemo(() => {
-    const values = Array.from(new Set([currentMonth(), ...(catalogs.meses_ventas || [])].filter(Boolean)));
-    return values
-      .sort((a, b) => String(b).localeCompare(String(a)))
-      .map((value) => ({ value, label: monthLabel(value) }));
-  }, [catalogs.meses_ventas]);
+  const campaignOptions = useMemo(() => ordenarCampanias(catalogs.campanias || [])
+    .map((item) => ({ value: String(item.id_campania), label: campaniaOpcion(item) })), [catalogs.campanias]);
 
   const filters = [
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI o referencia...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
-    { key: "campania", type: "select", label: "Campaña", value: campaign, placeholder: "TODAS", options: (catalogs.campanias || []).map((c) => ({ value: c.id_campania, label: upper(c.nombre, 150) })), onChange: (v) => { setPage(1); setCampaign(v); } },
-    { key: "mes", type: "select", label: "Mes de ventas", value: month, placeholder: "TODOS", options: monthOptions, onChange: (v) => { setPage(1); setMonth(v); } },
-    { key: "estado", type: "select", className: "ventas-orders-filter--pago", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
+    { key: "venta", type: "select", label: "Venta (mes y año)", value: campaign,
+      includeEmptyOption: false, options: campaignOptions,
+      onChange: (value) => { setPage(1); setCampaign(String(value)); } },
+    { key: "estado", type: "select", className: "ventas-orders-filter--pago", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
     { key: "retiro", type: "select", className: "ventas-orders-filter--retiro", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
     { key: "origen", type: "select", className: "ventas-orders-filter--origen", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
   ];
@@ -154,7 +143,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     hoja: "Ventas",
     titulo: "Ventas registradas",
     columnas: [
-      { label: "Campaña", key: "campania" },
+      { label: "Venta", key: "campania" },
       { label: "Detalle", key: "detalle" },
       { label: "Persona", key: "persona" },
       { label: "DNI", key: "dni" },
@@ -184,8 +173,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
 
   const selectedCampaignName = (catalogs.campanias || []).find((item) => String(item.id_campania) === String(campaign))?.nombre;
   const exportSubtitle = [
-    month ? monthLabel(month) : "TODOS LOS MESES",
-    selectedCampaignName ? upper(selectedCampaignName, 150) : "TODAS LAS CAMPAÑAS",
+    selectedCampaignName ? upper(selectedCampaignName, 150) : "VENTA ACTUAL",
     state ? stateLabel(state) : "PAGADOS Y PENDIENTES",
     origin ? originText(origin) : "TODOS LOS ORÍGENES",
   ].join(" · ");
@@ -196,7 +184,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
       title="Ventas registradas"
       description="Consultá y administrá las ventas realizadas."
       filters={filters}
-      canCreate={writable}
+      canCreate={writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()))}
       primaryActionLabel="Nueva venta"
       primaryActionClassName="global-tableAction--top ventas-headAction ventas-headAction--new"
       onPrimaryAction={() => setModal({ open: true, id: null })}
@@ -234,7 +222,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
           <div className="module-empty">
             <FontAwesomeIcon icon={faReceipt} />
             <strong>Sin ventas para mostrar</strong>
-            <span>No hay ventas que coincidan con los filtros seleccionados.</span>
+            <span>Seleccioná una campaña o un año y mes para consultar ventas anteriores.</span>
           </div>
         ) : null}
         {rows.map((row) => (
@@ -268,10 +256,10 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
             <div className="mov-gridCell mov-gridCell--actions">
               <div className="mov-actionsInline">
                 {row.comprobante_url ? <ActionButton icon={faEye} title="Ver comprobante" onClick={() => openPdf(row)} /> : null}
-                {writable && row.estado === "aprobada" ? (
+                {writable && row.estado === "aprobada" && row.estado_cierre !== "cerrada" ? (
                   <ActionButton icon={yes(row.retirado) ? faRotateLeft : faCheckCircle} title={yes(row.retirado) ? "Quitar retiro" : "Marcar como retirado"} onClick={() => setRetreatConfirm(row)} />
                 ) : null}
-                {writable ? (
+                {writable && row.estado_cierre !== "cerrada" ? (
                   <>
                     <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, id: row.id_orden })} />
                     {row.estado !== "cancelada" ? <ActionButton icon={faTrashCan} title="Anular venta" tone="danger" onClick={() => setConfirm(row)} /> : null}
@@ -298,7 +286,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
         className="ventas-tableFooter"
         leftContent={(
           <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
-            {writable ? <button
+            {writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today())) ? <button
               type="button"
               className="ventas-footer-action ventas-footer-action--new"
               onClick={() => setModal({ open: true, id: null })}
@@ -325,7 +313,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
         tituloArchivo="Ventas registradas"
         subtituloArchivoActual={exportSubtitle}
         subtituloArchivoTodos={exportSubtitle}
-        nombreArchivo={`ventas_${month || "todos_los_meses"}`}
+        nombreArchivo={`ventas_${campaign || "sin_seleccion"}`}
         logoPdfUrl={logoIpetPdf}
         seccionesActuales={exportSections}
         obtenerSeccionesTodos={obtainAllExportSections}

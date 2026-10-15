@@ -1,9 +1,9 @@
 import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
+import { showGlobalNotification } from "../../Global/notifications";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import ventasApi from "../api/ventasApi";
-import VentaItemsModal from "./VentaItemsModal";
 import { asId, blankItem, money, stateLabel, today, upper, yes } from "../ventasUtils";
 
 const emptyOrder = {
@@ -21,15 +21,29 @@ const emptyOrder = {
   items: [blankItem()],
 };
 
+// El ítem principal se propone automáticamente al elegir la campaña.
+// Se usan los mismos tipos de precio que ya acepta el backend de Ventas.
+const itemDeCampania = (campaign, products) => {
+  const product = products.find((p) => String(p.id_producto) === String(campaign?.id_producto_principal || ""));
+  if (!product) return blankItem();
+  const multiple = Number(product.precio_anticipada) !== Number(product.precio_puerta);
+  const type = multiple ? "anticipada" : "normal";
+  return {
+    id_producto: String(product.id_producto),
+    producto_nombre: upper(product.nombre, 150),
+    tipo_precio: type,
+    precio_unitario: type === "anticipada" ? product.precio_anticipada : (product.precio ?? product.precio_anticipada),
+    cantidad: 1,
+  };
+};
+
 export default function VentaModal({ open, initialId, catalogs, saving, onClose, onSave, onFeedback }) {
   const [form, setForm] = useState(emptyOrder);
   const [loading, setLoading] = useState(false);
   const [personSearch, setPersonSearch] = useState("");
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
-  const [conceptsOpen, setConceptsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("venta");
-  const [validationError, setValidationError] = useState("");
   const [objectiveBase, setObjectiveBase] = useState({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
   const searchTimer = useRef(null);
   const personSearchSeq = useRef(0);
@@ -38,7 +52,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const campaigns = catalogs?.campanias || [];
   const payments = catalogs?.medios_pago || [];
   const selectableCampaigns = campaigns.filter(
-    (campaign) => yes(campaign.activo) || (initialId && String(campaign.id_campania) === String(form.id_campania))
+    (campaign) => (yes(campaign.activo) && campaign.estado_cierre !== "cerrada" && (!campaign.fecha_inicio || campaign.fecha_inicio <= today()) && (!campaign.fecha_fin || campaign.fecha_fin >= today())) || (initialId && String(campaign.id_campania) === String(form.id_campania))
   );
 
   const selectedCampaign = useMemo(
@@ -52,9 +66,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     personSearchSeq.current += 1;
     setPersonSearch("");
     setPeople([]);
-    setConceptsOpen(false);
     setActiveTab("venta");
-    setValidationError("");
     setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
@@ -87,10 +99,63 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   useEffect(() => {
     if (!open || initialId || form.id_campania) return;
-    const activeCampaign = campaigns.find((c) => yes(c.activo));
+    const activeCampaign = campaigns.find((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()));
     if (!activeCampaign) return;
-    setForm((current) => current.id_campania ? current : { ...current, id_campania: String(activeCampaign.id_campania) });
-  }, [open, initialId, campaigns, form.id_campania]);
+    setForm((current) => current.id_campania ? current : { ...current, id_campania: String(activeCampaign.id_campania), items: [itemDeCampania(activeCampaign, products)] });
+  }, [open, initialId, campaigns, products, form.id_campania]);
+
+  const chooseCampaign = (value) => {
+    if (initialId) return; // El backend no permite mover una orden a otra campaña.
+    const campaign = campaigns.find((c) => String(c.id_campania) === String(value));
+    setForm((current) => ({
+      ...current,
+      id_campania: value,
+      items: campaign ? [itemDeCampania(campaign, products)] : [blankItem()],
+    }));
+  };
+
+  const editItem = (index, patch) => {
+    setForm((current) => ({
+      ...current,
+      items: current.items.map((item, i) => i === index ? { ...item, ...patch } : item),
+    }));
+  };
+
+  const chooseItemProduct = (index, id) => {
+    if (!id) {
+      editItem(index, { id_producto: "", producto_nombre: "", tipo_precio: "personalizado", precio_unitario: "" });
+      return;
+    }
+    const product = products.find((p) => String(p.id_producto) === String(id));
+    if (!product) return;
+    const multiple = Number(product.precio_anticipada) !== Number(product.precio_puerta);
+    editItem(index, {
+      id_producto: String(id),
+      producto_nombre: upper(product.nombre, 150),
+      tipo_precio: multiple ? "anticipada" : "normal",
+      precio_unitario: multiple ? product.precio_anticipada : (product.precio ?? product.precio_anticipada),
+    });
+  };
+
+  const choosePriceType = (index, type) => {
+    const item = form.items[index];
+    const product = products.find((p) => String(p.id_producto) === String(item?.id_producto));
+    const price = !product || type === "personalizado" ? item.precio_unitario
+      : type === "puerta" ? product.precio_puerta
+      : type === "anticipada" ? product.precio_anticipada
+      : (product.precio ?? product.precio_anticipada);
+    editItem(index, { tipo_precio: type, precio_unitario: price });
+  };
+
+  const addConcept = () => setForm((current) => ({
+    ...current,
+    items: [...current.items, { ...blankItem(), tipo_precio: "personalizado" }],
+  }));
+
+  const removeConcept = (index) => setForm((current) => ({
+    ...current,
+    items: current.items.filter((_, i) => i !== index),
+  }));
 
   const objectiveMinimum = Math.max(0, Number(selectedCampaign?.cantidad_minima_persona || 0));
   const objectivePerMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
@@ -137,10 +202,13 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   const searchPeople = (value) => {
     setPersonSearch(value);
-    setForm((v) => ({ ...v, id_venta_persona: "" }));
+    // Una búsqueda nueva invalida TAMBIÉN el DNI y el nombre del comprador
+    // anterior. De lo contrario, si no elige otro resultado, se guardaría
+    // accidentalmente la venta a nombre de la persona ya seleccionada.
+    setForm((v) => ({ ...v, id_venta_persona: "", dni: "", nombre_apellido: "" }));
     clearTimeout(searchTimer.current);
     const requestSeq = ++personSearchSeq.current;
-    if (value.trim().length < 2) { setPeople([]); setPeopleLoading(false); return; }
+    if (value.trim().length < 1) { setPeople([]); setPeopleLoading(false); return; }
     searchTimer.current = setTimeout(async () => {
       setPeopleLoading(true);
       try {
@@ -170,11 +238,12 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   const itemsSubtotal = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
   const configuredItems = form.items.filter((item) => String(item.producto_nombre || "").trim());
-  const hasConfiguredItems = configuredItems.length > 0 && configuredItems.every((item) => (
+  const hasConfiguredItems = configuredItems.length > 0 && configuredItems.length === form.items.length && configuredItems.every((item) => (
     item.precio_unitario !== ""
     && item.precio_unitario != null
     && Number(item.precio_unitario) >= 0
-    && Number(item.cantidad || 0) >= 1
+    && Number.isInteger(Number(item.cantidad))
+    && Number(item.cantidad) >= 1
   ));
   const allDoor = hasConfiguredItems && configuredItems.every((item) => item.tipo_precio === "puerta");
 
@@ -209,19 +278,18 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     event.preventDefault();
     if (!form.id_campania || !form.id_medio_pago || !/^\d{4}-\d{2}-\d{2}$/.test(form.fecha_venta || "")) {
       setActiveTab("venta");
-      setValidationError("Completá la campaña, el medio de pago y la fecha de venta para continuar.");
+      showGlobalNotification("error", "Completá la campaña, el medio de pago y la fecha de venta para continuar.");
       return;
     }
     if (!canSave) {
       if (!objectiveReady && objectiveEnabled && hasPersonReference) {
-        onFeedback("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
+        showGlobalNotification("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
       } else {
-        onFeedback("error", "Agregá un concepto válido o liquidá una ganancia pendiente.");
-        if (!canSettleGainOnly) setConceptsOpen(true);
+        showGlobalNotification("error", "Agregá un concepto válido o liquidá una ganancia pendiente.");
+        if (!canSettleGainOnly) setActiveTab("venta");
       }
       return;
     }
-    setValidationError("");
     onSave({
       ...form,
       id_orden: form.id_orden || null,
@@ -235,20 +303,18 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   };
 
   return (
-    <>
-      <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
+    <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
       <EntityTabs
         tabs={[{ value: "venta", label: <><VentasSectionIcon kind="sale" />Datos de la venta</> }, { value: "comprador", label: <><VentasSectionIcon kind="person" />Comprador y objetivo</> }]}
         value={activeTab}
-        onChange={(value) => { setActiveTab(value); setValidationError(""); }}
+        onChange={setActiveTab}
         idPrefix="ventas-order-modal-tab"
         className="ventas-modal-tabs"
       />
-      {validationError ? <div className="ventas-modal-validation" role="alert">{validationError}</div> : null}
       <EntityTabPane active={activeTab === "venta"} disableWhenInactive>
       <div className="ventas-form-grid ventas-form-grid--order-head">
         <FloatingField label="Venta / campaña" className="ventas-modal-field">
-          <select required value={form.id_campania} onChange={(e) => setForm((v) => ({ ...v, id_campania: e.target.value }))}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
+          <select required value={form.id_campania} disabled={Boolean(initialId)} onChange={(e) => chooseCampaign(e.target.value)}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
         </FloatingField>
         <FloatingField label="Medio de pago" className="ventas-modal-field">
           <select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="" disabled>SELECCIONAR MEDIO DE PAGO</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{upper(m.medio_pago, 120)}</option>)}</select>
@@ -261,39 +327,74 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         </FloatingField>
       </div>
 
-      <section className="ventas-modal-section ventas-concepts-launcher">
-        <div className="ventas-concepts-launcher__copy">
-          <strong><VentasSectionIcon kind="product" />Productos y conceptos</strong>
-          <small>
-            {hasConfiguredItems
-              ? `${configuredItems.length} ${configuredItems.length === 1 ? "concepto agregado" : "conceptos agregados"}`
-              : canSettleGainOnly
-                ? "Ganancia por objetivo sin unidades vendidas. No se descontará stock."
-                : "Agregá los productos o conceptos que forman parte de esta venta."}
-          </small>
-        </div>
-        <div className="ventas-concepts-launcher__actions">
-          <div className="ventas-concepts-launcher__total">
-            <span>Total venta</span>
-            <strong>{money(total)}</strong>
-            {objectiveGainForTotal > 0 ? (
-              <small>{itemsSubtotal > 0 ? `${money(itemsSubtotal)} productos + ` : ""}{money(objectiveGainForTotal)} ganancia</small>
-            ) : null}
+      <section className="ventas-modal-section ventas-inline-concepts" aria-label="Productos y conceptos de la venta">
+        <header className="ventas-inline-concepts__head">
+          <div>
+            <strong><VentasSectionIcon kind="product" />Productos y conceptos</strong>
+            <small>El producto de la venta se agrega solo. Indicá la cantidad; si cambiás de venta, se reinicia este detalle.</small>
           </div>
-          <button
-            type="button"
-            className="mov-btn mov-btn--primary"
-            onClick={() => setConceptsOpen(true)}
-          >
-            {hasConfiguredItems ? "Editar conceptos" : "Agregar conceptos"}
+          <button type="button" className="mov-btn mov-btn--ghost" onClick={addConcept}>
+            + Agregar concepto
           </button>
+        </header>
+        <div className="ventas-inline-concepts__scroll">
+          <table className="ventas-inline-concepts__table">
+            <thead><tr><th>Producto / concepto</th><th>Precio</th><th>Valor unitario</th><th>Cantidad</th><th>Subtotal</th><th aria-label="Acciones" /></tr></thead>
+            <tbody>
+              {form.items.map((item, index) => {
+                const product = products.find((p) => String(p.id_producto) === String(item.id_producto));
+                const campaignProductId = String(selectedCampaign?.id_producto_principal || "");
+                const multiple = product && Number(product.precio_anticipada) !== Number(product.precio_puerta);
+                const isManual = !item.id_producto;
+                const isCustom = isManual || item.tipo_precio === "personalizado";
+                return (
+                  <tr key={`item-${index}`}>
+                    <td>
+                      <select aria-label={`Producto del concepto ${index + 1}`} value={item.id_producto || ""} onChange={(event) => chooseItemProduct(index, event.target.value)}>
+                        <option value="">CONCEPTO MANUAL</option>
+                        {products.filter((p) => String(p.id_producto) === campaignProductId || (initialId && String(p.id_producto) === String(item.id_producto))).map((p) => (
+                          <option key={p.id_producto} value={p.id_producto}>{upper(p.nombre, 150)}</option>
+                        ))}
+                        {item.id_producto && !product ? <option value={item.id_producto}>{item.producto_nombre || "PRODUCTO HISTÓRICO"}</option> : null}
+                      </select>
+                      {isManual ? (
+                        <input aria-label={`Nombre del concepto manual ${index + 1}`} maxLength={150} placeholder="NOMBRE DEL CONCEPTO" value={item.producto_nombre || ""} onChange={(event) => editItem(index, { producto_nombre: upper(event.target.value, 150) })} />
+                      ) : null}
+                    </td>
+                    <td>
+                      <select aria-label={`Tipo de precio del concepto ${index + 1}`} value={item.tipo_precio || "personalizado"} onChange={(event) => choosePriceType(index, event.target.value)}>
+                        {multiple ? <><option value="anticipada">PRINCIPAL</option><option value="puerta">ALTERNATIVO</option></> : null}
+                        {!multiple && product ? <option value="normal">ÚNICO</option> : null}
+                        {product && !multiple && ["anticipada", "puerta"].includes(item.tipo_precio) ? <option value={item.tipo_precio}>HISTÓRICO</option> : null}
+                        {product && multiple && item.tipo_precio === "normal" ? <option value="normal">NORMAL (HISTÓRICO)</option> : null}
+                        <option value="personalizado">MANUAL</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input aria-label={`Precio unitario del concepto ${index + 1}`} type="number" min="0" step="0.01" value={item.precio_unitario ?? ""} readOnly={!isCustom} title={!isCustom ? "Precio configurado en el producto" : "Ingresá el precio del concepto"} onChange={(event) => editItem(index, { precio_unitario: event.target.value })} />
+                    </td>
+                    <td>
+                      <input aria-label={`Cantidad del concepto ${index + 1}`} type="number" min="1" max="100000" step="1" value={item.cantidad ?? 1} onChange={(event) => editItem(index, { cantidad: event.target.value })} />
+                    </td>
+                    <td className="ventas-inline-concepts__subtotal">{money(Number(item.cantidad || 0) * Number(item.precio_unitario || 0))}</td>
+                    <td><button type="button" className="ventas-inline-concepts__remove" title="Quitar concepto" aria-label={`Quitar concepto ${index + 1}`} onClick={() => removeConcept(index)}>×</button></td>
+                  </tr>
+                );
+              })}
+              {form.items.length === 0 ? <tr><td colSpan={6} className="ventas-inline-concepts__empty">Sin conceptos. Podés agregar uno o liquidar solo la ganancia pendiente del objetivo.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="ventas-inline-concepts__footer">
+          {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · Ganancia por objetivo: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
+          <div><span>Total de la venta</span><strong>{money(total)}</strong></div>
         </div>
       </section>
 
       </EntityTabPane>
       <EntityTabPane active={activeTab === "comprador"} disableWhenInactive>
       <section className="ventas-modal-section ventas-person-section">
-        <header><div><strong><VentasSectionIcon kind="person" />Comprador o alumno</strong><small>{allDoor ? "Opcional porque todos los conceptos son precio en puerta." : "Obligatorio para ventas anticipadas."}</small></div></header>
+        <header><div><strong><VentasSectionIcon kind="person" />Comprador o alumno</strong><small>{allDoor ? "Opcional para ventas con precio alternativo (en puerta)." : "Seleccioná una persona para asociar la venta y calcular su objetivo."}</small></div></header>
         <div className="ventas-person-search">
           <FloatingField label="Buscar por DNI o nombre" wide className="ventas-modal-field">
             <input value={personSearch} placeholder="Ej.: 40123456 o Juan Pérez" onChange={(e) => searchPeople(e.target.value)} />
@@ -374,16 +475,5 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       ) : null}
       </EntityTabPane>
       </CrudModal>
-
-      <VentaItemsModal
-        open={open && conceptsOpen}
-        items={form.items}
-        products={products}
-        campaign={selectedCampaign}
-        initialId={initialId}
-        onClose={() => setConceptsOpen(false)}
-        onApply={(items) => setForm((current) => ({ ...current, items }))}
-      />
-    </>
   );
 }

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/ventas_configuracion.php';
 require_once __DIR__ . '/ventas_ordenes.php';
 require_once __DIR__ . '/ventas_planillas.php';
+require_once __DIR__ . '/ventas_ciclos.php';
 
 final class Ventas
 {
@@ -20,6 +21,7 @@ final class Ventas
     use VentasConfiguracion;
     use VentasOrdenes;
     use VentasPlanillas;
+    use VentasCiclos;
 
     // Conexión, autenticación y validaciones comunes.
     private static function db(): PDO

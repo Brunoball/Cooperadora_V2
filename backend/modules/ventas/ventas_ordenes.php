@@ -294,6 +294,13 @@ trait VentasOrdenes
     ): void {
         $campaignId = (int)$campaign['id_campania'];
         $sameHistoricalCampaign = $before !== null && (int)$before['id_campania'] === $campaignId;
+        if (($campaign['estado_cierre'] ?? 'abierta') === 'cerrada') {
+            api_error('La campaña está cerrada. Consultá el historial; no se admiten cambios.', 'VENTA_CAMPANIA_CERRADA', 409);
+        }
+        if (!$sameHistoricalCampaign && ((isset($campaign['fecha_inicio']) && $campaign['fecha_inicio'] && $campaign['fecha_inicio'] > date('Y-m-d')) ||
+            (isset($campaign['fecha_fin']) && $campaign['fecha_fin'] && $campaign['fecha_fin'] < date('Y-m-d')))) {
+            api_error('La campaña está fuera del período de venta. No admite ventas nuevas.', 'VENTA_FUERA_DE_VIGENCIA', 409);
+        }
         if ((int)$campaign['activo'] !== 1) {
             $wasApproved = $before !== null && ($before['estado'] ?? '') === 'aprobada';
             if (!$sameHistoricalCampaign || ($newState === 'aprobada' && !$wasApproved)) {
@@ -490,6 +497,7 @@ trait VentasOrdenes
             $retreat = strtolower(trim((string)($_GET['retiro'] ?? '')));
             $origin = strtolower(trim((string)($_GET['origen'] ?? '')));
             $month = trim((string)($_GET['mes'] ?? ''));
+            $calendarYear=trim((string)($_GET['anio_calendario'] ?? ''));
             $search = trim((string)($_GET['buscar'] ?? $_GET['q'] ?? ''));
 
             $where = ['1=1'];
@@ -498,7 +506,14 @@ trait VentasOrdenes
                 $where[] = 'o.id_campania = ?';
                 $params[] = $campaign;
             }
-            if ($state === '' || $state === 'vigentes') {
+            if ((string)($_GET['solo_actual'] ?? '') === '1' && $campaign === null) {
+                // Vista inicial limpia: no mezclar campañas cerradas con las
+                // ventas actuales cuando todavía no se eligió historial.
+                $where[] = "EXISTS (SELECT 1 FROM ventas_campanias actual WHERE actual.id_campania=o.id_campania AND actual.activo=1 AND actual.estado_cierre='abierta' AND (actual.fecha_inicio IS NULL OR actual.fecha_inicio<=CURDATE()) AND (actual.fecha_fin IS NULL OR actual.fecha_fin>=CURDATE()))";
+            }
+            if ($state === 'todos') {
+                // Historial íntegro: aprobadas, pendientes y anuladas.
+            } elseif ($state === '' || $state === 'vigentes') {
                 $where[] = "o.estado IN ('aprobada', 'pendiente')";
             } else {
                 /** @disregard P1012 */
@@ -519,6 +534,11 @@ trait VentasOrdenes
             if ($origin !== '') {
                 $where[] = 'o.origen = ?';
                 $params[] = $origin;
+            }
+            if ($calendarYear !== '') {
+                if (!preg_match('/^\d{4}$/',$calendarYear)) api_error('Año inválido.','VALIDATION_ERROR');
+                $where[] = 'COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en) >= ? AND COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en) < ?';
+                $params[] = $calendarYear.'-01-01'; $params[]=(string)((int)$calendarYear+1).'-01-01';
             }
             if ($month !== '') {
                 if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
@@ -563,7 +583,7 @@ trait VentasOrdenes
 
             $stage = 'registros';
             $statement = $db->prepare(
-                'SELECT o.*, c.nombre AS campania_nombre, vp.dni, vp.nombre_apellido,'
+                'SELECT o.*, c.nombre AS campania_nombre, c.estado_cierre, vp.dni, vp.nombre_apellido,'
                 . ' a.telefono, mp.medio_pago,'
                 . ' COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en)) AS fecha_venta'
                 . ' FROM ventas_ordenes o'
@@ -656,16 +676,21 @@ trait VentasOrdenes
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
             $before=$id?self::order($db,$id,true):null;
+            if ($before && (int)$before['id_campania'] !== $campaignId) api_error('No se puede mover una venta a otra campaña.', 'VENTA_CAMPANIA_INMUTABLE', 409);
             // El bot registra ventas únicamente después de confirmar el pago.
             // Una edición manual no puede volver pendiente ese cobro confirmado.
             if ($before && $before['origen'] === 'bot_whatsapp' && $state !== 'aprobada') {
                 api_error('Las ventas de WhatsApp ya están pagadas y no pueden pasar a pendientes.', 'VALIDATION_ERROR');
             }
+            if ($before === null && (($campaign['fecha_inicio'] && $saleDate < $campaign['fecha_inicio'])
+                || ($campaign['fecha_fin'] && $saleDate > $campaign['fecha_fin']))) {
+                api_error('La fecha de venta tiene que estar dentro de la vigencia de la campaña.', 'VENTA_FECHA_FUERA_DE_RANGO', 409);
+            }
             $oldItems=$id?self::orderItems($db,$id):[];
             self::assertOrderCatalogAvailability($db,$campaign,$items,$before,$oldItems,$state);
             if($before && $before['estado']==='aprobada' && self::isStockManagedOrder($before)) self::adjustStock($db,$oldItems,+1);
             $personId=self::resolvePerson($db,$body);
-            if(!$personId && !$allDoor) api_error('Las ventas anticipadas deben estar asociadas a una persona o alumno.','VALIDATION_ERROR');
+            if(!$personId && !$allDoor) api_error('Esta venta debe estar asociada a una persona o alumno.','VALIDATION_ERROR');
             if ($personId) {
                 // Bloqueo por persona: impide dos liquidaciones simultáneas
                 // de la misma campaña/persona con ganancia duplicada.
@@ -718,7 +743,13 @@ trait VentasOrdenes
     public static function retiroOrden(): never
     {
         $db=self::db();$auth=self::auth();$body=request_body();$id=positive_id($body['id_orden'] ?? $body['id'] ?? null,'venta');$retired=self::boolValue($body['retirado'] ?? true);
-        transaction($db,function()use($db,$auth,$id,$retired){$before=self::order($db,$id,true);if($before['estado']!=='aprobada')api_error('Solo una venta pagada puede marcarse como retirada.','VENTA_ESTADO_INVALIDO',409);$db->prepare('UPDATE ventas_ordenes SET retirado=?,retirado_en=? WHERE id_orden=?')->execute([$retired,$retired?date('Y-m-d H:i:s'):null,$id]);$after=self::order($db,$id);audit_change($db,$auth,'VENTAS',$retired?'MARCAR_RETIRO':'REVERTIR_RETIRO','ventas_ordenes',$id,'Estado de retiro.',$before,$after);});
+        transaction($db,function()use($db,$auth,$id,$retired){
+            $reference=self::fetchOne($db,'SELECT id_campania FROM ventas_ordenes WHERE id_orden=?',[$id]);
+            if(!$reference) api_error('No existe la venta.', 'VENTA_NO_ENCONTRADA',404);
+            $campaign=self::campaign($db,(int)$reference['id_campania'],true);
+            if($campaign['estado_cierre']==='cerrada') api_error('El historial está cerrado.', 'VENTA_CAMPANIA_CERRADA',409);
+            $before=self::order($db,$id,true);
+            if($before['estado']!=='aprobada')api_error('Solo una venta pagada puede marcarse como retirada.','VENTA_ESTADO_INVALIDO',409);$db->prepare('UPDATE ventas_ordenes SET retirado=?,retirado_en=? WHERE id_orden=?')->execute([$retired,$retired?date('Y-m-d H:i:s'):null,$id]);$after=self::order($db,$id);audit_change($db,$auth,'VENTAS',$retired?'MARCAR_RETIRO':'REVERTIR_RETIRO','ventas_ordenes',$id,'Estado de retiro.',$before,$after);});
         api_success([], $retired?'Venta marcada como retirada.':'Retiro revertido.');
     }
 
@@ -726,6 +757,10 @@ trait VentasOrdenes
     {
         $db=self::db();$auth=self::auth();$body=request_body();$id=positive_id($body['id_orden'] ?? $body['id'] ?? null,'venta');$reason=optional_text($body['motivo'] ?? null,1000);
         $balance=transaction($db,function()use($db,$auth,$id,$reason){
+            $reference=self::fetchOne($db,'SELECT id_campania FROM ventas_ordenes WHERE id_orden=?',[$id]);
+            if(!$reference) api_error('No existe la venta.', 'VENTA_NO_ENCONTRADA',404);
+            $campaign=self::campaign($db,(int)$reference['id_campania'],true);
+            if($campaign['estado_cierre']==='cerrada') api_error('El historial está cerrado.', 'VENTA_CAMPANIA_CERRADA',409);
             $before=self::order($db,$id,true);
             if($before['estado']==='cancelada') return 0.0;
             $items=self::orderItems($db,$id);

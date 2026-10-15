@@ -6,6 +6,7 @@ export const ventasApi = {
   guardarCampania: (payload) => apiPost("ventas_campania_guardar", payload),
   estadoCampania: (payload) => apiPost("ventas_campania_estado", payload),
   eliminarCampania: (payload) => apiPost("ventas_campania_eliminar", payload),
+  cerrarCampania: (payload) => apiPost("ventas_campania_cerrar", payload),
 
   productos: (params) => apiGet("ventas_productos_listar", params),
   guardarProducto: (payload) => apiPost("ventas_producto_guardar", payload),

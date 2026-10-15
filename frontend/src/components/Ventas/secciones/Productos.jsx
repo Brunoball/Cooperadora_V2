@@ -97,8 +97,8 @@ export default function Productos({ writable, feedback, showFeedback }) {
         gridClassName="ventas-grid ventas-grid--products"
         columns={[
           "Producto",
-          { label: "Anticipada", align: "right" },
-          { label: "Puerta", align: "right" },
+          { label: "Precio principal", align: "right" },
+          { label: "Precio alternativo", align: "right" },
           { label: "Stock", align: "center" },
           "Objetivo vigente",
           { label: "Uso", align: "center" },
@@ -129,7 +129,7 @@ export default function Productos({ writable, feedback, showFeedback }) {
               <small>{row.descripcion ? upper(row.descripcion, 3000) : "SIN DESCRIPCIÓN"}</small>
             </div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.precio_anticipada)}</div>
-            <div className="mov-gridCell is-right is-strong ventas-money">{money(row.precio_puerta)}</div>
+            <div className="mov-gridCell is-right is-strong ventas-money">{Number(row.precio_anticipada) === Number(row.precio_puerta) ? <span className="ventas-pill neutral">PRECIO ÚNICO</span> : money(row.precio_puerta)}</div>
             <div className="mov-gridCell is-center">
               {row.stock == null ? (
                 <span className="ventas-pill neutral">SIN CONTROL</span>

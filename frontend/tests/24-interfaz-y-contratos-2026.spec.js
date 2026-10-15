@@ -1,130 +1,144 @@
 /**
- * Controles preventivos entre frontend actual y backend actual.
- * Estos contratos estáticos COMPLEMENTAN E2E: no sustituyen click real ni bot externo.
+ * Contratos preventivos vigentes (octubre de 2026).
+ * Complementan, pero no reemplazan, las pruebas de API e interacción real.
  */
-const { test, expect } = require('./helpers/playwright.helper');
-const fs = require('fs');
-const path = require('path');
-const { authenticatePage, token } = require('./helpers/auth.helper');
-const { ok } = require('./helpers/api.helper');
-const { loadTestEnv } = require('./helpers/env.helper');
+"use strict";
+const { test, expect } = require("./helpers/playwright.helper");
+const fs = require("fs");
+const path = require("path");
+const { authenticatePage } = require("./helpers/auth.helper");
+const { loadTestEnv } = require("./helpers/env.helper");
 
 const env = loadTestEnv();
-const src = (...parts) => path.join(process.cwd(), 'src', ...parts);
-const read = (...parts) => fs.readFileSync(src(...parts), 'utf8');
+const readSource = (...parts) => fs.readFileSync(path.join(process.cwd(), "src", ...parts), "utf8");
+const readBackend = (...parts) => fs.readFileSync(path.resolve(process.cwd(), env.backendDir, ...parts), "utf8");
 
 function phpActions() {
   const root = path.resolve(process.cwd(), env.backendDir);
-  const result = new Set();
-  function visit(dir) {
-    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, item.name);
+  const actions = new Set();
+  function visit(folder) {
+    for (const item of fs.readdirSync(folder, { withFileTypes: true })) {
+      const full = path.join(folder, item.name);
       if (item.isDirectory()) visit(full);
-      else if (item.isFile() && (item.name === 'routes.php' || full.endsWith('/routes/api.php') || full.endsWith('\\routes\\api.php'))) {
-        const text = fs.readFileSync(full, 'utf8');
-        for (const m of text.matchAll(/->register\(\s*['"]([^'"]+)['"]\s*,\s*['"](GET|POST|PUT|PATCH|DELETE)['"]/g)) result.add(m[1]);
+      else if (item.isFile() && item.name === "routes.php") {
+        const js = fs.readFileSync(full, "utf8");
+        for (const match of js.matchAll(/->register\(\s*['"]([^'"]+)['"]\s*,\s*['"](?:GET|POST|PUT|PATCH|DELETE)['"]/g)) actions.add(match[1]);
       }
     }
   }
   visit(root);
-  return result;
+  return actions;
 }
 
-test('los nombres de acciones usados por los clientes API React existen en el router PHP', async () => {
-  const backend = phpActions();
+test("Clientes React: todas las acciones de API declaradas existen en el router", () => {
+  const registered = phpActions();
   const used = new Set();
-  const jsApiDir = src('components');
-  function scan(dir) {
-    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
-      const file = path.join(dir, item.name);
-      if (item.isDirectory()) scan(file);
+  function walk(folder) {
+    for (const item of fs.readdirSync(folder, { withFileTypes: true })) {
+      const file = path.join(folder, item.name);
+      if (item.isDirectory()) walk(file);
       else if (/\.[jt]sx?$/.test(file)) {
-        const js = fs.readFileSync(file, 'utf8');
-        for (const match of js.matchAll(/\bapi(?:Get|Post|Request|Put|Delete)\s*\(\s*['"]([\w]+)['"]/g)) used.add(match[1]);
+        const source = fs.readFileSync(file, "utf8");
+        for (const match of source.matchAll(/\bapi(?:Get|Post|Request|Put|Delete)\s*\(\s*['"]([\w]+)['"]/g)) used.add(match[1]);
       }
     }
   }
-  scan(jsApiDir);
-  expect(used.size, 'Se deben analizar las llamadas reales del frontend').toBeGreaterThan(50);
-  const missing = [...used].filter((name) => !backend.has(name));
-  expect(missing, 'Frontend usa acciones que no están en el router').toEqual([]);
+  walk(path.join(process.cwd(), "src", "components"));
+  expect(used.size).toBeGreaterThan(50);
+  expect([...used].filter((name) => !registered.has(name))).toEqual([]);
 });
 
-test('Ventas: modal elige campaña activa, consulta objetivo en backend y suma ganancia al total', async () => {
-  const component = read('components', 'Ventas', 'modales', 'VentaModal.jsx');
-  expect(component).toContain('campaigns.find((c) => yes(c.activo))');
-  expect(component).toContain('ventasApi.objetivoPersona(');
-  expect(component).toContain('objectiveGainForTotal');
-  expect(component).toContain('itemsSubtotal');
-  expect(component).toContain('canSettleGainOnly ? [] : form.items');
+test("Ventas: el formulario usa una tabla de ítems, precarga el producto y solicita el objetivo al servidor", () => {
+  const modal = readSource("components", "Ventas", "modales", "VentaModal.jsx");
+  expect(modal).toContain("itemDeCampania(activeCampaign, products)");
+  expect(modal).toContain("ventasApi.objetivoPersona(");
+  expect(modal).toContain("objectiveGainForTotal");
+  expect(modal).toContain("itemsSubtotal");
+  expect(modal).toContain("addConcept");
+  expect(modal).toContain("choosePriceType");
+  expect(modal).toContain('showGlobalNotification');
+  expect(modal).not.toContain("VentaItemsModal");
+  expect(modal).toContain('id_venta_persona: "", dni: "", nombre_apellido: ""');
 });
 
-test('Ventas: filtros de MES VENTAS, ORIGEN y modal global para exportar', async () => {
-  const component = read('components', 'Ventas', 'secciones', 'VentasRegistradas.jsx');
-  expect(component).toContain('label: "Mes de ventas"');
-  expect(component).toContain('label: "Origen"');
-  expect(component).toContain('BotonExportarGlobal');
-  expect(component).toContain('onClick={() => setExportOpen(true)}');
-  expect(component).toContain('obtainAllExportSections');
-  expect(component).toContain('ganancia_objetivo');
+test("Ventas: catálogo admite precio único/doble y campaña conserva fechas, cierre y disponibilidad", () => {
+  const modal = readSource("components", "Ventas", "modales", "VentaModal.jsx");
+  const config = readBackend("modules", "ventas", "ventas_configuracion.php");
+  const cycles = readBackend("modules", "ventas", "ventas_ciclos.php");
+  const orders = readBackend("modules", "ventas", "ventas_ordenes.php");
+  expect(modal).toContain('tipo_precio: type');
+  expect(modal).toContain('Number(product.precio_anticipada) !== Number(product.precio_puerta)');
+  for (const field of ["fecha_inicio", "fecha_fin", "fecha_entrega", "estado_cierre"]) expect(config).toContain(field);
+  expect(config).toContain("VENTA_CAMPANIAS_SUPERPUESTAS");
+  expect(cycles).toContain("ventas_planillas_cerradas");
+  expect(cycles).toContain("VENTA_CAMPANIA_AUN_VIGENTE");
+  expect(orders).toContain("VENTA_CAMPANIA_CERRADA");
+  expect(orders).toContain("VENTA_FUERA_DE_VIGENCIA");
 });
 
-test('Planillas: impresion y PDF comparten plantilla; faltantes/ganancias se completan a mano', async () => {
-  const component = read('components', 'Ventas', 'secciones', 'Planillas.jsx');
-  const document = read('utils', 'planillasDocumento.js');
-  // La plantilla se extrajo a planillasDocumento: no buscar constantes que ya
-  // dejaron de existir en Planillas.jsx.
-  expect(component).toContain('crearDocumentoPlanillas(data, type)');
-  expect(component).toContain('imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type), popup)');
-  expect(component).toContain('exportarDocumentoPlanillasPdf(documento, exportFileName)');
+test("Ventas registradas: selector único venta (mes/año), origen y exportación", () => {
+  const source = readSource("components", "Ventas", "secciones", "VentasRegistradas.jsx");
+  expect(source).toContain('label: "Venta (mes y año)"');
+  expect(source).toContain('label: "Origen"');
+  expect(source).toContain('BotonExportarGlobal');
+  expect(source).toContain('obtainAllExportSections');
+  expect(source).toContain('ganancia_objetivo');
+  expect(source).not.toContain('label: "Mes de ventas"');
+});
+
+test("Planillas: buscador integral, curso automático y descomposición contable sin duplicar cobros", () => {
+  const source = readSource("components", "Ventas", "secciones", "Planillas.jsx");
+  const document = readSource("utils", "planillasDocumento.js");
+  const backend = readBackend("modules", "ventas", "ventas_planillas.php");
+  expect(source).toContain('Buscar alumno o DNI');
+  expect(source).toContain('Buscar docente o DNI');
+  expect(source).toContain('ventasApi.planillasDatos({ tipo: type, id_campania: campaign, id_anio: "", id_division: "" })');
+  expect(source).toContain('setYear(row.id_anio');
+  expect(source).toContain('setDivision(row.id_division');
+  expect(source).toContain('ventas-planillas-match');
+  expect(source).toContain('filaMarcadaRef');
+  expect(source).toContain('revisionBusqueda');
+  expect(source).not.toContain('cacheBusquedaRef');
+  expect(source).toContain('key: "gananciaCobrada"');
+  expect(source).toContain('key: "productos"');
+  expect(source).toContain('key: "cobrado"');
+  expect(source).toContain('imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type), popup)');
+  expect(source).toContain('exportarDocumentoPlanillasPdf(documento, exportFileName)');
   expect(document).toContain('function hojaCurso(');
   expect(document).toContain('function hojaDocentes(');
-  const course = document.slice(document.indexOf('function hojaCurso('), document.indexOf('function hojaDocentes('));
-  const teachers = document.slice(document.indexOf('function hojaDocentes('), document.indexOf('// Mantiene la estética'));
-  expect(course).toContain('row.num_documento');
-  expect(course).toContain('cursoSinSimbolo(curso)');
-  expect(course).toContain('legacy-data-row');
-  expect(course).toContain('<td></td><td></td><td></td><td></td><td></td>');
-  expect(course).not.toContain('row.ganancia_');
-  expect(course).not.toContain('row.cantidad_faltante');
-  expect(teachers).toContain('row.dni');
-  expect(teachers).toContain('<td></td><td></td><td></td>');
-  // Excel se descarga con los campos de identificación, no con cifras de
-  // ganancia/cantidad calculadas por el backend.
-  expect(component).toContain('{ label: "Apellido y nombres", key: "alumno" }');
-  expect(component).toContain('{ label: "División", key: "division" }');
-  expect(component).toContain('{ label: "DNI", key: "dni" }');
-  expect(component).not.toContain('key: "ganancia_objetivo"');
-  expect(component).not.toContain('key: "cantidad_faltante"');
+  expect(document).toContain('f.gananciaCobrada');
+  expect(document).toContain('f.productos');
+  expect(backend).toContain("'importe_productos'");
+  expect(backend).toContain("'ganancia_cobrada'");
+  expect(backend).toContain("ventas_planillas_cerradas");
 });
 
-test('interfaz: listado de Ventas ofrece nueva venta, filtros y navegación sin errores de JavaScript', async ({ page }) => {
+test("Cuotas: año de ingreso incluye su mes, conserva pagos previos y excluye diciembre interno", () => {
+  const consultas = readBackend("modules", "cuotas", "cuotas_consultas.php");
+  const soporte = readBackend("modules", "cuotas", "cuotas_soporte.php");
+  const comprobantes = readSource("components", "Cuotas", "modales", "ModalPagoCuota.jsx");
+  expect(soporte).toContain("fechaCorteIngresoPeriodo");
+  expect(soporte).toContain("'Y-m-t'");
+  expect(soporte).toContain("periodoAplicaAlumno");
+  expect(consultas).toContain("ocultar_por_ingreso");
+  expect(consultas).toContain("hasExactHistoricalPayment");
+  expect(consultas).toContain("cupones");
+  expect(comprobantes).toContain("Los alumnos internos no abonan diciembre.");
+});
+
+test("Interfaz: ventas registradas muestra el selector vigente y permite abrir Nueva venta", async ({ page }) => {
   await authenticatePage(page);
   const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/ventas/registradas');
-  await expect(page.getByText('Ventas registradas').first()).toBeVisible();
-  await expect(page.getByText('Mes de ventas').first()).toBeVisible();
-  await expect(page.getByText('Origen').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /nueva venta/i }).first()).toBeVisible();
+  page.on("pageerror", (err) => errors.push(err.message));
+  await page.goto("/ventas/registradas");
+  await expect(page.getByText("Ventas registradas").first()).toBeVisible();
+  await expect(page.getByRole("combobox", { name: /venta \(mes y año\)/i })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Origen" })).toBeVisible();
+  await page.getByRole("button", { name: /nueva venta/i }).first().click();
+  const dialog = page.getByRole("dialog", { name: /nueva venta/i });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("tab", { name: /comprador y objetivo/i })).toBeVisible();
+  await expect(dialog.getByText("Productos y conceptos")).toBeVisible();
+  await dialog.getByRole("button", { name: /cancelar/i }).click();
   expect(errors).toEqual([]);
-});
-
-test('interfaz: nueva venta selecciona por defecto la campaña activa, si existe', async ({ page, request }) => {
-  const t = token();
-  const campaigns = await ok(request, 'ventas_campanias_listar', { token: t });
-  const active = (campaigns.items || []).find((item) => Number(item.activo) === 1);
-  test.skip(!active, 'No hay campaña activa para verificar la selección automática.');
-  await authenticatePage(page);
-  await page.goto('/ventas/registradas');
-  await page.getByRole('button', { name: /nueva venta/i }).first().click();
-  const campaignSelect = page.locator('.ventas-order-modal select[required]').first();
-  if (env.productionE2E && !/^PW E2E VTA CAMP /i.test(String(active.nombre || ''))) {
-    // La campaña real debe estar aislada del usuario PW E2E: no seleccionarla
-    // automáticamente para evitar afectar una venta productiva por accidente.
-    await expect(campaignSelect).not.toHaveValue(String(active.id_campania));
-  } else {
-    await expect(campaignSelect).toHaveValue(String(active.id_campania));
-  }
-  await expect(page.getByText('Productos y conceptos').first()).toBeVisible();
 });

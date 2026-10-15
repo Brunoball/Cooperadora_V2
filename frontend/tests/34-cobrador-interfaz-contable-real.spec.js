@@ -46,7 +46,9 @@ test("El modal usa recuadro compacto junto a TOTAL OPERACIÓN y actualiza el 15%
   const compact = dialog.locator(".cuotas-v2-footer-collector-box");
   await expect(total).toContainText(/total operaci[oó]n/i);
   await expect(compact).toHaveCount(1);
-  await expect(compact).toContainText(/15% para cobrador/i);
+  await expect(compact).toContainText(/comisi[oó]n del cobrador/i);
+  await expect(compact).toContainText(/15%\s*del total/i);
+  await expect(compact).toHaveAttribute('aria-label', /15 por ciento/i);
   // Es sólo un pequeño bloque al pie; no debe haber un resumen extra grande.
   await expect(dialog.locator(".cuotas-v2-footer-totals > div")).toHaveCount(2);
 

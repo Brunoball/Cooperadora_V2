@@ -10,6 +10,7 @@ function register_ventas_routes(Router $router): void
     $router->register('ventas_campania_guardar', 'POST', [Ventas::class, 'guardarCampania'], true);
     $router->register('ventas_campania_estado', 'POST', [Ventas::class, 'estadoCampania'], true);
     $router->register('ventas_campania_eliminar', 'POST', [Ventas::class, 'eliminarCampania'], true);
+    $router->register('ventas_campania_cerrar', 'POST', [Ventas::class, 'cerrarCampania'], true);
     $router->register('ventas_productos_listar', 'GET', [Ventas::class, 'productos'], true);
     $router->register('ventas_producto_guardar', 'POST', [Ventas::class, 'guardarProducto'], true);
     $router->register('ventas_producto_estado', 'POST', [Ventas::class, 'estadoProducto'], true);

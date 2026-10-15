@@ -1,253 +1,154 @@
-import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useState } from "react";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
+import { FloatingField } from "../../Global/Formularios/TabbedForm";
 import { VentasCheckbox } from "../VentasUI";
-import { asId, money, upper, yes } from "../ventasUtils";
+import { asId, campaniaOpcion, ordenarCampanias, upper, yes } from "../ventasUtils";
 
-const emptyCampaign = {
-  id_campania: "",
-  nombre: "",
-  id_producto_principal: "",
-  fecha_inicio: "",
-  fecha_fin: "",
-  cantidad_minima_persona: "0",
-  ganancia_unidad_faltante: "0",
-  ganancia_total_sin_ventas: "0",
-  pregunta_persona: "Ingresá el DNI de la persona o alumno que va a realizar la compra/pago.",
-  mensaje_inicio: "Indicá la cantidad que querés comprar.",
-  mensaje_aprobado: "Pago aprobado. Te enviamos el comprobante.",
-  activo: false,
+const defaults = {
+  id_campania: "", nombre: "", id_producto_principal: "", fecha_inicio: "", fecha_fin: "", fecha_entrega: "",
+  cantidad_minima_persona: "0", ganancia_unidad_faltante: "0", ganancia_total_sin_ventas: "0",
   visible_menu: true,
 };
 
-const numericValue = (value) => {
-  const number = Number(value || 0);
-  return Number.isFinite(number) && number > 0 ? number : 0;
-};
+// Los nombres generados automáticamente deben acompañar al producto elegido.
+// Los nombres personalizados no se reemplazan al cambiar de producto.
+const nombreAutomatico = (producto) => producto ? upper(`VENTA DE ${producto.nombre}`, 150) : "";
+const sigueNombreAutomatico = (nombre, productos) =>
+  !String(nombre ?? "").trim() || productos.some((producto) =>
+    upper(String(nombre).trim(), 150) === nombreAutomatico(producto));
 
-export default function ConfiguracionVentaModal({ open, initial, products, saving, onClose, onSave }) {
-  const [form, setForm] = useState(emptyCampaign);
-  const [activeTab, setActiveTab] = useState("general");
-  const [validationError, setValidationError] = useState("");
+/** No hay plantillas independientes: se copian los ajustes de cualquier venta anterior. */
+export default function ConfiguracionVentaModal({ open, initial, products = [], campaigns = [], saving, onClose, onSave }) {
+  const [form, setForm] = useState(defaults);
+  const [copyId, setCopyId] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setActiveTab("general");
-    setValidationError("");
+    setError("");
+    setCopyId("");
     setForm({
-      ...emptyCampaign,
-      ...initial,
-      id_campania: initial?.id_campania || "",
-      nombre: upper(initial?.nombre || "", 150),
+      ...defaults, ...initial,
+      id_campania: asId(initial?.id_campania),
       id_producto_principal: asId(initial?.id_producto_principal),
-      fecha_inicio: initial?.fecha_inicio || "",
-      fecha_fin: initial?.fecha_fin || "",
+      fecha_inicio: initial?.fecha_inicio || "", fecha_fin: initial?.fecha_fin || "", fecha_entrega: initial?.fecha_entrega || "",
       cantidad_minima_persona: String(initial?.cantidad_minima_persona ?? 0),
       ganancia_unidad_faltante: String(initial?.ganancia_unidad_faltante ?? 0),
       ganancia_total_sin_ventas: String(initial?.ganancia_total_sin_ventas ?? 0),
-      activo: initial ? yes(initial.activo) : false,
       visible_menu: initial ? yes(initial.visible_menu) : true,
     });
   }, [open, initial]);
 
-  const objective = useMemo(() => {
-    const minimum = Math.max(0, Math.trunc(numericValue(form.cantidad_minima_persona)));
-    const perMissing = numericValue(form.ganancia_unidad_faltante);
-    const noSales = numericValue(form.ganancia_total_sin_ventas);
-
-    if (!minimum) return { minimum: 0, perMissing: 0, noSales: 0, examples: [] };
-
-    const quantities = minimum <= 4
-      ? Array.from({ length: minimum + 1 }, (_, index) => minimum - index)
-      : [minimum, Math.max(0, minimum - 1), 1, 0];
-
-    const examples = [...new Set(quantities)].map((sold) => {
-      const missing = Math.max(0, minimum - sold);
-      const due = missing === 0 ? 0 : (sold === 0 ? noSales : missing * perMissing);
-      return { sold, due };
-    });
-
-    return { minimum, perMissing, noSales, examples };
-  }, [form.cantidad_minima_persona, form.ganancia_unidad_faltante, form.ganancia_total_sin_ventas]);
-
   const isNew = !form.id_campania;
   const hasSales = !isNew && Number(initial?.cantidad_ordenes || 0) > 0;
-  const productRequired = isNew || objective.minimum > 0 || yes(form.activo);
+  const minimum = Number(form.cantidad_minima_persona || 0);
+  const options = useMemo(() => ordenarCampanias(campaigns), [campaigns]);
+  const set = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+  const copy = (value) => {
+    setCopyId(value);
+    const source = campaigns.find((item) => String(item.id_campania) === String(value));
+    if (!source) return;
+    setForm((current) => ({
+      ...current,
+      nombre: upper(source.nombre, 150),
+      id_producto_principal: asId(source.id_producto_principal),
+      cantidad_minima_persona: String(source.cantidad_minima_persona ?? 0),
+      ganancia_unidad_faltante: String(source.ganancia_unidad_faltante ?? 0),
+      ganancia_total_sin_ventas: String(source.ganancia_total_sin_ventas ?? 0),
+      visible_menu: true,
+      // Fechas nuevas, nunca se copian las fechas históricas.
+      fecha_inicio: "", fecha_fin: "", fecha_entrega: "",
+    }));
+    setError("");
+  };
 
   const submit = (event) => {
     event.preventDefault();
-    const minimum = Math.max(0, Math.trunc(Number(form.cantidad_minima_persona || 0)));
-    const invalidRules = !Number.isFinite(Number(form.cantidad_minima_persona))
-      || !Number.isInteger(Number(form.cantidad_minima_persona))
-      || Number(form.cantidad_minima_persona) < 0
-      || Number(form.cantidad_minima_persona) > 10000
-      || (minimum > 0 && [form.ganancia_unidad_faltante, form.ganancia_total_sin_ventas]
-        .some((value) => value === "" || !Number.isFinite(Number(value)) || Number(value) < 0));
-    if (!form.nombre.trim() || (productRequired && !hasSales && !form.id_producto_principal) || (!hasSales && invalidRules)) {
-      setActiveTab("general");
-      setValidationError("Completá el nombre, el producto y los valores del objetivo antes de guardar.");
-      return;
+    if (!form.nombre.trim() || !form.id_producto_principal) { setError("Indicá un nombre y un producto principal."); return; }
+    if (!Number.isInteger(minimum) || minimum < 0 || minimum > 10000 ||
+      (minimum > 0 && [form.ganancia_unidad_faltante, form.ganancia_total_sin_ventas].some((v) => !v || !Number.isFinite(Number(v)) || Number(v) <= 0))) {
+      setError("Revisá la cantidad mínima y los importes de ganancia por faltante."); return;
     }
-    setValidationError("");
+    // Las ventas legadas con registros pueden conservar sus fechas originales en blanco.
+    const legacyWithSales = hasSales && !initial?.fecha_inicio && !initial?.fecha_fin;
+    if (!legacyWithSales && (!form.fecha_inicio || !form.fecha_fin || !form.fecha_entrega || form.fecha_inicio > form.fecha_fin || form.fecha_fin > form.fecha_entrega)) {
+      setError("Completá las fechas de inicio, fin y entrega en orden cronológico."); return;
+    }
+    setError("");
     onSave({
       ...form,
       nombre: upper(form.nombre, 150),
       cantidad_minima_persona: minimum,
-      ganancia_unidad_faltante: minimum > 0 ? Number(form.ganancia_unidad_faltante || 0) : 0,
-      ganancia_total_sin_ventas: minimum > 0 ? Number(form.ganancia_total_sin_ventas || 0) : 0,
+      ganancia_unidad_faltante: minimum ? Number(form.ganancia_unidad_faltante) : 0,
+      ganancia_total_sin_ventas: minimum ? Number(form.ganancia_total_sin_ventas) : 0,
     });
   };
 
-  return (
-    <CrudModal
-      open={open}
-      title={form.id_campania ? "Editar configuración de venta" : "Nueva configuración de venta"}
-      subtitle="Define el producto, el objetivo mínimo por persona y los mensajes que consume el bot."
-      onClose={onClose}
-      onSubmit={submit}
-      noValidate
-      saving={saving}
-      showSavingEffect={false}
-      wide
-      modalClassName="ventas-modal ventas-campaign-modal"
-    >
-      <EntityTabs
-        tabs={[{ value: "general", label: <><VentasSectionIcon kind="objective" />Datos y objetivos</> }, { value: "mensajes", label: <><VentasSectionIcon kind="messages" />Vigencia y mensajes</> }]}
-        value={activeTab}
-        onChange={(value) => { setActiveTab(value); setValidationError(""); }}
-        idPrefix="ventas-campaign-modal-tab"
-        className="ventas-modal-tabs"
-      />
-      {validationError ? <div className="ventas-modal-validation" role="alert">{validationError}</div> : null}
-      <EntityTabPane active={activeTab === "general"} disableWhenInactive>
-      <div className="ventas-form-grid ventas-form-grid--campaign">
-        <FloatingField label="Nombre de la venta" className="ventas-modal-field">
-          <input required maxLength={150} placeholder="Ej.: Venta de talitas" value={form.nombre} onChange={(e) => setForm((v) => ({ ...v, nombre: upper(e.target.value, 150) }))} />
-        </FloatingField>
-        <FloatingField label="Producto principal" className="ventas-modal-field">
-          <select
-            required={productRequired}
-            disabled={hasSales}
-            value={form.id_producto_principal}
-            onChange={(e) => setForm((v) => ({ ...v, id_producto_principal: e.target.value }))}
-          >
-            <option value="">{productRequired ? "SELECCIONAR PRODUCTO" : "SELECCIONAR PRODUCTO (OPCIONAL)"}</option>
-            {products
-              .filter((p) => yes(p.activo) || String(p.id_producto) === String(form.id_producto_principal))
-              .map((p) => <option key={p.id_producto} value={p.id_producto}>{upper(p.nombre, 150)}{yes(p.activo) ? "" : " (DADO DE BAJA)"}</option>)}
-          </select>
-        </FloatingField>
-
-        <section className="ventas-objective-card ventas-field--wide" aria-label="Objetivo de venta por persona">
-          <div className="ventas-objective-card__head">
-            <div>
-              <strong><VentasSectionIcon kind="objective" />Objetivo de venta por persona</strong>
-              <span>Configurá cuántas unidades debe vender cada persona y qué ganancia debe abonar si no llega al mínimo.</span>
-            </div>
-            <span className={`ventas-pill ${objective.minimum > 0 ? "warning" : "neutral"}`}>
-              {objective.minimum > 0 ? `MÍNIMO ${objective.minimum}` : "SIN OBJETIVO"}
-            </span>
-          </div>
-
-          <div className="ventas-objective-grid">
-            <FloatingField label="Cantidad mínima por persona" className="ventas-modal-field">
-              <input
-                type="number"
-                min="0"
-                max="10000"
-                step="1"
-                placeholder="Ej.: 3"
-                disabled={hasSales}
-                value={form.cantidad_minima_persona}
-                onChange={(e) => setForm((v) => ({ ...v, cantidad_minima_persona: e.target.value }))}
-              />
-            </FloatingField>
-            <FloatingField label="Ganancia simple · por unidad faltante" className="ventas-modal-field">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Ej.: 3000"
-                disabled={hasSales || !objective.minimum}
-                required={objective.minimum > 0}
-                value={form.ganancia_unidad_faltante}
-                onChange={(e) => setForm((v) => ({ ...v, ganancia_unidad_faltante: e.target.value }))}
-              />
-            </FloatingField>
-            <FloatingField label="Ganancia total · si no vende ninguna" className="ventas-modal-field">
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Ej.: 10000"
-                disabled={hasSales || !objective.minimum}
-                required={objective.minimum > 0}
-                value={form.ganancia_total_sin_ventas}
-                onChange={(e) => setForm((v) => ({ ...v, ganancia_total_sin_ventas: e.target.value }))}
-              />
-            </FloatingField>
-          </div>
-
-          <div className="ventas-objective-card__rule">
-            {hasSales ? (
-              <>
-                <strong><VentasSectionIcon kind="locked" />Regla histórica bloqueada</strong>
-                <span>
-                  Esta configuración ya tiene ventas registradas. El producto principal, la cantidad mínima y las ganancias no pueden modificarse para no alterar planillas ni cálculos históricos.
-                </span>
-              </>
-            ) : objective.minimum > 0 ? (
-              <>
-                <strong><VentasSectionIcon kind="calculation" />Cómo se calcula</strong>
-                <span>
-                  Si cumple el mínimo no paga ganancia. Si vende al menos una unidad pero le faltan unidades, paga la ganancia simple por cada faltante. Si no vende ninguna, se aplica directamente la ganancia total.
-                </span>
-                <div className="ventas-objective-examples">
-                  {objective.examples.map((example) => (
-                    <span key={example.sold}><b>VENDE {example.sold}</b> → {example.due > 0 ? money(example.due) : "$ 0"}</span>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <span>Con cantidad mínima en 0, esta venta no exige objetivo ni genera ganancia por unidades faltantes.</span>
-            )}
-          </div>
-        </section>
-
+  return <CrudModal
+    open={open} title={isNew ? "Nueva venta" : "Editar venta"}
+    subtitle="Cada venta tiene sus propias fechas, registros y cierre. Los productos se pueden reutilizar."
+    onClose={onClose} onSubmit={submit} noValidate saving={saving} showSavingEffect={false}
+    wide modalClassName="ventas-modal ventas-campaign-modal"
+  >
+    {error ? <div className="ventas-modal-validation" role="alert">{error}</div> : null}
+    <div className="ventas-form-grid ventas-form-grid--campaign">
+      {isNew && campaigns.length > 0 && <FloatingField label="Copiar datos de otra venta (opcional)" wide className="ventas-modal-field">
+        <select value={copyId} onChange={(e) => copy(e.target.value)}>
+          <option value="">EMPEZAR DESDE CERO</option>
+          {options.map((item) => <option value={item.id_campania} key={item.id_campania}>{campaniaOpcion(item)}</option>)}
+        </select>
+      </FloatingField>}
+      <FloatingField label="Nombre de la venta" className="ventas-modal-field">
+        <input required maxLength={150} value={form.nombre} placeholder="EJ.: VENTA DE TALITAS" onChange={(e) => set("nombre", upper(e.target.value, 150))} />
+      </FloatingField>
+      <FloatingField label="Producto principal" className="ventas-modal-field">
+        <select required disabled={hasSales} value={form.id_producto_principal} onChange={(e) => {
+          const id = e.target.value;
+          const product = products.find((item) => String(item.id_producto) === String(id));
+          setForm((current) => ({
+            ...current,
+            id_producto_principal: id,
+            nombre: sigueNombreAutomatico(current.nombre, products)
+              ? nombreAutomatico(product)
+              : current.nombre,
+          }));
+        }}>
+          <option value="">SELECCIONAR PRODUCTO</option>
+          {products.filter((p) => yes(p.activo) || String(p.id_producto) === String(form.id_producto_principal)).map((p) =>
+            <option key={p.id_producto} value={p.id_producto}>{upper(p.nombre, 150)}{yes(p.activo) ? "" : " (DADO DE BAJA)"}</option>)}
+        </select>
+      </FloatingField>
+      <FloatingField label="Fecha de inicio" className="ventas-modal-field">
+        <input type="date" disabled={hasSales} value={form.fecha_inicio} onChange={(e) => set("fecha_inicio", e.target.value)} />
+      </FloatingField>
+      <FloatingField label="Fecha de fin" className="ventas-modal-field">
+        <input type="date" disabled={hasSales} value={form.fecha_fin} onChange={(e) => set("fecha_fin", e.target.value)} />
+      </FloatingField>
+      <FloatingField label="Fecha de entrega" className="ventas-modal-field">
+        <input type="date" disabled={hasSales} value={form.fecha_entrega} onChange={(e) => set("fecha_entrega", e.target.value)} />
+      </FloatingField>
+      <section className="ventas-objective-card ventas-field--wide" aria-label="Objetivo de venta">
+        <div className="ventas-objective-card__head"><div>
+          <strong>Objetivo por persona</strong>
+          <span>Si no se exige una cantidad mínima, dejá 0.</span>
+        </div></div>
+        <div className="ventas-objective-grid">
+          <FloatingField label="Cantidad mínima" className="ventas-modal-field">
+            <input type="number" step="1" min="0" max="10000" disabled={hasSales} value={form.cantidad_minima_persona} onChange={(e) => set("cantidad_minima_persona", e.target.value)} />
+          </FloatingField>
+          <FloatingField label="Ganancia por unidad faltante" className="ventas-modal-field">
+            <input type="number" step="0.01" min="0" disabled={hasSales || !minimum} value={form.ganancia_unidad_faltante} onChange={(e) => set("ganancia_unidad_faltante", e.target.value)} />
+          </FloatingField>
+          <FloatingField label="Ganancia total si no vendió ninguna" className="ventas-modal-field">
+            <input type="number" step="0.01" min="0" disabled={hasSales || !minimum} value={form.ganancia_total_sin_ventas} onChange={(e) => set("ganancia_total_sin_ventas", e.target.value)} />
+          </FloatingField>
+        </div>
+      </section>
+      <div className="ventas-field--wide">
+        <VentasCheckbox checked={Boolean(form.visible_menu)} label="Visible en WhatsApp durante las fechas de venta" onChange={(checked) => set("visible_menu", checked)} />
       </div>
-      </EntityTabPane>
-      <EntityTabPane active={activeTab === "mensajes"} disableWhenInactive>
-      <div className="ventas-form-grid ventas-form-grid--campaign">
-        <FloatingField label="Fecha inicio" className="ventas-modal-field">
-          <input type="date" value={form.fecha_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_inicio: e.target.value }))} />
-        </FloatingField>
-        <FloatingField label="Fecha fin" className="ventas-modal-field">
-          <input type="date" value={form.fecha_fin || ""} onChange={(e) => setForm((v) => ({ ...v, fecha_fin: e.target.value }))} />
-        </FloatingField>
-        <FloatingField label="Pregunta de identificación" wide textarea className="ventas-modal-field">
-          <textarea rows="2" placeholder="Ej.: Ingresá el DNI de la persona o alumno que realiza la compra." value={form.pregunta_persona || ""} onChange={(e) => setForm((v) => ({ ...v, pregunta_persona: e.target.value.slice(0, 1000) }))} />
-        </FloatingField>
-        <FloatingField label="Mensaje inicial" textarea className="ventas-modal-field">
-          <textarea rows="2" placeholder="Ej.: Indicá la cantidad que querés comprar." value={form.mensaje_inicio || ""} onChange={(e) => setForm((v) => ({ ...v, mensaje_inicio: e.target.value.slice(0, 1000) }))} />
-        </FloatingField>
-        <FloatingField label="Mensaje aprobado" textarea className="ventas-modal-field">
-          <textarea rows="2" placeholder="Ej.: Pago aprobado. Te enviamos el comprobante." value={form.mensaje_aprobado || ""} onChange={(e) => setForm((v) => ({ ...v, mensaje_aprobado: e.target.value.slice(0, 1000) }))} />
-        </FloatingField>
-        <VentasCheckbox
-          checked={Boolean(form.visible_menu)}
-          label="Visible en WhatsApp"
-          onChange={(checked) => setForm((v) => ({ ...v, visible_menu: checked }))}
-        />
-      </div>
-      <div className="ventas-note">
-        {isNew
-          ? "Al guardar, esta configuración quedará ACTIVA y cualquier otra configuración activa se dará de baja automáticamente."
-          : hasSales
-            ? "Esta configuración ya tiene ventas: podés editar nombre, vigencia y mensajes, pero el producto principal y la regla económica quedan bloqueados para preservar el historial."
-            : "El estado se administra desde las pestañas ACTIVAS / DADAS DE BAJA. La visibilidad en WhatsApp se aplica únicamente cuando la configuración está activa."}
-      </div>
-      </EntityTabPane>
-    </CrudModal>
-  );
+      {hasSales && <div className="ventas-note ventas-field--wide">Esta venta ya tiene registros: sus fechas, producto y objetivo se mantienen protegidos. Para repetirla, creá una nueva copiando su configuración.</div>}
+    </div>
+  </CrudModal>;
 }

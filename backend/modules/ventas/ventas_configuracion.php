@@ -27,9 +27,13 @@ trait VentasConfiguracion
     {
         $db = self::db();
         $statement = $db->query(
-            "SELECT c.*, p.nombre AS producto_principal_nombre, p.precio_anticipada, p.precio_puerta, p.stock AS producto_stock,
+            "SELECT c.*, COALESCE(c.fecha_inicio, (SELECT MIN(COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en))) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania), DATE(c.creado_en)) AS fecha_referencia,
+                    p.nombre AS producto_principal_nombre, p.precio_anticipada, p.precio_puerta, p.stock AS producto_stock,
                     (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania = c.id_campania) AS cantidad_ordenes,
-                    CASE WHEN c.activo = 1 AND c.visible_menu = 1
+                    (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='pendiente') AS cobros_pendientes,
+                    (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='aprobada' AND o.retirado=0) AS retiros_pendientes,
+                    CASE WHEN c.estado_cierre='cerrada' THEN 'cerrada' WHEN c.fecha_fin IS NOT NULL AND c.fecha_fin<CURDATE() THEN 'finalizada' WHEN c.fecha_inicio IS NOT NULL AND c.fecha_inicio>CURDATE() THEN 'programada' WHEN c.activo=0 THEN 'pausada' ELSE 'en_curso' END AS etapa,
+                    CASE WHEN c.estado_cierre = 'abierta' AND c.activo = 1 AND c.visible_menu = 1
                          AND (c.fecha_inicio IS NULL OR c.fecha_inicio <= CURDATE())
                          AND (c.fecha_fin IS NULL OR c.fecha_fin >= CURDATE())
                          AND p.activo = 1 THEN 1 ELSE 0 END AS disponible_bot
@@ -50,6 +54,8 @@ trait VentasConfiguracion
         $productId = self::nullablePositiveId($body['id_producto_principal'] ?? null);
         $start = valid_date($body['fecha_inicio'] ?? null, 'inicio', false);
         $end = valid_date($body['fecha_fin'] ?? null, 'fin', false);
+        $delivery = valid_date($body['fecha_entrega'] ?? null, 'entrega', false);
+        if ($delivery && $end && $delivery < $end) api_error('La entrega no puede ser anterior al cierre de ventas.', 'VALIDATION_ERROR');
         if ($start && $end && $end < $start) api_error('La fecha de fin no puede ser anterior a la fecha de inicio.', 'VALIDATION_ERROR');
         $visibleRequested = array_key_exists('visible_menu', $body) ? self::boolValue($body['visible_menu']) : null;
 
@@ -70,10 +76,12 @@ trait VentasConfiguracion
             }
         }
 
-        // Los únicos textos que conservan la escritura natural son los que consume el bot.
-        $question = optional_text($body['pregunta_persona'] ?? null, 1000, false);
-        $startMessage = optional_text($body['mensaje_inicio'] ?? null, 1000, false);
-        $approvedMessage = optional_text($body['mensaje_aprobado'] ?? null, 1000, false);
+        // Los mensajes no se personalizan por campaña: el bot usa el mismo flujo.
+        // Conservar los mensajes de campañas anteriores al editar para no alterar su historial.
+        // Los valores siguen guardándose para compatibilidad con el bot existente.
+        $question = 'Ingresá el DNI de la persona o alumno que va a realizar la compra/pago.';
+        $startMessage = 'Indicá la cantidad que querés comprar.';
+        $approvedMessage = 'Pago aprobado. Te enviamos el comprobante.';
 
         // La suite E2E necesita poder crear su campaña aislada como inactiva para no
         // tocar la configuración real. En uso normal, una nueva configuración siempre
@@ -84,18 +92,39 @@ trait VentasConfiguracion
             && array_key_exists('activo', $body)
             && !self::boolValue($body['activo']);
 
-        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate) {
+        // La interfaz exige tres fechas para las nuevas campañas. Mantenemos la
+        // compatibilidad de las campañas legadas y del runner E2E preexistente.
+        if ($id === null && !$isolatedE2ECreate && !(function_exists('e2e_request_active') && e2e_request_active($auth))
+            && (!$start || !$end || !$delivery)) {
+            api_error('Definí las fechas de inicio, fin y entrega de la campaña.', 'VENTA_FECHAS_REQUERIDAS');
+        }
+
+        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate, $delivery) {
             // Bloqueamos primero el producto solicitado y después la configuración.
             // De esta forma una edición de una configuración activa no puede aprobar un
             // producto que fue dado de baja concurrentemente.
             $product = $productId !== null ? self::product($db, $productId, true) : null;
             $before = $id ? self::campaign($db, $id, true) : null;
+            if ($before && $before['estado_cierre'] === 'cerrada') api_error('La campaña está cerrada: el historial no puede modificarse.', 'VENTA_CAMPANIA_CERRADA', 409);
+            if ($before) {
+                $question = $before['pregunta_persona'];
+                $startMessage = $before['mensaje_inicio'];
+                $approvedMessage = $before['mensaje_aprobado'];
+            }
 
-            // Editar conserva el estado actual. Crear, en cambio, activa automáticamente
-            // la nueva configuración y da de baja cualquier otra que estuviera activa.
-            // Así el alta deja siempre una única venta/configuración vigente.
+            // Editar conserva el estado; una nueva campaña no desactiva las demás
+            // ni interfiere con el historial de otras fechas.
             $active = $before ? (int)$before['activo'] : ($isolatedE2ECreate ? 0 : 1);
             $visible = $visibleRequested ?? ($before ? (int)$before['visible_menu'] : 1);
+            // El menú público es único: permitir campañas programadas sucesivas,
+            // pero impedir que dos campañas visibles compitan por la misma fecha.
+            if ($active && $visible && $start && $end &&
+                !(function_exists('e2e_request_active') && e2e_request_active($auth))) {
+                $conflict = self::fetchOne($db,
+                    "SELECT id_campania,nombre FROM ventas_campanias WHERE id_campania<>? AND estado_cierre='abierta' AND activo=1 AND visible_menu=1 AND (fecha_inicio IS NULL OR fecha_inicio<=?) AND (fecha_fin IS NULL OR fecha_fin>=?) AND UPPER(nombre) NOT LIKE 'PW E2E VTA CAMP %' LIMIT 1",
+                    [$id ?? 0,$end,$start]);
+                if ($conflict) api_error('Ya existe una campaña visible en WhatsApp durante esas fechas: ' . $conflict['nombre'] . '. Cambiá las fechas o desactivá su visibilidad.', 'VENTA_CAMPANIAS_SUPERPUESTAS',409);
+            }
             if ($active && (!$product || empty($product['activo']))) {
                 api_error(
                     $id
@@ -122,9 +151,9 @@ trait VentasConfiguracion
                         (int)($before['cantidad_minima_persona'] ?? 0) !== $minimumQuantity
                         || round((float)($before['ganancia_unidad_faltante'] ?? 0), 2) !== round((float)$missingUnitGain, 2)
                         || round((float)($before['ganancia_total_sin_ventas'] ?? 0), 2) !== round((float)$noSalesGain, 2);
-                    if ($beforeProductId !== $productId || $objectiveChanged) {
+                    if ($beforeProductId !== $productId || $objectiveChanged || $start !== $before['fecha_inicio'] || $end !== $before['fecha_fin'] || $delivery !== $before['fecha_entrega']) {
                         api_error(
-                            'Esta configuración ya tiene ventas registradas. El producto principal y el objetivo de venta no pueden modificarse porque forman parte del historial.',
+                            'Esta campaña ya tiene ventas: el producto, las fechas y el objetivo económico forman parte del historial y no se pueden modificar.',
                             'VENTA_CAMPANIA_REGLA_HISTORICA',
                             409
                         );
@@ -134,53 +163,25 @@ trait VentasConfiguracion
             if ($id) {
                 $db->prepare(
                     'UPDATE ventas_campanias
-                        SET nombre=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?,
+                        SET nombre=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?, fecha_entrega=?,
                             cantidad_minima_persona=?, ganancia_unidad_faltante=?, ganancia_total_sin_ventas=?,
                             pregunta_persona=?, mensaje_inicio=?, mensaje_aprobado=?
                       WHERE id_campania=?'
                 )->execute([
-                    $name, $visible, $productId, $start, $end,
+                    $name, $visible, $productId, $start, $end, $delivery,
                     $minimumQuantity, $missingUnitGain, $noSalesGain,
                     $question, $startMessage, $approvedMessage, $id
                 ]);
                 $recordId = $id;
             } else {
-                if ($active) {
-                    // Bloqueamos las configuraciones en orden estable antes de cambiar estados.
-                    // Esto replica el blindaje de estadoCampania() y evita que dos altas
-                    // concurrentes puedan dejar más de una configuración activa.
-                    $db->query('SELECT id_campania FROM ventas_campanias ORDER BY id_campania FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN);
-
-                    $activeIds = array_map(
-                        'intval',
-                        $db->query('SELECT id_campania FROM ventas_campanias WHERE activo=1 ORDER BY id_campania')->fetchAll(PDO::FETCH_COLUMN) ?: []
-                    );
-                    foreach ($activeIds as $otherId) {
-                        $otherBefore = self::campaign($db, $otherId);
-                        $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_campania=?')->execute([$otherId]);
-                        $otherAfter = self::campaign($db, $otherId);
-                        audit_change(
-                            $db,
-                            $auth,
-                            'VENTAS',
-                            'DESACTIVAR_CAMPANIA_AUTOMATICA',
-                            'ventas_campanias',
-                            $otherId,
-                            'Se dio de baja automáticamente al crear una nueva configuración de venta.',
-                            $otherBefore,
-                            $otherAfter
-                        );
-                    }
-                }
-
                 $db->prepare(
                     'INSERT INTO ventas_campanias
-                        (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin,
+                        (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin, fecha_entrega,
                          cantidad_minima_persona, ganancia_unidad_faltante, ganancia_total_sin_ventas,
                          tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
                 )->execute([
-                    $name, $active, $visible, $productId, $start, $end,
+                    $name, $active, $visible, $productId, $start, $end, $delivery,
                     $minimumQuantity, $missingUnitGain, $noSalesGain,
                     $question, $startMessage, $approvedMessage
                 ]);
@@ -192,7 +193,7 @@ trait VentasConfiguracion
         });
         api_success(
             ['item' => $result],
-            $id ? 'Campaña actualizada.' : ((int)($result['activo'] ?? 0) === 1 ? 'Configuración creada y activada.' : 'Configuración creada.')
+            $id ? 'Campaña actualizada.' : ((int)($result['activo'] ?? 0) === 1 ? 'Campaña creada y activada.' : 'Campaña creada.')
         );
     }
 
@@ -204,8 +205,7 @@ trait VentasConfiguracion
         $id = positive_id($body['id_campania'] ?? $body['id'] ?? null, 'campaña');
         $active = self::boolValue($body['activo'] ?? true);
         transaction($db, function () use ($db, $auth, $id, $active) {
-            // Al activar, bloqueamos todas las configuraciones en un orden estable.
-            // Así dos activaciones concurrentes no pueden dejar más de una activa.
+            // Validamos y bloqueamos antes de reactivar.
             if ($active) {
                 $ids = $db->query('SELECT id_campania FROM ventas_campanias ORDER BY id_campania FOR UPDATE')->fetchAll(PDO::FETCH_COLUMN) ?: [];
                 if (!in_array((string)$id, array_map('strval', $ids), true)) {
@@ -215,37 +215,18 @@ trait VentasConfiguracion
             } else {
                 $before = self::campaign($db, $id, true);
             }
+            if ($before['estado_cierre'] === 'cerrada') api_error('Una campaña cerrada no puede reactivarse ni modificarse.', 'VENTA_CAMPANIA_CERRADA', 409);
 
+            if ($active && (int)$before['visible_menu']===1 && $before['fecha_inicio'] && $before['fecha_fin']) {
+                $conflict = self::fetchOne($db, "SELECT id_campania FROM ventas_campanias WHERE id_campania<>? AND estado_cierre='abierta' AND activo=1 AND visible_menu=1 AND (fecha_inicio IS NULL OR fecha_inicio<=?) AND (fecha_fin IS NULL OR fecha_fin>=?) AND UPPER(nombre) NOT LIKE 'PW E2E VTA CAMP %' LIMIT 1", [$id,$before['fecha_fin'],$before['fecha_inicio']]);
+                if ($conflict && !(function_exists('e2e_request_active') && e2e_request_active($auth))) api_error('Ya existe otra campaña visible en WhatsApp durante esas fechas.', 'VENTA_CAMPANIAS_SUPERPUESTAS',409);
+            }
             if ($active && (empty($before['id_producto_principal']) || empty($before['producto_principal_activo']))) {
                 api_error('No podés activar esta configuración hasta asignarle un producto principal activo.', 'VENTA_CAMPANIA_PRODUCTO_REQUERIDO', 409);
             }
             if ($active && (int)($before['cantidad_minima_persona'] ?? 0) > 0) {
                 if ((float)($before['ganancia_unidad_faltante'] ?? 0) <= 0 || (float)($before['ganancia_total_sin_ventas'] ?? 0) <= 0) {
                     api_error('La configuración tiene un objetivo incompleto. Revisá la ganancia por unidad faltante y la ganancia total sin ventas.', 'VENTA_OBJETIVO_INCOMPLETO', 409);
-                }
-            }
-
-            if ($active) {
-                // Conservamos trazabilidad también de las configuraciones que se dan
-                // de baja automáticamente por la regla de "una sola activa".
-                $others = $db->prepare('SELECT id_campania FROM ventas_campanias WHERE activo=1 AND id_campania<>? ORDER BY id_campania');
-                $others->execute([$id]);
-                $otherIds = array_map('intval', $others->fetchAll(PDO::FETCH_COLUMN) ?: []);
-                foreach ($otherIds as $otherId) {
-                    $otherBefore = self::campaign($db, $otherId);
-                    $db->prepare('UPDATE ventas_campanias SET activo=0 WHERE id_campania=?')->execute([$otherId]);
-                    $otherAfter = self::campaign($db, $otherId);
-                    audit_change(
-                        $db,
-                        $auth,
-                        'VENTAS',
-                        'DESACTIVAR_CAMPANIA_AUTOMATICA',
-                        'ventas_campanias',
-                        $otherId,
-                        'Se dio de baja automáticamente al activar otra configuración de venta.',
-                        $otherBefore,
-                        $otherAfter
-                    );
                 }
             }
 
@@ -264,17 +245,13 @@ trait VentasConfiguracion
         $mode = transaction($db, function () use ($db, $auth, $id) {
             $before = self::campaign($db, $id, true);
             $count = (int)self::fetchOne($db, 'SELECT COUNT(*) AS n FROM ventas_ordenes WHERE id_campania=?', [$id])['n'];
-            if ($count > 0) {
-                $db->prepare('UPDATE ventas_campanias SET activo=0, visible_menu=0 WHERE id_campania=?')->execute([$id]);
-                $after = self::campaign($db, $id);
-                audit_change($db, $auth, 'VENTAS', 'ARCHIVAR_CAMPANIA', 'ventas_campanias', $id, 'Campaña con ventas asociadas: se archivó.', $before, $after);
-                return 'archivada';
-            }
+            if ($before['estado_cierre'] === 'cerrada') api_error('No podés borrar el historial de una campaña cerrada.', 'VENTA_CAMPANIA_CERRADA', 409);
+            if ($count > 0) api_error('Esta campaña tiene ventas: cerrala para conservar su historial.', 'VENTA_CAMPANIA_CON_VENTAS', 409);
             $db->prepare('DELETE FROM ventas_campanias WHERE id_campania=?')->execute([$id]);
             audit_change($db, $auth, 'VENTAS', 'ELIMINAR_CAMPANIA', 'ventas_campanias', $id, 'Campaña sin ventas asociadas.', $before, null);
             return 'eliminada';
         });
-        api_success(['modo' => $mode], $mode === 'archivada' ? 'La campaña tenía ventas y fue archivada.' : 'Campaña eliminada.');
+        api_success(['modo' => $mode], 'Campaña eliminada.');
     }
 
     public static function menuActivo(): never
@@ -297,7 +274,7 @@ trait VentasConfiguracion
                    c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
                    p.id_producto,p.nombre AS producto_nombre,p.descripcion AS producto_descripcion,p.precio_anticipada,p.precio_puerta,p.stock
               FROM ventas_campanias c INNER JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
-             WHERE c.activo=1 AND c.visible_menu=1 AND p.activo=1
+             WHERE c.estado_cierre='abierta' AND c.activo=1 AND c.visible_menu=1 AND p.activo=1
                AND (c.fecha_inicio IS NULL OR c.fecha_inicio<=CURDATE()) AND (c.fecha_fin IS NULL OR c.fecha_fin>=CURDATE())
                {$campaignScope}
              ORDER BY c.id_campania DESC LIMIT 1");
@@ -480,8 +457,10 @@ trait VentasConfiguracion
     public static function buscarPersonas(): never
     {
         $db=self::db(); $search=trim((string)($_GET['buscar'] ?? $_GET['q'] ?? ''));
-        if((function_exists('mb_strlen') ? mb_strlen($search,'UTF-8') : strlen($search))<2) api_success(['items'=>[]]);
+        if($search==='') api_success(['items'=>[]]);
         $filter=build_search_filter($search,["vp.dni LIKE {param}","vp.nombre_apellido LIKE {param}","a.num_documento LIKE {param}","a.apellido LIKE {param}","a.nombre LIKE {param}"],120,null,8);
+        // Con un único carácter no alfanumérico no se genera un filtro SQL válido.
+        if ($filter['sql'] === '') api_success(['items'=>[]]);
         $sql="SELECT * FROM (
                 SELECT vp.id_persona, vp.dni, vp.nombre_apellido, vp.id_alumno, vp.origen, a.telefono,
                        an.nombre_anio, d.nombre_division

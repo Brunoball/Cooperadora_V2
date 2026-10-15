@@ -15,7 +15,7 @@ async function fakePrinter(context) {
   await context.addInitScript(() => { window.print = () => { window.__e2e_print_invoked = true; }; });
 }
 
-test("Ventas: vista previa + impresión por curso y por docente (datos y celdas manuales)", async ({ context, page, request }) => {
+test("Ventas: vista previa + impresión por curso y docente (datos de ventas y totales reales)", async ({ context, page, request }) => {
   test.setTimeout(140_000);
   const t = token(), marker = suffix(), dni = testDni(), teacherDni = testDni();
   const product = await createSalesProduct(request, t, marker);
@@ -39,14 +39,15 @@ test("Ventas: vista previa + impresión por curso y por docente (datos y celdas 
   await fakePrinter(context);
   await authenticatePage(page);
   await page.goto("/ventas/planillas");
-  await page.getByRole("combobox", { name: /venta \/ campaña/i }).selectOption(String(campaign.id_campania));
+  await page.getByRole("combobox", { name: /venta \(mes y año\)/i }).selectOption(String(campaign.id_campania));
 
   async function printAndVerify(type, target) {
-    await page.getByRole("combobox", { name: /tipo de planilla/i }).selectOption(type);
-    const preview = page.getByRole("table", { name: /planilla de ventas/i }).first();
+    await page.getByRole("tablist", { name: /tipo de planilla/i })
+      .getByRole("tab", { name: type === "docentes" ? /docentes/i : /cursos y alumnos/i }).click();
+    const preview = page.getByRole("table", { name: /planilla de (docentes|alumnos)/i }).first();
     // Esperar el tipo correcto: evita leer durante el render anterior al cambio.
     await expect(preview.getByRole("columnheader", {
-      name: type === "docentes" ? "Docente" : "Apellido y nombres", exact: true,
+      name: type === "docentes" ? "DOCENTE" : "APELLIDO Y NOMBRES", exact: true,
     })).toBeVisible({ timeout: 20_000 });
     await expect(preview).toHaveAttribute("aria-busy", "false", { timeout: 20_000 });
     // La vista previa muestra 20 alumnos/docentes por página. La impresión
@@ -84,11 +85,15 @@ test("Ventas: vista previa + impresión por curso y por docente (datos y celdas 
     await expect(popup.locator("table.legacy-grid").first()).toBeVisible();
     await expect(popup.locator("body")).toContainText(target);
     const cells = popup.locator("tr.legacy-data-row").filter({ hasText: target }).first().locator("td");
-    await expect(cells).toHaveCount(type === "docentes" ? 6 : 9);
+    // El PDF/impreso actual NO contiene celdas para completar a mano: refleja
+    // el estado y montos reales de cada fila (sin exigir ventas al fixture).
+    const campaignHasObjective = Number(campaign.cantidad_minima_persona || 0) > 0;
+    await expect(cells).toHaveCount(type === "docentes" ? (campaignHasObjective ? 8 : 6) : 9);
     const values = await cells.allTextContents();
-    if (type === "docentes") expect(values.slice(3)).toEqual(["", "", ""]);
-    else expect(values.slice(4)).toEqual(["", "", "", "", ""]);
-    await expect(popup.locator("body")).toContainText(/COMPLETAR A MANO|OBSERVACIONES/i);
+    expect(values.join(" ")).toContain(target);
+    expect(values.join(" ")).toContain("0"); // Fixture sin compras.
+    await expect(popup.locator("body")).toContainText(/TOTAL COBRADO/i);
+    await expect(popup.locator("body")).not.toContainText(/COMPLETAR A MANO/i);
     await popup.close();
   }
   await printAndVerify("cursos", dni);

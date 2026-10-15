@@ -43,7 +43,8 @@ trait VentasPlanillas
     {
         $db=self::db();
         $products=$db->query('SELECT id_producto,nombre,descripcion,precio,precio_anticipada,precio_puerta,stock,activo FROM ventas_productos ORDER BY activo DESC,nombre')->fetchAll(PDO::FETCH_ASSOC)?:[];
-        $campaigns=$db->query("SELECT c.id_campania,c.nombre,c.activo,c.id_producto_principal,
+        $campaigns=$db->query("SELECT c.id_campania,c.nombre,c.activo,c.id_producto_principal,c.fecha_inicio,c.fecha_fin,c.fecha_entrega,c.estado_cierre,
+                                      COALESCE(c.fecha_inicio, (SELECT MIN(COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en))) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania), DATE(c.creado_en)) AS fecha_referencia,
                                       c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
                                       p.nombre AS producto_principal_nombre
                                  FROM ventas_campanias c
@@ -67,7 +68,9 @@ trait VentasPlanillas
         api_success([
             'anios'=>$db->query('SELECT id_anio,nombre_anio FROM anio ORDER BY id_anio')->fetchAll(PDO::FETCH_ASSOC)?:[],
             'divisiones'=>$db->query('SELECT id_division,nombre_division FROM division ORDER BY id_division')->fetchAll(PDO::FETCH_ASSOC)?:[],
-            'campanias'=>$db->query('SELECT id_campania,nombre,activo,id_producto_principal FROM ventas_campanias ORDER BY activo DESC,id_campania DESC')->fetchAll(PDO::FETCH_ASSOC)?:[],
+            'campanias'=>$db->query('SELECT c.id_campania,c.nombre,c.activo,c.id_producto_principal,c.fecha_inicio,c.fecha_fin,c.fecha_entrega,c.estado_cierre,
+                      COALESCE(c.fecha_inicio,(SELECT MIN(COALESCE(o.fecha_venta,DATE(o.aprobado_en),DATE(o.creado_en))) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania),DATE(c.creado_en)) AS fecha_referencia
+                    FROM ventas_campanias c ORDER BY c.activo DESC,c.id_campania DESC')->fetchAll(PDO::FETCH_ASSOC)?:[],
             'total_docentes'=>(int)$db->query('SELECT COUNT(*) FROM docentes WHERE activo=1')->fetchColumn(),
         ]);
     }
@@ -102,17 +105,41 @@ trait VentasPlanillas
     {
         $db = self::db();
         $type = strtolower(trim((string)($_GET['tipo'] ?? 'cursos')));
+        $campaignId = positive_id($_GET['id_campania'] ?? null, 'campaña');
+        $year = self::nullablePositiveId($_GET['id_anio'] ?? null);
+        $division = self::nullablePositiveId($_GET['id_division'] ?? null);
+        $closed = self::fetchOne($db, 'SELECT datos FROM ventas_planillas_cerradas WHERE id_campania=? AND tipo=?', [$campaignId,$type]);
+        if ($closed) {
+            $data = json_decode((string)$closed['datos'], true, 512, JSON_THROW_ON_ERROR);
+            if ($type === 'cursos') {
+                $data['items'] = array_values(array_filter($data['items'], static fn($r) =>
+                    ($year===null || (int)$r['id_anio']===$year) && ($division===null || (int)$r['id_division']===$division)));
+                $data['totales'] = self::planillasTotales($data['items']);
+                $keys = [];
+                foreach ($data['items'] as $r) {
+                    $k = (string)$r['id_anio'].':'.(string)$r['id_division'];
+                    if (!isset($keys[$k])) $keys[$k]=['id_anio'=>$r['id_anio'],'id_division'=>$r['id_division'],'nombre_anio'=>$r['nombre_anio'],'nombre_division'=>$r['nombre_division'],'items'=>[]];
+                    $keys[$k]['items'][]=$r;
+                }
+                $data['totales_por_curso'] = array_values(array_map(static function($g) {
+                    $g['totales']=self::planillasTotales($g['items']);unset($g['items']);return $g;
+                },$keys));
+            }
+            api_success($data);
+        }
+        api_success(self::calcularPlanilla($db,$campaignId,$type,$year,$division));
+    }
+
+    private static function calcularPlanilla(PDO $db, int $campaignId, string $type, ?int $year, ?int $division): array
+    {
         if (!in_array($type, ['cursos', 'docentes'], true)) {
             api_error('El tipo de planilla no es válido.', 'VALIDATION_ERROR');
         }
-        $campaignId = positive_id($_GET['id_campania'] ?? null, 'campaña');
         $campaign = self::campaign($db, $campaignId); // Incluye campañas inactivas históricas.
         $principalId = (int)($campaign['id_producto_principal'] ?? 0);
         $yearSource = $campaign['fecha_inicio'] ?: ($campaign['fecha_fin'] ?: ($campaign['creado_en'] ?? null));
         $sheetYear = $yearSource ? (int)substr((string)$yearSource, 0, 4) : (int)date('Y');
 
-        $year = self::nullablePositiveId($_GET['id_anio'] ?? null);
-        $division = self::nullablePositiveId($_GET['id_division'] ?? null);
         if ($type === 'cursos') {
             if ($year !== null && !self::fetchOne($db, 'SELECT id_anio FROM anio WHERE id_anio=? LIMIT 1', [$year])) {
                 api_error('El año seleccionado no existe.', 'VALIDATION_ERROR');
@@ -332,7 +359,7 @@ trait VentasPlanillas
         $unassignedTotal = round(array_sum(array_column($unassigned, 'importe_cobrado')), 2);
         $assignedTotal = round(array_sum(array_column($byStudent, 'importe_cobrado')) +
             array_sum(array_column($byTeacher, 'importe_cobrado')), 2);
-        api_success([
+        return [
             'tipo' => $type, 'campania' => $campaign, 'meta' => $meta,
             'items' => $rows, 'totales' => self::planillasTotales($rows),
             'totales_por_curso' => array_values($courseTotals),
@@ -348,6 +375,6 @@ trait VentasPlanillas
                 'total_sin_asignar' => $unassignedTotal,
                 'diferencia' => round($campaignTotal - $assignedTotal - $unassignedTotal, 2),
             ],
-        ]);
+        ];
     }
 }

@@ -53,11 +53,11 @@ function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPagina
         <tr><th class="legacy-school" colspan="9">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
         <tr class="legacy-top"><th colspan="2">ALUMNOS</th><th colspan="6">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
         <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(cursoTexto)}</th><th colspan="5">DATOS ACTUALIZADOS DE VENTAS</th></tr>
-        <tr class="legacy-columns"><th rowspan="2">APELLIDO Y NOMBRES</th><th rowspan="2">DNI</th><th colspan="2">CURSO</th><th colspan="2">UNIDADES</th><th rowspan="2">GANANCIA<br>A PAGAR</th><th rowspan="2">IMPORTE<br>COBRADO</th><th rowspan="2">OBSERVACIONES</th></tr>
+        <tr class="legacy-columns"><th rowspan="2">APELLIDO Y NOMBRES</th><th rowspan="2">DNI</th><th colspan="2">CURSO</th><th colspan="2">UNIDADES</th><th rowspan="2">GANANCIA<br>PENDIENTE</th><th rowspan="2">TOTAL<br>COBRADO</th><th rowspan="2">OBSERVACIONES</th></tr>
         <tr class="legacy-columns legacy-columns--sub"><th>AÑO</th><th>DIV.</th><th>VEND.</th><th>FALT.</th></tr>
         ${rows.map((row) => {
           const f = filaPlanilla(row, "cursos");
-          return `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${escapeHtml(f.anio)}</td><td>${escapeHtml(f.division)}</td><td>${f.vendidas}</td><td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td><td class="legacy-amount">${escapeHtml(money(f.cobrado))}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
+          return `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${escapeHtml(f.anio)}</td><td>${escapeHtml(f.division)}</td><td>${f.vendidas}</td><td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td><td class="legacy-amount">${escapeHtml(money(f.cobrado))}${f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
         }).join("")}
       </tbody>
     </table>
@@ -81,10 +81,10 @@ function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTex
         <tr><th class="legacy-school" colspan="${span}">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
         <tr class="legacy-top"><th colspan="2">PROFESORES / DOCENTES</th><th colspan="${span - 3}">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
         <tr class="legacy-course-line"><th colspan="${Math.floor(span / 2)}">PRODUCTO: ${escapeHtml(producto.toLocaleUpperCase("es-AR"))}</th><th colspan="${span - Math.floor(span / 2)}">PRECIO UNITARIO: ${precioTexto ? escapeHtml(precioTexto) : "SIN VENTAS"}</th></tr>
-        <tr class="legacy-columns"><th>ORDEN</th><th>DOCENTE</th><th>DNI</th><th>CANT.</th>${conObjetivo ? "<th>FALT.</th><th>GANANCIA A PAGAR</th>" : ""}<th>COBRADO</th><th>OBSERVACIONES</th></tr>
+        <tr class="legacy-columns"><th>ORDEN</th><th>DOCENTE</th><th>DNI</th><th>CANT.</th>${conObjetivo ? "<th>FALT.</th><th>GANANCIA PENDIENTE</th>" : ""}<th>TOTAL COBRADO</th><th>OBSERVACIONES</th></tr>
         ${rows.map((row, index) => {
           const f = filaPlanilla(row, "docentes", (pagina - 1) * DOCENTES_POR_HOJA + index);
-          return `<tr class="legacy-data-row"><td>${f.orden}</td><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${f.vendidas}</td>${conObjetivo ? `<td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td>` : ""}<td class="legacy-amount">${escapeHtml(money(f.cobrado))}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
+          return `<tr class="legacy-data-row"><td>${f.orden}</td><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${f.vendidas}</td>${conObjetivo ? `<td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td>` : ""}<td class="legacy-amount">${escapeHtml(money(f.cobrado))}${f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
         }).join("")}
       </tbody>
     </table>
@@ -116,6 +116,7 @@ const ESTILOS = `
   .legacy-total strong{font-size:10px;text-align:right}
   .legacy-final-total{width:74mm;height:7mm;margin:1mm 0 0 auto;border:0.75px solid #000;display:flex;align-items:center;justify-content:space-between;gap:2mm;padding:0 3mm;font-size:7.5px;font-weight:700}
   .legacy-grid .legacy-amount{white-space:nowrap;font-size:7.3px}
+  .legacy-amountBreakdown{display:block;font-size:6px;font-weight:400;line-height:1.05;margin-top:.2mm;color:#444}
   .legacy-grid .legacy-notes{font-size:7px;overflow:hidden;max-width:0;text-overflow:ellipsis;white-space:nowrap}
   .legacy-grid--course .c-name{width:58mm}.legacy-grid--course .c-dni{width:23mm}.legacy-grid--course .c-year{width:12mm}.legacy-grid--course .c-div{width:12mm}.legacy-grid--course .c-qty{width:13mm}.legacy-grid--course .c-gain{width:21mm}.legacy-grid--course .c-paid{width:21mm}.legacy-grid--course .c-notes{width:auto}
   .legacy-grid--course .legacy-data-row td{height:6mm;font-size:8px}
