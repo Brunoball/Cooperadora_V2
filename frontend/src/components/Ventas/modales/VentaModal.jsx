@@ -1,5 +1,7 @@
 import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faPlus, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { showGlobalNotification } from "../../Global/notifications";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
@@ -198,6 +200,14 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     return () => { alive = false; clearTimeout(timer); };
   }, [form.id_campania, form.id_venta_persona, hasPersonReference, initialId, objectiveEnabled, onFeedback, open, personDni]);
 
+  // Al cambiar de pestaña no conservar el desplazamiento de la anterior:
+  // el contenido de la nueva sección siempre comienza debajo de las tabs.
+  useEffect(() => {
+    if (!open) return;
+    const scrollBody = document.querySelector(".ventas-order-modal .entity-modal__body");
+    if (scrollBody) scrollBody.scrollTop = 0;
+  }, [activeTab, open]);
+
   useEffect(() => () => clearTimeout(searchTimer.current), []);
 
   const searchPeople = (value) => {
@@ -303,7 +313,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   };
 
   return (
-    <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Las ventas nuevas de V2 sincronizan stock y Contabilidad en una única operación; el historial previo conserva su comportamiento original." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
+    <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Completá los datos de la venta y asociá los conceptos y el comprador." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
       <EntityTabs
         tabs={[{ value: "venta", label: <><VentasSectionIcon kind="sale" />Datos de la venta</> }, { value: "comprador", label: <><VentasSectionIcon kind="person" />Comprador y objetivo</> }]}
         value={activeTab}
@@ -312,29 +322,47 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         className="ventas-modal-tabs"
       />
       <EntityTabPane active={activeTab === "venta"} disableWhenInactive>
-      <div className="ventas-form-grid ventas-form-grid--order-head">
-        <FloatingField label="Venta / campaña" className="ventas-modal-field">
-          <select required value={form.id_campania} disabled={Boolean(initialId)} onChange={(e) => chooseCampaign(e.target.value)}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
-        </FloatingField>
-        <FloatingField label="Medio de pago" className="ventas-modal-field">
-          <select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="" disabled>SELECCIONAR MEDIO DE PAGO</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{upper(m.medio_pago, 120)}</option>)}</select>
-        </FloatingField>
-        <FloatingField label="Fecha de venta" className="ventas-modal-field">
-          <input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
-        </FloatingField>
-        <FloatingField label="Estado de pago" className="ventas-modal-field">
-          <select value={form.estado} disabled={form.origen === "bot_whatsapp"} title={form.origen === "bot_whatsapp" ? "Las ventas de WhatsApp ya están pagadas." : undefined} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select>
-        </FloatingField>
-      </div>
+      <div className="ventas-order-layout">
+      <section className="ventas-order-basics" aria-label="Datos generales de la venta">
+        <header className="ventas-order-basics__head">
+          <span className="ventas-order-basics__icon"><VentasSectionIcon kind="sale" /></span>
+          <div>
+            <strong>Datos generales</strong>
+            <small>Configuración y condiciones del cobro</small>
+          </div>
+        </header>
+        <div className="ventas-order-basics__fields">
+          <div className="ventas-order-basics__row ventas-order-basics__row--primary">
+            <FloatingField label="Venta / campaña" className="ventas-modal-field ventas-order-field--campaign">
+              <select required value={form.id_campania} disabled={Boolean(initialId)} onChange={(e) => chooseCampaign(e.target.value)}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
+            </FloatingField>
+            <FloatingField label="Medio de pago" className="ventas-modal-field ventas-order-field--payment">
+              <select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="" disabled>SELECCIONAR MEDIO DE PAGO</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{upper(m.medio_pago, 120)}</option>)}</select>
+            </FloatingField>
+          </div>
+          <div className="ventas-order-basics__row ventas-order-basics__row--secondary">
+            <FloatingField label="Fecha de venta" className="ventas-modal-field ventas-order-field--date">
+              <input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
+            </FloatingField>
+            <FloatingField label="Estado de pago" className="ventas-modal-field ventas-order-field--status">
+              <select value={form.estado} disabled={form.origen === "bot_whatsapp"} title={form.origen === "bot_whatsapp" ? "Las ventas de WhatsApp ya están pagadas." : undefined} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select>
+            </FloatingField>
+            <FloatingField label="Referencia de pago" active className="ventas-modal-field ventas-order-field--reference">
+              <input placeholder="Ej.: transferencia 45821, recibo 1024 o comprobante" value={form.referencia_pago || ""} onChange={(e) => setForm((v) => ({ ...v, referencia_pago: upper(e.target.value, 180) }))} />
+            </FloatingField>
+          </div>
+        </div>
+      </section>
 
       <section className="ventas-modal-section ventas-inline-concepts" aria-label="Productos y conceptos de la venta">
         <header className="ventas-inline-concepts__head">
           <div>
             <strong><VentasSectionIcon kind="product" />Productos y conceptos</strong>
-            <small>El producto de la venta se agrega solo. Indicá la cantidad; si cambiás de venta, se reinicia este detalle.</small>
+            <small>Revisá el producto y las cantidades. Podés sumar otros conceptos.</small>
           </div>
           <button type="button" className="mov-btn mov-btn--ghost" onClick={addConcept}>
-            + Agregar concepto
+            <FontAwesomeIcon icon={faPlus} aria-hidden="true" />
+            Agregar concepto
           </button>
         </header>
         <div className="ventas-inline-concepts__scroll">
@@ -349,35 +377,45 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 const isCustom = isManual || item.tipo_precio === "personalizado";
                 return (
                   <tr key={`item-${index}`}>
-                    <td>
-                      <select aria-label={`Producto del concepto ${index + 1}`} value={item.id_producto || ""} onChange={(event) => chooseItemProduct(index, event.target.value)}>
-                        <option value="">CONCEPTO MANUAL</option>
-                        {products.filter((p) => String(p.id_producto) === campaignProductId || (initialId && String(p.id_producto) === String(item.id_producto))).map((p) => (
-                          <option key={p.id_producto} value={p.id_producto}>{upper(p.nombre, 150)}</option>
-                        ))}
-                        {item.id_producto && !product ? <option value={item.id_producto}>{item.producto_nombre || "PRODUCTO HISTÓRICO"}</option> : null}
-                      </select>
+                    <td data-label="Producto / concepto">
+                      <FloatingField label="Producto / concepto" className="ventas-concept-field">
+                        <select aria-label={`Producto del concepto ${index + 1}`} value={item.id_producto || ""} onChange={(event) => chooseItemProduct(index, event.target.value)}>
+                          <option value="">CONCEPTO MANUAL</option>
+                          {products.filter((p) => String(p.id_producto) === campaignProductId || (initialId && String(p.id_producto) === String(item.id_producto))).map((p) => (
+                            <option key={p.id_producto} value={p.id_producto}>{upper(p.nombre, 150)}</option>
+                          ))}
+                          {item.id_producto && !product ? <option value={item.id_producto}>{item.producto_nombre || "PRODUCTO HISTÓRICO"}</option> : null}
+                        </select>
+                      </FloatingField>
                       {isManual ? (
-                        <input aria-label={`Nombre del concepto manual ${index + 1}`} maxLength={150} placeholder="NOMBRE DEL CONCEPTO" value={item.producto_nombre || ""} onChange={(event) => editItem(index, { producto_nombre: upper(event.target.value, 150) })} />
+                        <FloatingField label="Nombre del concepto" className="ventas-concept-field">
+                          <input aria-label={`Nombre del concepto manual ${index + 1}`} maxLength={150} placeholder="NOMBRE DEL CONCEPTO" value={item.producto_nombre || ""} onChange={(event) => editItem(index, { producto_nombre: upper(event.target.value, 150) })} />
+                        </FloatingField>
                       ) : null}
                     </td>
-                    <td>
-                      <select aria-label={`Tipo de precio del concepto ${index + 1}`} value={item.tipo_precio || "personalizado"} onChange={(event) => choosePriceType(index, event.target.value)}>
-                        {multiple ? <><option value="anticipada">PRINCIPAL</option><option value="puerta">ALTERNATIVO</option></> : null}
-                        {!multiple && product ? <option value="normal">ÚNICO</option> : null}
-                        {product && !multiple && ["anticipada", "puerta"].includes(item.tipo_precio) ? <option value={item.tipo_precio}>HISTÓRICO</option> : null}
-                        {product && multiple && item.tipo_precio === "normal" ? <option value="normal">NORMAL (HISTÓRICO)</option> : null}
-                        <option value="personalizado">MANUAL</option>
-                      </select>
+                    <td data-label="Tipo de precio">
+                      <FloatingField label="Tipo de precio" className="ventas-concept-field">
+                        <select aria-label={`Tipo de precio del concepto ${index + 1}`} value={item.tipo_precio || "personalizado"} onChange={(event) => choosePriceType(index, event.target.value)}>
+                          {multiple ? <><option value="anticipada">PRINCIPAL</option><option value="puerta">ALTERNATIVO</option></> : null}
+                          {!multiple && product ? <option value="normal">ÚNICO</option> : null}
+                          {product && !multiple && ["anticipada", "puerta"].includes(item.tipo_precio) ? <option value={item.tipo_precio}>HISTÓRICO</option> : null}
+                          {product && multiple && item.tipo_precio === "normal" ? <option value="normal">NORMAL (HISTÓRICO)</option> : null}
+                          <option value="personalizado">MANUAL</option>
+                        </select>
+                      </FloatingField>
                     </td>
-                    <td>
-                      <input aria-label={`Precio unitario del concepto ${index + 1}`} type="number" min="0" step="0.01" value={item.precio_unitario ?? ""} readOnly={!isCustom} title={!isCustom ? "Precio configurado en el producto" : "Ingresá el precio del concepto"} onChange={(event) => editItem(index, { precio_unitario: event.target.value })} />
+                    <td data-label="Valor unitario">
+                      <FloatingField label="Valor unitario" className="ventas-concept-field">
+                        <input aria-label={`Precio unitario del concepto ${index + 1}`} type="number" min="0" step="0.01" placeholder=" " value={item.precio_unitario ?? ""} readOnly={!isCustom} title={!isCustom ? "Precio configurado en el producto" : "Ingresá el precio del concepto"} onChange={(event) => editItem(index, { precio_unitario: event.target.value })} />
+                      </FloatingField>
                     </td>
-                    <td>
-                      <input aria-label={`Cantidad del concepto ${index + 1}`} type="number" min="1" max="100000" step="1" value={item.cantidad ?? 1} onChange={(event) => editItem(index, { cantidad: event.target.value })} />
+                    <td data-label="Cantidad">
+                      <FloatingField label="Cantidad" className="ventas-concept-field">
+                        <input aria-label={`Cantidad del concepto ${index + 1}`} type="number" min="1" max="100000" step="1" placeholder=" " value={item.cantidad ?? 1} onChange={(event) => editItem(index, { cantidad: event.target.value })} />
+                      </FloatingField>
                     </td>
-                    <td className="ventas-inline-concepts__subtotal">{money(Number(item.cantidad || 0) * Number(item.precio_unitario || 0))}</td>
-                    <td><button type="button" className="ventas-inline-concepts__remove" title="Quitar concepto" aria-label={`Quitar concepto ${index + 1}`} onClick={() => removeConcept(index)}>×</button></td>
+                    <td data-label="Subtotal" className="ventas-inline-concepts__subtotal">{money(Number(item.cantidad || 0) * Number(item.precio_unitario || 0))}</td>
+                    <td data-label="Quitar"><button type="button" className="ventas-inline-concepts__remove" title="Quitar concepto" aria-label={`Quitar concepto ${index + 1}`} onClick={() => removeConcept(index)}><FontAwesomeIcon icon={faTrashCan} aria-hidden="true" /></button></td>
                   </tr>
                 );
               })}
@@ -386,36 +424,38 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           </table>
         </div>
         <div className="ventas-inline-concepts__footer">
-          {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · Ganancia por objetivo: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
-          <div><span>Total de la venta</span><strong>{money(total)}</strong></div>
+          <div className="ventas-inline-concepts__meta">
+            {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · Ganancia por objetivo: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
+            <FloatingField label="Observación" active textarea className="ventas-modal-field">
+              <textarea rows="2" placeholder="Ej.: Retira el comprobante en secretaría." value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
+            </FloatingField>
+          </div>
+          <div className="ventas-inline-concepts__total"><span>Total de la venta</span><strong>{money(total)}</strong></div>
         </div>
       </section>
+      </div>
 
       </EntityTabPane>
       <EntityTabPane active={activeTab === "comprador"} disableWhenInactive>
       <section className="ventas-modal-section ventas-person-section">
         <header><div><strong><VentasSectionIcon kind="person" />Comprador o alumno</strong><small>{allDoor ? "Opcional para ventas con precio alternativo (en puerta)." : "Seleccioná una persona para asociar la venta y calcular su objetivo."}</small></div></header>
-        <div className="ventas-person-search">
-          <FloatingField label="Buscar por DNI o nombre" wide className="ventas-modal-field">
-            <input value={personSearch} placeholder="Ej.: 40123456 o Juan Pérez" onChange={(e) => searchPeople(e.target.value)} />
-          </FloatingField>
-          {peopleLoading ? null : people.length ? (
-            <div className="ventas-search-results">{people.map((person, index) => <button type="button" key={`${person.id_persona || "a"}-${person.id_alumno || index}`} onClick={() => selectPerson(person)}><strong>{person.nombre_apellido}</strong><small>DNI {person.dni}{person.nombre_anio ? ` · ${person.nombre_anio} ${person.nombre_division || ""}` : ""}</small></button>)}</div>
-          ) : null}
-        </div>
-        <div className="ventas-form-grid ventas-form-grid--buyer">
-          <FloatingField label="DNI" className="ventas-modal-field">
-            <input inputMode="numeric" placeholder="Ej.: 40123456" value={form.dni || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", dni: e.target.value.replace(/\D/g, "").slice(0, 12) }))} />
-          </FloatingField>
-          <FloatingField label="Nombre y apellido" className="ventas-modal-field">
-            <input placeholder="Ej.: Juan Pérez" value={form.nombre_apellido || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", nombre_apellido: upper(e.target.value, 160) }))} />
-          </FloatingField>
-          <FloatingField label="Referencia de pago" wide className="ventas-modal-field">
-            <input placeholder="Ej.: transferencia 45821, recibo 1024 o comprobante" value={form.referencia_pago || ""} onChange={(e) => setForm((v) => ({ ...v, referencia_pago: upper(e.target.value, 180) }))} />
-          </FloatingField>
-          <FloatingField label="Observación" wide textarea className="ventas-modal-field">
-            <textarea rows="2" placeholder="Ej.: Retira el comprobante en secretaría." value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
-          </FloatingField>
+        <div className="ventas-buyer-identity">
+          <div className="ventas-person-search">
+            <FloatingField label="Buscar por DNI o nombre" className="ventas-modal-field">
+              <input value={personSearch} placeholder="Ej.: 40123456 o Juan Pérez" onChange={(e) => searchPeople(e.target.value)} />
+            </FloatingField>
+            {peopleLoading ? null : people.length ? (
+              <div className="ventas-search-results">{people.map((person, index) => <button type="button" key={`${person.id_persona || "a"}-${person.id_alumno || index}`} onClick={() => selectPerson(person)}><strong>{person.nombre_apellido}</strong><small>DNI {person.dni}{person.nombre_anio ? ` · ${person.nombre_anio} ${person.nombre_division || ""}` : ""}</small></button>)}</div>
+            ) : null}
+          </div>
+          <div className="ventas-buyer-identity__fields">
+            <FloatingField label="DNI" className="ventas-modal-field">
+              <input inputMode="numeric" placeholder="Ej.: 40123456" value={form.dni || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", dni: e.target.value.replace(/\D/g, "").slice(0, 12) }))} />
+            </FloatingField>
+            <FloatingField label="Nombre y apellido" className="ventas-modal-field">
+              <input placeholder="Ej.: Juan Pérez" value={form.nombre_apellido || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", nombre_apellido: upper(e.target.value, 160) }))} />
+            </FloatingField>
+          </div>
         </div>
       </section>
 
