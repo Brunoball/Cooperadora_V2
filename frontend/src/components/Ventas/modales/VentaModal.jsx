@@ -437,6 +437,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
       </EntityTabPane>
       <EntityTabPane active={activeTab === "comprador"} disableWhenInactive>
+      <div className={`ventas-order-buyer-layout${objectiveEnabled ? "" : " ventas-order-buyer-layout--single"}`}>
+      <div className="ventas-order-buyer-layout__top">
       <section className="ventas-modal-section ventas-person-section">
         <header><div><strong><VentasSectionIcon kind="person" />Comprador o alumno</strong><small>{allDoor ? "Opcional para ventas con precio alternativo (en puerta)." : "Seleccioná una persona para asociar la venta y calcular su objetivo."}</small></div></header>
         <div className="ventas-buyer-identity">
@@ -497,22 +499,30 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 <div className="ventas-objective-cell ventas-objective-cell--missing"><small>Faltantes</small><strong>{objectiveBase.loading ? "..." : objectiveMissing}</strong></div>
               </div>
             </div>
-            <div className="ventas-order-objective__payable">
-              <span>Ganancia a pagar</span>
-              <strong className="ventas-money">{objectiveBase.loading || !hasPersonReference ? "—" : money(objectiveDue)}</strong>
-              <small>{!hasPersonReference ? "Seleccioná una persona para calcular el importe." : objectiveBase.loading ? "Actualizando el cálculo..." : objectiveDue === 0 ? "No hay ganancia pendiente por cobrar." : "Importe pendiente de esta campaña."}</small>
-            </div>
-          </div>
-
-          <div className="ventas-objective-card__rule">
-            <strong><VentasSectionIcon kind="calculation" />Regla de la campaña</strong>
-            <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
-            {Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 && objectiveReady ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
-            {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
-            {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
           </div>
         </section>
       ) : null}
+      </div>
+
+      {/* Ambas tarjetas se ubican después de la fila superior para ocupar el ancho completo. */}
+      {objectiveEnabled ? (
+        <div className="ventas-order-objective__payable" aria-busy={objectiveBase.loading}>
+          <span>Ganancia a pagar</span>
+          <strong className="ventas-money">{objectiveBase.loading || !hasPersonReference ? "—" : money(objectiveDue)}</strong>
+          <small>{!hasPersonReference ? "Seleccioná una persona para calcular el importe." : objectiveBase.loading ? "Actualizando el cálculo..." : objectiveDue === 0 ? "No hay ganancia pendiente por cobrar." : "Importe pendiente de esta campaña."}</small>
+        </div>
+      ) : null}
+
+      {objectiveEnabled ? (
+        <div className="ventas-objective-card__rule">
+          <strong><VentasSectionIcon kind="calculation" />Regla de la campaña</strong>
+          <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
+          {Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 && objectiveReady ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
+          {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
+          {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
+        </div>
+      ) : null}
+      </div>
       </EntityTabPane>
       </CrudModal>
   );

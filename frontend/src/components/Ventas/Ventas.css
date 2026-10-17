@@ -3644,3 +3644,186 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-search-results {
     0 0 0 3px color-mix(in srgb, var(--primary-color) 9%, transparent),
     0 8px 18px -18px rgb(15 23 42 / 0.5);
 }
+
+
+/* Nueva / Editar venta · tarjeta única. El comprador y los indicadores
+   comparten la fila superior; el importe y las reglas ocupan todo el ancho. */
+.ventas-order-modal .ventas-order-buyer-layout {
+  --ventas-obj-surface: var(--mov-card, #fff);
+  --ventas-obj-soft: color-mix(in srgb, var(--primary-500, #1d428a) 4%, var(--ventas-obj-surface));
+  --ventas-obj-border: var(--mov-border, #e2e8f0);
+  --ventas-obj-accent: var(--primary-500, #1d428a);
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 13px;
+  box-sizing: border-box;
+  padding: 18px;
+  border: 1px solid var(--ventas-order-line);
+  border-radius: 12px;
+  background: var(--ventas-order-card);
+  box-shadow: 0 2px 12px -11px rgb(13 36 64 / 22%);
+}
+
+.ventas-order-modal .ventas-order-buyer-layout__top {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  gap: 0;
+}
+
+/* Ambas secciones son zonas de una misma caja, sin tarjetas anidadas. */
+.ventas-order-modal .ventas-order-buyer-layout__top > .ventas-person-section,
+.ventas-order-modal .ventas-order-buyer-layout__top > .ventas-order-objective {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ventas-order-modal .ventas-order-buyer-layout .ventas-buyer-identity {
+  min-width: 0;
+  align-items: stretch;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Al quedar el importe debajo de ambas columnas, el progreso aprovecha
+   toda la anchura disponible de la columna derecha. */
+.ventas-order-modal .ventas-order-buyer-layout .ventas-order-objective__summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ventas-order-modal .ventas-order-buyer-layout__top > .ventas-order-objective {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ventas-order-line);
+}
+
+/* Ganancia y regla: dos franjas completas dentro de la tarjeta común. */
+.ventas-order-modal .ventas-order-buyer-layout > .ventas-order-objective__payable,
+.ventas-order-modal .ventas-order-buyer-layout > .ventas-objective-card__rule {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.ventas-order-modal .ventas-order-buyer-layout > .ventas-objective-card__rule {
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--ventas-obj-border);
+  border-radius: 9px;
+  background: var(--ventas-obj-soft);
+  color: var(--mov-muted);
+  font-size: 11px;
+}
+
+.ventas-order-modal .ventas-order-buyer-layout > .ventas-objective-card__rule > strong {
+  color: var(--balto-ink);
+  font-size: 11px;
+  font-weight: 640;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout {
+  --ventas-obj-surface: #1d2a3b;
+  --ventas-obj-soft: #26374a;
+  --ventas-obj-border: #3a4b61;
+  --ventas-obj-accent: #91b9ff;
+}
+
+html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .ventas-objective-card__rule,
+html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .ventas-order-objective__payable > :is(span, small) {
+  color: #b8c8dd;
+}
+
+html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .ventas-objective-card__rule > strong {
+  color: #eef4ff;
+}
+
+@media (min-width: 1000px) {
+  .ventas-order-modal .ventas-order-buyer-layout__top {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout:not(.ventas-order-buyer-layout--single) .ventas-order-buyer-layout__top > .ventas-person-section {
+    flex: 0 0 39%;
+    width: auto;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout:not(.ventas-order-buyer-layout--single) .ventas-order-buyer-layout__top > .ventas-order-objective {
+    flex: 1 1 0;
+    width: auto;
+    margin: 0 0 0 20px;
+    padding: 0 0 0 20px;
+    border-top: 0;
+    border-left: 1px solid var(--ventas-order-line);
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout .ventas-buyer-identity {
+    flex-direction: column;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout .ventas-buyer-identity .ventas-person-search,
+  .ventas-order-modal .ventas-order-buyer-layout .ventas-buyer-identity__fields {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout .ventas-buyer-identity__fields > .ventas-modal-field:first-child {
+    flex: 0 1 140px;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout .ventas-buyer-identity__fields > .ventas-modal-field:last-child {
+    flex: 1 1 165px;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout--single .ventas-buyer-identity {
+    flex-direction: row;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout--single .ventas-buyer-identity .ventas-person-search {
+    width: auto;
+    flex: 1 1 260px;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout--single .ventas-buyer-identity__fields {
+    width: auto;
+    flex: 2 1 400px;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout .ventas-order-objective {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 720px) {
+    .ventas-order-modal .ventas-order-buyer-layout .ventas-objective-card__head {
+      flex-wrap: wrap;
+    }
+  }
+}
+
+@media (max-width: 560px) {
+  .ventas-order-modal .ventas-order-buyer-layout {
+    padding: 13px;
+  }
+
+  .ventas-order-modal .ventas-order-buyer-layout__top > .ventas-order-objective {
+    margin-top: 16px;
+    padding-top: 16px;
+  }
+}
