@@ -4,6 +4,17 @@ declare(strict_types=1);
 /** Cierre manual: los registros permanecen asociados a su campaña. */
 trait VentasCiclos
 {
+    /**
+     * Métodos que proporciona la clase Ventas y sus otros traits.
+     * Las firmas hacen explícitas las dependencias para el editor
+     * (Intelephense) sin cambiar la lógica del cierre de campañas.
+     */
+    abstract private static function db(): PDO;
+    abstract private static function auth(): array;
+    abstract private static function campaign(PDO $db, int $id, bool $forUpdate = false): array;
+    abstract private static function fetchOne(PDO $db, string $sql, array $params = []): ?array;
+    abstract private static function calcularPlanilla(PDO $db, int $campaignId, string $type, ?int $year, ?int $division): array;
+
     public static function cerrarCampania(): never
     {
         $db=self::db();$auth=self::auth();$body=request_body();

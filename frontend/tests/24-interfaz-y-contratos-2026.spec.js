@@ -56,7 +56,16 @@ test("Ventas: el formulario usa una tabla de ítems, precarga el producto y soli
   expect(modal).toContain("itemsSubtotal");
   expect(modal).toContain("addConcept");
   expect(modal).toContain("choosePriceType");
-  expect(modal).toContain('showGlobalNotification');
+  // El modal delega los errores al feedback compartido de Ventas.
+  // El toast global se publica desde el hook, no directamente desde el modal.
+  const ventas = readSource("components", "Ventas", "Ventas.jsx");
+  const feedback = readSource("components", "Ventas", "hooks", "useVentasFeedback.js");
+  const toastHost = readSource("components", "Global", "GlobalToastHost.jsx");
+  expect(modal).toContain('onFeedback("error",');
+  expect(ventas).toContain("useVentasFeedback()");
+  expect(ventas).toContain("const sharedProps = { showFeedback }");
+  expect(feedback).toContain("showGlobalNotification(type, message, duration)");
+  expect(toastHost).toContain("setNotification({");
   expect(modal).not.toContain("VentaItemsModal");
   expect(modal).toContain('id_venta_persona: "", dni: "", nombre_apellido: ""');
 });

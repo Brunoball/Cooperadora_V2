@@ -549,7 +549,7 @@ final class TestingCleanup
                 'tipos_documentos' => [
                     ['alumnos', 'id_tipo_documento'], ['alumnos_egresados', 'id_tipo_documento'],
                 ],
-                'docentes' => [], // Las planillas consultan docentes sin FK.
+                'docentes' => [], // La nueva FK usa ON DELETE SET NULL: conserva nombre histórico de responsable.
             ];
             $idColumns = [
                 'contable_categoria' => 'id_cont_categoria',

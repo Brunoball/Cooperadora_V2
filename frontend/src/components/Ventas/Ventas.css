@@ -3845,3 +3845,26 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* Planillas de ventas: asignación independiente por campaña/año/división. */
+.ventas-docentes-responsables { margin: 12px 0; padding: 14px; border: 1px solid var(--mov-border, #dce3eb); border-radius: 10px; background: var(--surface-color, #fff); }
+.ventas-docentes-responsables__head { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 6px 18px; margin-bottom: 12px; }
+.ventas-docentes-responsables__head strong { font-size: 12px; }
+.ventas-docentes-responsables__head span { font-size: 12px; opacity: .76; }
+.ventas-docentes-responsables__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 10px; }
+.ventas-docente-responsable { padding: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--surface-color, #fff); border: 1px solid var(--mov-border, #dce3eb); border-radius: 8px; min-width: 0; }
+.ventas-docente-responsable__info { display: flex; flex: 1 1 100%; flex-direction: column; gap: 3px; min-width: 0; }
+.ventas-docente-responsable__info strong { font-size: 13px; }
+.ventas-docente-responsable__info small { font-size: 11px; overflow-wrap: anywhere; }
+.ventas-docente-responsable__control { position: relative; display: flex; flex: 1 1 100%; gap: 7px; min-width: 0; }
+.ventas-docente-responsable__control input { flex: 1 1 auto; min-width: 0; padding: 9px; border: 1px solid var(--mov-border, #cbd5df); border-radius: 6px; background: var(--surface-color, #fff); color: inherit; font: inherit; font-size: 12px; }
+.ventas-docente-responsable__control input:focus-visible { outline: 2px solid var(--balto-action, #357cba); outline-offset: 1px; }
+.ventas-docente-responsable__clear { flex: 0 0 auto; padding: 0 10px; border-radius: 6px; border: 1px solid var(--mov-border, #dce3eb); background: transparent; color: inherit; cursor: pointer; }
+.ventas-docente-responsable__results { position: absolute; z-index: 30; top: calc(100% + 3px); left: 0; right: 0; background: var(--surface-color, #fff); border: 1px solid var(--mov-border, #cbd5df); border-radius: 6px; box-shadow: 0 6px 22px #0002; max-height: 260px; overflow-y: auto; }
+.ventas-docente-responsable__results button { width: 100%; border: 0; padding: 9px 10px; background: transparent; color: inherit; text-align: left; display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
+.ventas-docente-responsable__results button:hover, .ventas-docente-responsable__results button:focus-visible { background: color-mix(in srgb, var(--balto-action, #357cba) 8%, transparent); }
+.ventas-docente-responsable__results button strong { font-size: 12px; }
+.ventas-docente-responsable__results button small, .ventas-docente-responsable__results > span { font-size: 11px; opacity: .8; padding: 6px 10px; }
+
+.ventas-docentes-responsables__toggle { padding: 8px 12px; margin-bottom: 10px; background: transparent; color: inherit; border: 1px solid var(--mov-border, #dce3eb); border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; }
+.ventas-docentes-responsables__toggle:hover { background: color-mix(in srgb, var(--balto-action, #357cba) 5%, transparent); }

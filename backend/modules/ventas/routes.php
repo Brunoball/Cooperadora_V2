@@ -26,6 +26,7 @@ function register_ventas_routes(Router $router): void
     $router->register('ventas_orden_eliminar', 'POST', [Ventas::class, 'eliminarOrden'], true);
     $router->register('ventas_planillas_opciones', 'GET', [Ventas::class, 'opcionesPlanillas'], true);
     $router->register('ventas_planillas_datos', 'GET', [Ventas::class, 'datosPlanillas'], true);
+    $router->register('ventas_planillas_docente_guardar', 'POST', [Ventas::class, 'guardarDocenteResponsable'], true);
     $router->register('ventas_menu_activo', 'GET', [Ventas::class, 'menuActivo'], false);
 
     // Compatibilidad de lectura con el módulo anterior mientras el bot/panel termina de migrar.

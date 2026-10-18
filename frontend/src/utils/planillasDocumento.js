@@ -41,12 +41,12 @@ export function filaPlanilla(row, tipo, indice = 0) {
   };
 }
 
-function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPaginas, totalCurso, totalCursoCobrado, totalGeneral = null) {
+function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPaginas, totalCurso, totalCursoCobrado, totalGeneral = null, docenteResponsable = "") {
   const cursoTexto = `${curso || "SIN AÑO"} ${division || ""}`.trim();
   const paginaTexto = totalPaginas > 1 ? ` · Hoja ${nroPagina} de ${totalPaginas}` : "";
   const subtotal = rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
   return `<section class="legacy-sheet">
-    <div class="legacy-meta"><span>Curso: ${escapeHtml(cursoTexto)} · Alumnos: ${totalCurso}${paginaTexto}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docente responsable: _______________________________</span></div>
+    <div class="legacy-meta"><span>Curso: ${escapeHtml(cursoTexto)} · Alumnos: ${totalCurso}${paginaTexto}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docente responsable: ${docenteResponsable ? escapeHtml(docenteResponsable) : "_______________________________"}</span></div>
     <table class="legacy-grid legacy-grid--course">
       <colgroup><col class="c-name"><col class="c-dni"><col class="c-year"><col class="c-div"><col class="c-qty"><col class="c-qty"><col class="c-gain"><col class="c-paid"><col class="c-notes"></colgroup>
       <tbody>
@@ -101,8 +101,8 @@ const ESTILOS = `
   body{font-size:10px}
   .legacy-sheet{width:200mm;height:287mm;min-height:287mm;margin:0 auto;position:relative;break-after:page;page-break-after:always;padding-top:1mm;overflow:hidden;background:#fff}
   .legacy-sheet:last-child{break-after:auto;page-break-after:auto}
-  .legacy-meta{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:4mm;height:8mm;font-size:8.5px;white-space:nowrap}
-  .legacy-meta strong{text-align:center;font-size:8.5px}.legacy-meta span:last-child{text-align:right}
+  .legacy-meta{display:grid;grid-template-columns:1fr auto 1.5fr;align-items:center;gap:3mm;min-height:8mm;font-size:8.5px}
+  .legacy-meta strong{text-align:center;font-size:8.5px}.legacy-meta span:last-child{text-align:right;overflow-wrap:anywhere;line-height:1.1}
   .legacy-grid{width:100%;border-collapse:collapse;table-layout:fixed;border:1.2px solid #000}
   .legacy-grid th,.legacy-grid td{border:0.75px solid #000;padding:1.4mm 1.1mm;text-align:center;vertical-align:middle;line-height:1.05;overflow-wrap:break-word}
   .legacy-grid th{font-weight:700}
@@ -140,12 +140,14 @@ export function crearDocumentoPlanillas(data, tipo) {
     const totalDocentes = items.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
     paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio, conObjetivo, totalDocentes));
   } else {
+    const responsables = new Map((data?.docentes_responsables || [])
+      .map((asignacion) => [JSON.stringify([String(asignacion.id_anio), String(asignacion.id_division)]), asignacion.docente_nombre]));
     const cursos = new Map();
     items.forEach((row) => {
       const curso = row.nombre_anio || "SIN AÑO";
       const division = row.nombre_division || "";
-      const key = JSON.stringify([curso, division]);
-      if (!cursos.has(key)) cursos.set(key, { curso, division, rows: [] });
+      const key = JSON.stringify([String(row.id_anio ?? ""), String(row.id_division ?? "")]);
+      if (!cursos.has(key)) cursos.set(key, { curso, division, key, rows: [] });
       cursos.get(key).rows.push(row);
     });
     const valoresCurso = [...cursos.values()];
@@ -155,7 +157,8 @@ export function crearDocumentoPlanillas(data, tipo) {
       const totalCurso = grupo.rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
       return hojas.map((rows, i) => hojaCurso(rows, grupo.curso, grupo.division, campania, anio,
         i + 1, hojas.length, grupo.rows.length, totalCurso,
-        (valoresCurso.length > 1 && grupoIndex === valoresCurso.length - 1 && i === hojas.length - 1) ? totalGeneral : null));
+        (valoresCurso.length > 1 && grupoIndex === valoresCurso.length - 1 && i === hojas.length - 1) ? totalGeneral : null,
+        responsables.get(grupo.key) || ""));
     });
   }
 

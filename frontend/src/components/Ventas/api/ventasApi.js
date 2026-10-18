@@ -27,6 +27,7 @@ export const ventasApi = {
 
   planillasOpciones: () => apiGet("ventas_planillas_opciones"),
   planillasDatos: (params) => apiGet("ventas_planillas_datos", params),
+  guardarDocenteResponsable: (payload) => apiPost("ventas_planillas_docente_guardar", payload),
 };
 
 export default ventasApi;

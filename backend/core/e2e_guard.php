@@ -832,6 +832,15 @@ function e2e_scope_guard(string $action, array $auth): void
             }
             return;
 
+        case 'ventas_planillas_docente_guardar':
+            // Solo relacionar campaña y docente creados por la suite. Nunca
+            // permitir que Playwright reasigne responsables de una venta real.
+            e2e_assert_target($db, $action, 'ventas_campania', $body['id_campania'] ?? null);
+            if (!empty($body['id_docente'])) {
+                e2e_assert_target($db, $action, 'config_docentes', $body['id_docente']);
+            }
+            return;
+
         case 'ventas_campania_cerrar':
             e2e_assert_sales_campaign_close_safe($db, $action, $body['id_campania'] ?? $body['id'] ?? null);
             return;

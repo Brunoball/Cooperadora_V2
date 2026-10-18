@@ -72,7 +72,83 @@ trait VentasPlanillas
                       COALESCE(c.fecha_inicio,(SELECT MIN(COALESCE(o.fecha_venta,DATE(o.aprobado_en),DATE(o.creado_en))) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania),DATE(c.creado_en)) AS fecha_referencia
                     FROM ventas_campanias c ORDER BY c.activo DESC,c.id_campania DESC')->fetchAll(PDO::FETCH_ASSOC)?:[],
             'total_docentes'=>(int)$db->query('SELECT COUNT(*) FROM docentes WHERE activo=1')->fetchColumn(),
+            'docentes'=>$db->query('SELECT id_docente,docente,dni FROM docentes WHERE activo=1 ORDER BY docente')->fetchAll(PDO::FETCH_ASSOC)?:[],
         ]);
+    }
+
+    /**
+     * La asignación no altera la foto de ventas cerradas: queda en una tabla
+     * independiente y se incorpora a la respuesta también para campañas históricas.
+     */
+    private static function docentesResponsables(PDO $db, int $campaignId): array
+    {
+        $stmt = $db->prepare(
+            'SELECT v.id_anio,v.id_division,v.id_docente,v.docente_nombre,
+                    COALESCE(d.activo,0) AS docente_activo
+               FROM ventas_planillas_docentes v
+               LEFT JOIN docentes d ON d.id_docente=v.id_docente
+              WHERE v.id_campania=? ORDER BY v.id_anio,v.id_division'
+        );
+        $stmt->execute([$campaignId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public static function guardarDocenteResponsable(): never
+    {
+        $auth = require_admin();
+        $db = $auth['db'];
+        $body = request_body();
+        $campaignId = positive_id($body['id_campania'] ?? null, 'campaña');
+        $yearId = positive_id($body['id_anio'] ?? null, 'año');
+        $divisionId = positive_id($body['id_division'] ?? null, 'división');
+        $rawId = $body['id_docente'] ?? null;
+        $teacherId = $rawId === null || $rawId === ''
+            ? null : positive_id($rawId, 'docente');
+
+        $result = transaction($db, static function () use ($db, $auth, $campaignId, $yearId, $divisionId, $teacherId): ?array {
+            // El bloqueo de campaña serializa altas/cambios de una misma planilla.
+            self::campaign($db, $campaignId, true);
+            foreach ([['anio', 'id_anio', $yearId], ['division', 'id_division', $divisionId]] as [$table, $column, $id]) {
+                if (!self::fetchOne($db, "SELECT {$column} FROM {$table} WHERE {$column}=?", [$id])) {
+                    api_error('El curso o la división no existen.', 'VALIDATION_ERROR', 422);
+                }
+            }
+            $before = self::fetchOne($db,
+                'SELECT * FROM ventas_planillas_docentes WHERE id_campania=? AND id_anio=? AND id_division=? FOR UPDATE',
+                [$campaignId, $yearId, $divisionId]
+            );
+            if ($teacherId === null) {
+                $db->prepare('DELETE FROM ventas_planillas_docentes WHERE id_campania=? AND id_anio=? AND id_division=?')
+                   ->execute([$campaignId, $yearId, $divisionId]);
+                $after = null;
+            } else {
+                $teacher = self::fetchOne($db,
+                    'SELECT id_docente,docente FROM docentes WHERE id_docente=? AND activo=1 LIMIT 1',
+                    [$teacherId]
+                );
+                if (!$teacher) api_error('Seleccioná un docente activo del catálogo.', 'VALIDATION_ERROR', 422);
+                $db->prepare('INSERT INTO ventas_planillas_docentes
+                    (id_campania,id_anio,id_division,id_docente,docente_nombre)
+                    VALUES (?,?,?,?,?)
+                    ON DUPLICATE KEY UPDATE id_docente=VALUES(id_docente),docente_nombre=VALUES(docente_nombre)')
+                   ->execute([$campaignId, $yearId, $divisionId, $teacherId, $teacher['docente']]);
+                $after = self::fetchOne($db,
+                    'SELECT * FROM ventas_planillas_docentes WHERE id_campania=? AND id_anio=? AND id_division=?',
+                    [$campaignId, $yearId, $divisionId]
+                );
+            }
+            // Auditoría siempre ligada al ID de la campaña; el antes/después
+            // conserva la clave compuesta del curso y la división.
+            if ($before !== $after) {
+                audit_change($db, $auth, 'VENTAS', $after ? 'ASIGNAR_DOCENTE_PLANILLA' : 'QUITAR_DOCENTE_PLANILLA',
+                    'ventas_planillas_docentes', $campaignId,
+                    "Planilla campaña {$campaignId}, año {$yearId}, división {$divisionId}", $before, $after);
+            }
+            return $after;
+        });
+        api_success(['asignacion' => $result], $teacherId === null
+            ? 'Docente responsable quitado de esta planilla.'
+            : 'Docente responsable asignado correctamente.');
     }
 
     /** Los DNI se comparan sólo si contienen entre 6 y 12 dígitos. */
@@ -125,9 +201,16 @@ trait VentasPlanillas
                     $g['totales']=self::planillasTotales($g['items']);unset($g['items']);return $g;
                 },$keys));
             }
+            if ($type === 'cursos') {
+                $data['docentes_responsables'] = self::docentesResponsables($db, $campaignId);
+            }
             api_success($data);
         }
-        api_success(self::calcularPlanilla($db,$campaignId,$type,$year,$division));
+        $data = self::calcularPlanilla($db,$campaignId,$type,$year,$division);
+        if ($type === 'cursos') {
+            $data['docentes_responsables'] = self::docentesResponsables($db, $campaignId);
+        }
+        api_success($data);
     }
 
     private static function calcularPlanilla(PDO $db, int $campaignId, string $type, ?int $year, ?int $division): array

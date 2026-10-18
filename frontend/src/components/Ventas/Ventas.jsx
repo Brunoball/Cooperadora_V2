@@ -27,7 +27,7 @@ export default function Ventas() {
     return <ConfiguracionVentas writable={writable} {...sharedProps} />;
   }
   if (location.pathname.startsWith("/ventas/planillas")) {
-    return <Planillas {...sharedProps} />;
+    return <Planillas writable={writable} {...sharedProps} />;
   }
   return <VentasRegistradas writable={writable} {...sharedProps} />;
 }

@@ -7,6 +7,7 @@ import BotonExportarGlobal from "../../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../../Global/Modales/ModalExportarGlobal";
 import { crearDocumentoPlanillas, imprimirDocumentoPlanillas, exportarDocumentoPlanillasPdf, filaPlanilla } from "../../../utils/planillasDocumento";
 import ventasApi from "../api/ventasApi";
+import DocenteResponsableSelector from "./DocenteResponsableSelector";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import { campaniaOpcion, ordenarCampanias, money, upper, yes, today } from "../ventasUtils";
 
@@ -35,8 +36,8 @@ function TextoResaltado({ texto, busqueda }) {
 
 const filaId = (row, tipo) => String(tipo === "docentes" ? row.id_docente : row.id_alumno);
 
-export default function Planillas({ showFeedback }) {
-  const [options, setOptions] = useState({ campanias: [], anios: [], divisiones: [], total_docentes: 0 });
+export default function Planillas({ writable, showFeedback }) {
+  const [options, setOptions] = useState({ campanias: [], anios: [], divisiones: [], docentes: [], total_docentes: 0 });
   const [campaign, setCampaign] = useState("");
   const [type, setType] = useState("cursos");
   const [year, setYear] = useState("");
@@ -48,6 +49,8 @@ export default function Planillas({ showFeedback }) {
   const [revisionBusqueda, setRevisionBusqueda] = useState(0);
   const busquedaActivaRef = useRef(false);
   const filaMarcadaRef = useRef(null);
+  const [docenteSaving, setDocenteSaving] = useState(false);
+  const [asignacionesAbiertas, setAsignacionesAbiertas] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportData, setExportData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +82,7 @@ export default function Planillas({ showFeedback }) {
   const currentRequestKeyRef = useRef(requestKey);
   currentRequestKeyRef.current = requestKey;
   useEffect(() => { setConciliacionAbierta(false); }, [requestKey]);
+  useEffect(() => { setAsignacionesAbiertas(false); }, [campaign, type]);
   const previewData = previewResult.key === requestKey ? previewResult.data : null;
   const isPreviewPending = loading || (Boolean(campaign) && previewResult.key !== requestKey);
 
@@ -188,6 +192,22 @@ export default function Planillas({ showFeedback }) {
     return () => { sequenceRef.current += 1; };
   }, [campaign, refreshPreview]);
 
+  const guardarDocente = async (grupo, idDocente) => {
+    if (docenteSaving) return;
+    setDocenteSaving(true);
+    try {
+      const resultado = await ventasApi.guardarDocenteResponsable({
+        id_campania: campaign, id_anio: grupo.id_anio,
+        id_division: grupo.id_division, id_docente: idDocente,
+      });
+      await refreshPreview({ silent: true });
+      showFeedback("success", resultado.mensaje || "Docente responsable actualizado.");
+    } catch (err) {
+      showFeedback("error", `No se pudo asignar el docente: ${err.message}`);
+      throw err;
+    } finally { setDocenteSaving(false); }
+  };
+
   const fetchCurrentData = async () => {
     if (!campaign) {
       showFeedback("warning", "Seleccioná una venta.");
@@ -254,6 +274,9 @@ export default function Planillas({ showFeedback }) {
   };
 
   const previewItems = previewData?.items || [];
+  const responsables = previewData?.docentes_responsables || [];
+  const responsablesPorCurso = new Map(responsables.map((r) => [`${r.id_anio}:${r.id_division}`, r]));
+  const gruposCursos = previewData?.totales_por_curso || [];
   // Paginación local: el servicio devuelve toda la planilla para que la
   // impresión y exportación sigan incluyendo todos los registros filtrados.
   const previewPageSize = 20;
@@ -274,11 +297,17 @@ export default function Planillas({ showFeedback }) {
 
   const exportSections = useMemo(() => {
     const tieneObjetivo = Number(exportSourceData?.campania?.cantidad_minima_persona || 0) > 0;
-    const rows = exportItems.map((row, index) => filaPlanilla(row, type, index));
+    const asignaciones = new Map((exportSourceData?.docentes_responsables || [])
+      .map((r) => [`${r.id_anio}:${r.id_division}`, r.docente_nombre]));
+    const rows = exportItems.map((row, index) => ({
+      ...filaPlanilla(row, type, index),
+      docenteResponsable: asignaciones.get(`${row.id_anio}:${row.id_division}`) || "SIN ASIGNAR",
+    }));
     const columnasBase = type === "docentes"
       ? [{ label: "Orden", key: "orden" }, { label: "Docente", key: "nombre" }, { label: "DNI", key: "dni" }]
       : [{ label: "Apellido y nombres", key: "nombre" }, { label: "DNI", key: "dni" },
-          { label: "Año", key: "anio" }, { label: "División", key: "division" }];
+          { label: "Año", key: "anio" }, { label: "División", key: "division" },
+          { label: "Docente responsable", key: "docenteResponsable" }];
     const columnas = [
       ...columnasBase,
       { label: "Unidades vendidas", key: "vendidas" },
@@ -294,7 +323,7 @@ export default function Planillas({ showFeedback }) {
     const sections = [{
       hoja: type === "docentes" ? "Docentes" : "Alumnos",
       titulo: exportCampaignName || "Planilla de ventas",
-      subtitulo: exportProductName ? `Producto: ${exportProductName}` : "",
+      subtitulo: `${exportProductName ? `Producto: ${exportProductName}` : ""}${type === "cursos" && (exportSourceData?.totales_por_curso || []).length === 1 ? ` · Docente responsable: ${rows[0]?.docenteResponsable || "SIN ASIGNAR"}` : ""}`,
       columnas,
       registros: rows,
     }];
@@ -400,6 +429,38 @@ export default function Planillas({ showFeedback }) {
           <strong>Persona localizada.</strong> Se seleccionó su {type === "cursos" ? "año y división" : "página"} y se resaltó la fila.
           <button type="button" onClick={() => { setFilaLocalizada(null); setBusqueda(""); setBuscarAbierto(true); }}>Limpiar búsqueda</button>
         </div>
+      )}
+      {campaign && type === "cursos" && !isPreviewPending && gruposCursos.length > 0 && (
+        <section className="ventas-docentes-responsables" aria-label="Docentes responsables de las planillas">
+          <div className="ventas-docentes-responsables__head">
+            <strong>DOCENTES RESPONSABLES POR CURSO Y DIVISIÓN</strong>
+            <span>{gruposCursos.length === 1
+              ? "Esta asignación pertenece solo a este curso y a la venta seleccionada."
+              : `${gruposCursos.length} planillas de cursos · cada docente se guarda por separado para esta venta.`}</span>
+          </div>
+          {gruposCursos.length > 1 && (
+            <button type="button" className="ventas-docentes-responsables__toggle"
+              aria-expanded={asignacionesAbiertas} aria-controls="ventas-asignaciones-por-curso"
+              onClick={() => setAsignacionesAbiertas((abierto) => !abierto)}>
+              {asignacionesAbiertas ? "Ocultar cursos" : "Ver y asignar docentes de cada curso"}
+            </button>
+          )}
+          {(gruposCursos.length === 1 || asignacionesAbiertas) && (
+            <div className="ventas-docentes-responsables__grid" id="ventas-asignaciones-por-curso">
+              {gruposCursos.map((grupo) => (
+                <DocenteResponsableSelector
+                  key={`${campaign}:${grupo.id_anio}:${grupo.id_division}`}
+                  grupo={grupo}
+                  docentes={options.docentes}
+                  asignacion={responsablesPorCurso.get(`${grupo.id_anio}:${grupo.id_division}`)}
+                  writable={writable}
+                  saving={docenteSaving}
+                  onAssign={guardarDocente}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       )}
       <div className={`ventas-planillas-panel${!campaign && !isPreviewPending ? " ventas-planillas-panel--empty" : ""}`}>
         <section className="ventas-planillas-tableCard" aria-label="Planilla de ventas">

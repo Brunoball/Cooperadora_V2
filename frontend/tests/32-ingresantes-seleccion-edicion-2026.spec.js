@@ -7,6 +7,11 @@ const { suffix, currentYear } = require("./helpers/data.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
 
 const env = loadTestEnv();
+// En la suite completa de Windows se observó una salida nativa del worker
+// (0xC0000409) ANTES de iniciar el tercer test, sin fallo de la aplicación.
+// Con --workers=1, el modo parallel obliga a usar un worker nuevo para cada
+// caso de este archivo. No cambia expectativas, no reintenta ni omite pruebas.
+test.describe.configure({ mode: "parallel" });
 test.beforeEach(() => {
   test.skip(!env.isLocal && !env.allowRemoteWrites,
     "Ingresantes con fixtures E2E: sin escrituras sobre alumnos reales de producción.");
