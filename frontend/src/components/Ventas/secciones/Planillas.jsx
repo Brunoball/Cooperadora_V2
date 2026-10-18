@@ -35,7 +35,7 @@ function TextoResaltado({ texto, busqueda }) {
 
 const filaId = (row, tipo) => String(tipo === "docentes" ? row.id_docente : row.id_alumno);
 
-export default function Planillas({ feedback, showFeedback }) {
+export default function Planillas({ showFeedback }) {
   const [options, setOptions] = useState({ campanias: [], anios: [], divisiones: [], total_docentes: 0 });
   const [campaign, setCampaign] = useState("");
   const [type, setType] = useState("cursos");
@@ -95,10 +95,13 @@ export default function Planillas({ feedback, showFeedback }) {
         const items = data.items || [];
         setBusquedaCompleta({ key: claveBusqueda, items, loading: false, error: "" });
       }).catch((err) => {
-        if (!cancelada) setBusquedaCompleta({ key: claveBusqueda, items: [], loading: false, error: err.message });
+        if (!cancelada) {
+          setBusquedaCompleta({ key: claveBusqueda, items: [], loading: false, error: err.message });
+          showFeedback("error", `No se pudo buscar en la planilla: ${err.message}`);
+        }
       });
     return () => { cancelada = true; };
-  }, [campaign, type, claveBusqueda, busquedaActiva, revisionBusqueda]);
+  }, [campaign, type, claveBusqueda, busquedaActiva, revisionBusqueda, showFeedback]);
 
   const resultadosBusqueda = useMemo(() => {
     if (!busqueda.trim() || busquedaCompleta.key !== claveBusqueda || busquedaCompleta.loading) return [];
@@ -350,8 +353,8 @@ export default function Planillas({ feedback, showFeedback }) {
           onChange: cambiarConsulta(setCampaign), includeEmptyOption: false,
           options: campaignOptions },
         ...(type === "cursos" ? [
-          { key: "anio", type: "select", label: "Año", value: year, onChange: cambiarConsulta(setYear), options: (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) })), placeholder: "TODOS" },
-          { key: "division", type: "select", label: "División", value: division, onChange: cambiarConsulta(setDivision), options: (options.divisiones || []).map((item) => ({ value: String(item.id_division), label: upper(item.nombre_division, 80) })), placeholder: "TODAS" },
+          { key: "anio", type: "select", className: "ventas-filter--option-width", label: "Año", value: year, onChange: cambiarConsulta(setYear), options: (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) })), placeholder: "TODOS" },
+          { key: "division", type: "select", className: "ventas-filter--option-width", label: "División", value: division, onChange: cambiarConsulta(setDivision), options: (options.divisiones || []).map((item) => ({ value: String(item.id_division), label: upper(item.nombre_division, 80) })), placeholder: "TODAS" },
         ] : []),
       ]}
       canCreate={false}
@@ -374,7 +377,7 @@ export default function Planillas({ feedback, showFeedback }) {
             {busquedaCompleta.loading || busquedaCompleta.key !== claveBusqueda
               ? "Buscando en toda la planilla..."
               : busquedaCompleta.error
-                ? `No se pudo buscar: ${busquedaCompleta.error}`
+                ? "No se pudieron cargar las coincidencias"
                 : `${resultadosBusqueda.length} coincidencia(s) en la venta seleccionada`}
           </div>
           {!busquedaCompleta.loading && busquedaCompleta.key === claveBusqueda && !busquedaCompleta.error && (
@@ -602,7 +605,6 @@ export default function Planillas({ feedback, showFeedback }) {
         onError={(message) => showFeedback("error", message)}
       />
 
-      {feedback}
     </ModulePage>
   );
 }

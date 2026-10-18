@@ -1,8 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { showGlobalNotification } from "../../Global/notifications";
 
+// Todas las subsecciones y modales de Ventas publican en el host global.
+// Su toast no se desmonta al cerrar un modal o cambiar de subsección.
 export function useVentasFeedback() {
-  const [feedbackState, setFeedbackState] = useState(null);
-  const showFeedback = useCallback((type, message) => setFeedbackState({ type, message }), []);
-  const clearFeedback = useCallback(() => setFeedbackState(null), []);
-  return { feedbackState, showFeedback, clearFeedback };
+  const showFeedback = useCallback((type, message, duration) => {
+    if (!message) return;
+    showGlobalNotification(type, message, duration);
+  }, []);
+  return { showFeedback };
 }

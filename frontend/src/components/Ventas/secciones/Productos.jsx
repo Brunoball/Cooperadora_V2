@@ -11,7 +11,7 @@ import ProductoModal from "../modales/ProductoModal";
 import { ActionButton } from "../VentasUI";
 import { money, upper } from "../ventasUtils";
 
-export default function Productos({ writable, feedback, showFeedback }) {
+export default function Productos({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
   const [pagination, setPagination] = useState({ pagina: 1, total_paginas: 1, total: 0 });
   const [page, setPage] = useState(1);
@@ -198,7 +198,7 @@ export default function Productos({ writable, feedback, showFeedback }) {
         className="ventas-tableFooter"
       />
 
-      <ProductoModal open={modal.open} initial={modal.row} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} />
+      <ProductoModal open={modal.open} initial={modal.row} saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} onFeedback={showFeedback} />
 
       <ModalEliminarGlobal
         open={Boolean(stateConfirm)}
@@ -239,7 +239,6 @@ export default function Productos({ writable, feedback, showFeedback }) {
         }}
       />
 
-      {feedback}
     </ModulePage>
   );
 }

@@ -18,14 +18,12 @@ const sigueNombreAutomatico = (nombre, productos) =>
     upper(String(nombre).trim(), 150) === nombreAutomatico(producto));
 
 /** No hay plantillas independientes: se copian los ajustes de cualquier venta anterior. */
-export default function ConfiguracionVentaModal({ open, initial, products = [], campaigns = [], saving, onClose, onSave }) {
+export default function ConfiguracionVentaModal({ open, initial, products = [], campaigns = [], saving, onClose, onSave, onFeedback }) {
   const [form, setForm] = useState(defaults);
   const [copyId, setCopyId] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setError("");
     setCopyId("");
     setForm({
       ...defaults, ...initial,
@@ -60,22 +58,20 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       // Fechas nuevas, nunca se copian las fechas históricas.
       fecha_inicio: "", fecha_fin: "", fecha_entrega: "",
     }));
-    setError("");
   };
 
   const submit = (event) => {
     event.preventDefault();
-    if (!form.nombre.trim() || !form.id_producto_principal) { setError("Indicá un nombre y un producto principal."); return; }
+    if (!form.nombre.trim() || !form.id_producto_principal) { onFeedback?.("error", "Indicá un nombre y un producto principal."); return; }
     if (!Number.isInteger(minimum) || minimum < 0 || minimum > 10000 ||
       (minimum > 0 && [form.ganancia_unidad_faltante, form.ganancia_total_sin_ventas].some((v) => !v || !Number.isFinite(Number(v)) || Number(v) <= 0))) {
-      setError("Revisá la cantidad mínima y los importes de ganancia por faltante."); return;
+      onFeedback?.("error", "Revisá la cantidad mínima y los importes de ganancia por faltante."); return;
     }
     // Las ventas legadas con registros pueden conservar sus fechas originales en blanco.
     const legacyWithSales = hasSales && !initial?.fecha_inicio && !initial?.fecha_fin;
     if (!legacyWithSales && (!form.fecha_inicio || !form.fecha_fin || !form.fecha_entrega || form.fecha_inicio > form.fecha_fin || form.fecha_fin > form.fecha_entrega)) {
-      setError("Completá las fechas de inicio, fin y entrega en orden cronológico."); return;
+      onFeedback?.("error", "Completá las fechas de inicio, fin y entrega en orden cronológico."); return;
     }
-    setError("");
     onSave({
       ...form,
       nombre: upper(form.nombre, 150),
@@ -91,7 +87,6 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
     onClose={onClose} onSubmit={submit} noValidate saving={saving} showSavingEffect={false}
     wide modalClassName="ventas-modal ventas-campaign-modal"
   >
-    {error ? <div className="ventas-modal-validation" role="alert">{error}</div> : null}
     <div className="ventas-form-grid ventas-form-grid--campaign">
       {isNew && campaigns.length > 0 && <FloatingField label="Copiar datos de otra venta (opcional)" wide className="ventas-modal-field">
         <select value={copyId} onChange={(e) => copy(e.target.value)}>

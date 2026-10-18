@@ -40,7 +40,7 @@ const exportRecord = (row) => ({
   referencia: upper(row.referencia_pago || "", 180),
 });
 
-export default function VentasRegistradas({ writable, feedback, showFeedback }) {
+export default function VentasRegistradas({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
   const [catalogs, setCatalogs] = useState({ productos: [], campanias: [], medios_pago: [], meses_ventas: [] });
   const [pagination, setPagination] = useState({ pagina: 1, total_paginas: 1, total: 0 });
@@ -134,9 +134,9 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
     { key: "venta", type: "select", label: "Venta (mes y año)", value: campaign,
       includeEmptyOption: false, options: campaignOptions,
       onChange: (value) => { setPage(1); setCampaign(String(value)); } },
-    { key: "estado", type: "select", className: "ventas-orders-filter--pago", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
-    { key: "retiro", type: "select", className: "ventas-orders-filter--retiro", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
-    { key: "origen", type: "select", className: "ventas-orders-filter--origen", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
+    { key: "estado", type: "select", className: "ventas-orders-filter--pago ventas-filter--option-width", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
+    { key: "retiro", type: "select", className: "ventas-orders-filter--retiro ventas-filter--option-width", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
+    { key: "origen", type: "select", className: "ventas-orders-filter--origen ventas-filter--option-width", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
   ];
 
   const exportSections = useMemo(() => [{
@@ -350,8 +350,7 @@ export default function VentasRegistradas({ writable, feedback, showFeedback }) 
           return { mensaje: result.mensaje };
         }}
       />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); await load({ silent: true }); showFeedback(Number(result.ganancia_pendiente || 0) > 0 ? "warning" : "success", result.mensaje); return { mensaje: result.mensaje }; }} onToast={(tipo, mensaje) => { if (tipo === "error") showFeedback("error", mensaje); }} />
-      {feedback}
+      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
     </ModulePage>
   );
 }

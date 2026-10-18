@@ -1957,15 +1957,7 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   background: var(--entity-modal-bg, #fff);
 }
 
-.ventas-modal-validation {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--entity-modal-danger, #c33) 30%, transparent);
-  border-radius: 9px;
-  color: var(--entity-modal-danger, #a33);
-  background: color-mix(in srgb, var(--entity-modal-danger, #c33) 6%, var(--entity-modal-bg, #fff));
-  font-size: 12px;
-}
+
 
 .ventas-modal .entity-tab-pane {
   min-width: 0;
@@ -3826,4 +3818,30 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
     margin-top: 16px;
     padding-top: 16px;
   }
+}
+
+/* Ventas · filtros de ancho estable: cada select ocupa el ancho de la
+   opción más larga (incluido "Todos/Todas"), nunca el del valor elegido.
+   No se aplica al filtro "Venta (mes y año)" ni a los selects de modales.
+   También sobrescribe los anchos compactos anteriores de Año en Planillas. */
+.ventas-page .module-headFilters > .module-filter--select.ventas-filter--option-width {
+  display: inline-flex;
+  flex: 0 0 auto !important;
+  width: max-content !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.ventas-page .module-headFilters > .module-filter--select.ventas-filter--option-width > .module-filterControl {
+  display: block;
+  box-sizing: border-box;
+  /* El tamaño intrínseco de un select normal usa su opción más larga;
+     field-sizing: content, en cambio, cambia al seleccionar otra opción. */
+  field-sizing: fixed;
+  width: max-content !important;
+  min-width: 0;
+  max-width: 100% !important;
+  padding-inline: 10px 26px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

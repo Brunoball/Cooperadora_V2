@@ -3,7 +3,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { showGlobalNotification } from "../../Global/notifications";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import ventasApi from "../api/ventasApi";
 import { asId, blankItem, money, stateLabel, today, upper, yes } from "../ventasUtils";
@@ -288,14 +287,14 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     event.preventDefault();
     if (!form.id_campania || !form.id_medio_pago || !/^\d{4}-\d{2}-\d{2}$/.test(form.fecha_venta || "")) {
       setActiveTab("venta");
-      showGlobalNotification("error", "Completá la campaña, el medio de pago y la fecha de venta para continuar.");
+      onFeedback("error", "Completá la campaña, el medio de pago y la fecha de venta para continuar.");
       return;
     }
     if (!canSave) {
       if (!objectiveReady && objectiveEnabled && hasPersonReference) {
-        showGlobalNotification("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
+        onFeedback("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
       } else {
-        showGlobalNotification("error", "Agregá un concepto válido o liquidá una ganancia pendiente.");
+        onFeedback("error", "Agregá un concepto válido o liquidá una ganancia pendiente.");
         if (!canSettleGainOnly) setActiveTab("venta");
       }
       return;

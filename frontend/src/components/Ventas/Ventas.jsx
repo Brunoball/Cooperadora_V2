@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import ModuleFeedback from "../Global/ModuleFeedback";
 import { canWrite } from "../_shared/auth/session";
 import { useVentasFeedback } from "./hooks/useVentasFeedback";
 import ConfiguracionVentas from "./secciones/ConfiguracionVentas";
@@ -13,21 +12,13 @@ export default function Ventas() {
   const location = useLocation();
   const navigate = useNavigate();
   const writable = canWrite();
-  const { feedbackState, showFeedback, clearFeedback } = useVentasFeedback();
+  const { showFeedback } = useVentasFeedback();
 
   useEffect(() => {
     if (location.pathname === "/ventas") navigate("/ventas/registradas", { replace: true });
   }, [location.pathname, navigate]);
 
-  const feedback = feedbackState ? (
-    <ModuleFeedback
-      type={feedbackState.type}
-      message={feedbackState.message}
-      onClose={clearFeedback}
-    />
-  ) : null;
-
-  const sharedProps = { feedback, showFeedback };
+  const sharedProps = { showFeedback };
 
   if (location.pathname.startsWith("/ventas/productos")) {
     return <Productos writable={writable} {...sharedProps} />;

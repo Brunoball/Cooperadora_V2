@@ -12,7 +12,7 @@ import { ActionButton } from "../VentasUI";
 import { campaniaOpcion, money, ordenarCampanias, upper, yes, today } from "../ventasUtils";
 
 /** Un solo espacio de trabajo; el historial se consulta en Registradas/Planillas. */
-export default function ConfiguracionVentas({ writable, feedback, showFeedback }) {
+export default function ConfiguracionVentas({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +123,7 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
 
       <ConfiguracionVentaModal
         open={modal.open} initial={modal.row} products={products} campaigns={rows}
-        saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save}
+        saving={saving} onClose={() => setModal({ open: false, row: null })} onSave={save} onFeedback={showFeedback}
       />
       <ModalEliminarGlobal
         open={Boolean(stateConfirm)} row={stateConfirm} operacion="advertencia" showLoadingEffect={false}
@@ -168,7 +168,6 @@ export default function ConfiguracionVentas({ writable, feedback, showFeedback }
           return { mensaje: result.mensaje };
         }}
       />
-      {feedback}
     </ModulePage>
   );
 }

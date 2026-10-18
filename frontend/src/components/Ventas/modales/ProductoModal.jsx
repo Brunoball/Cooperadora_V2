@@ -15,7 +15,7 @@ const emptyProduct = {
   stock: "",
 };
 
-export default function ProductoModal({ open, initial, saving, onClose, onSave }) {
+export default function ProductoModal({ open, initial, saving, onClose, onSave, onFeedback }) {
   const [form, setForm] = useState(emptyProduct);
   useEffect(() => {
     if (!open) return;
@@ -34,6 +34,21 @@ export default function ProductoModal({ open, initial, saving, onClose, onSave }
 
   const submit = (event) => {
     event.preventDefault();
+    if (!form.nombre.trim()) {
+      onFeedback?.("error", "Ingresá el nombre del producto.");
+      return;
+    }
+    const precioPrincipal = Number(form.precio_anticipada);
+    const precioAlternativo = Number(form.precio_puerta);
+    if (form.precio_anticipada === "" || form.precio_anticipada == null || !Number.isFinite(precioPrincipal) || precioPrincipal < 0 ||
+      (form.dos_precios && (form.precio_puerta === "" || form.precio_puerta == null || !Number.isFinite(precioAlternativo) || precioAlternativo < 0))) {
+      onFeedback?.("error", "Revisá los precios del producto. Deben ser números válidos mayores o iguales a cero.");
+      return;
+    }
+    if (form.stock !== "" && form.stock != null && (!Number.isInteger(Number(form.stock)) || Number(form.stock) < 0)) {
+      onFeedback?.("error", "El stock debe ser un número entero mayor o igual a cero, o quedar vacío.");
+      return;
+    }
     onSave({
       ...form,
       nombre: upper(form.nombre, 150),
@@ -45,7 +60,7 @@ export default function ProductoModal({ open, initial, saving, onClose, onSave }
   };
 
   return (
-    <CrudModal open={open} title={form.id_producto ? "Editar producto" : "Nuevo producto"} subtitle="Catálogo de productos o conceptos vendibles." onClose={onClose} onSubmit={submit} saving={saving} showSavingEffect={false} wide modalClassName="ventas-modal ventas-product-modal">
+    <CrudModal open={open} title={form.id_producto ? "Editar producto" : "Nuevo producto"} subtitle="Catálogo de productos o conceptos vendibles." onClose={onClose} onSubmit={submit} noValidate saving={saving} showSavingEffect={false} wide modalClassName="ventas-modal ventas-product-modal">
       <div className="ventas-form-grid ventas-form-grid--product">
         <h3 className="ventas-product-section-title"><VentasSectionIcon kind="product" />Datos del producto</h3>
         <FloatingField label="Nombre" wide className="ventas-modal-field">

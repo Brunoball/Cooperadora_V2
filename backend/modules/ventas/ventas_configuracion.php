@@ -461,6 +461,8 @@ trait VentasConfiguracion
         $filter=build_search_filter($search,["vp.dni LIKE {param}","vp.nombre_apellido LIKE {param}","a.num_documento LIKE {param}","a.apellido LIKE {param}","a.nombre LIKE {param}"],120,null,8);
         // Con un único carácter no alfanumérico no se genera un filtro SQL válido.
         if ($filter['sql'] === '') api_success(['items'=>[]]);
+        // No ofrecer alumnos egresados, dados de baja ni eliminados en el
+        // buscador de compradores; las personas externas siguen habilitadas.
         $sql="SELECT * FROM (
                 SELECT vp.id_persona, vp.dni, vp.nombre_apellido, vp.id_alumno, vp.origen, a.telefono,
                        an.nombre_anio, d.nombre_division
@@ -468,8 +470,17 @@ trait VentasConfiguracion
                   LEFT JOIN alumnos a ON a.id_alumno=vp.id_alumno
                   LEFT JOIN anio an ON an.id_anio=a.id_anio
                   LEFT JOIN division d ON d.id_division=a.id_division
-                 WHERE (vp.id_alumno IS NULL OR (COALESCE(a.eliminado, 0) = 0 AND a.ingreso <= CURDATE()))
-                   AND {$filter['sql']}
+                 WHERE (
+                       (vp.id_alumno IS NOT NULL AND a.eliminado = 0 AND a.activo = 1 AND a.ingreso <= CURDATE())
+                       OR (vp.id_alumno IS NULL AND NOT EXISTS (
+                           SELECT 1 FROM alumnos alumno_inactivo
+                            WHERE alumno_inactivo.num_documento = vp.dni
+                              AND (COALESCE(alumno_inactivo.activo, 0) <> 1
+                                   OR COALESCE(alumno_inactivo.eliminado, 1) <> 0
+                                   OR alumno_inactivo.ingreso IS NULL
+                                   OR alumno_inactivo.ingreso > CURDATE())
+                       ))
+                   ) AND {$filter['sql']}
                 UNION
                 SELECT NULL AS id_persona, a.num_documento AS dni, TRIM(CONCAT(a.apellido,' ',COALESCE(a.nombre,''))) AS nombre_apellido,
                        a.id_alumno, 'alumno' AS origen, a.telefono, an.nombre_anio, d.nombre_division
@@ -477,7 +488,7 @@ trait VentasConfiguracion
                   LEFT JOIN ventas_personas vp ON vp.id_alumno=a.id_alumno OR vp.dni=a.num_documento
                   LEFT JOIN anio an ON an.id_anio=a.id_anio
                   LEFT JOIN division d ON d.id_division=a.id_division
-                 WHERE a.eliminado = 0 AND a.ingreso <= CURDATE() AND vp.id_persona IS NULL AND {$filter['sql']}
+                 WHERE a.eliminado = 0 AND a.activo = 1 AND a.ingreso <= CURDATE() AND vp.id_persona IS NULL AND {$filter['sql']}
              ) x ORDER BY nombre_apellido LIMIT 30";
         $statement=$db->prepare($sql); $statement->execute(array_merge($filter['params'],$filter['params']));
         api_success(['items'=>$statement->fetchAll(PDO::FETCH_ASSOC)?:[]]);
