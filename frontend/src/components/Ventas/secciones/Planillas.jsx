@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faChevronDown, faFileLines, faPrint, faUsers, faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
@@ -62,6 +62,36 @@ export default function Planillas({ writable, showFeedback }) {
   const [conciliacionAbierta, setConciliacionAbierta] = useState(false);
   const previewBodyRef = useRef(null);
   const sequenceRef = useRef(0);
+
+  // El contenedor general no siempre tiene un alto definido: medir el espacio
+  // visible permite que flex limite el cuerpo y active su scroll interno.
+  useLayoutEffect(() => {
+    const pageElement = previewBodyRef.current?.closest(".ventas-page--planillas");
+    if (!pageElement) return undefined;
+    let frame;
+    const measure = () => {
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const top = pageElement.getBoundingClientRect().top;
+      const height = Math.max(180, Math.floor(viewportHeight - top - 12));
+      pageElement.style.setProperty("--ventas-planillas-height", `${height}px`);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer = new ResizeObserver(schedule);
+    if (pageElement.parentElement) observer.observe(pageElement.parentElement);
+    window.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("resize", schedule);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      pageElement.style.removeProperty("--ventas-planillas-height");
+    };
+  }, []);
 
   const campaignOptions = useMemo(() => ordenarCampanias(options.campanias || []).map((item) => ({
     value: String(item.id_campania), label: campaniaOpcion(item),
@@ -433,24 +463,31 @@ export default function Planillas({ writable, showFeedback }) {
       {campaign && type === "cursos" && !isPreviewPending && gruposCursos.length > 0 && (
         <section className="ventas-docentes-responsables" aria-label="Docentes responsables de las planillas">
           <div className="ventas-docentes-responsables__head">
-            <strong>DOCENTES RESPONSABLES POR CURSO Y DIVISIÓN</strong>
-            <span>{gruposCursos.length === 1
-              ? "Esta asignación pertenece solo a este curso y a la venta seleccionada."
-              : `${gruposCursos.length} planillas de cursos · cada docente se guarda por separado para esta venta.`}</span>
-          </div>
-          {gruposCursos.length > 1 && (
+            <span className="ventas-docentes-responsables__icon" aria-hidden="true"><FontAwesomeIcon icon={faUsers} /></span>
+            <div className="ventas-docentes-responsables__title">
+              <strong>Docentes responsables por curso y división</strong>
+              <span>Asignaciones de la venta seleccionada</span>
+            </div>
+            <span className="ventas-docentes-responsables__count">
+              {gruposCursos.filter((grupo) => responsablesPorCurso.get(`${grupo.id_anio}:${grupo.id_division}`)?.id_docente).length} / {gruposCursos.length} asignados
+            </span>
             <button type="button" className="ventas-docentes-responsables__toggle"
-              aria-expanded={asignacionesAbiertas} aria-controls="ventas-asignaciones-por-curso"
-              onClick={() => setAsignacionesAbiertas((abierto) => !abierto)}>
-              {asignacionesAbiertas ? "Ocultar cursos" : "Ver y asignar docentes de cada curso"}
+                aria-expanded={asignacionesAbiertas} aria-controls="ventas-asignaciones-por-curso"
+                onClick={() => { setAsignacionesAbiertas(!asignacionesAbiertas); setConciliacionAbierta(false); }}>
+                {asignacionesAbiertas ? "Ocultar cursos" : writable ? "Asignar docentes" : "Ver docentes"}
+                <FontAwesomeIcon icon={faChevronDown} aria-hidden="true" />
             </button>
-          )}
-          {(gruposCursos.length === 1 || asignacionesAbiertas) && (
-            <div className="ventas-docentes-responsables__grid" id="ventas-asignaciones-por-curso">
+          </div>
+          <div className={`ventas-docentes-responsables__collapse${asignacionesAbiertas ? " is-open" : ""}`}
+            id="ventas-asignaciones-por-curso" aria-hidden={!asignacionesAbiertas}
+            inert={asignacionesAbiertas ? undefined : ""}>
+            <div className="ventas-docentes-responsables__collapseBody">
+            <div className="ventas-docentes-responsables__grid">
               {gruposCursos.map((grupo) => (
                 <DocenteResponsableSelector
                   key={`${campaign}:${grupo.id_anio}:${grupo.id_division}`}
                   grupo={grupo}
+                  panelOpen={asignacionesAbiertas}
                   docentes={options.docentes}
                   asignacion={responsablesPorCurso.get(`${grupo.id_anio}:${grupo.id_division}`)}
                   writable={writable}
@@ -459,7 +496,8 @@ export default function Planillas({ writable, showFeedback }) {
                 />
               ))}
             </div>
-          )}
+            </div>
+          </div>
         </section>
       )}
       <div className={`ventas-planillas-panel${!campaign && !isPreviewPending ? " ventas-planillas-panel--empty" : ""}`}>
@@ -595,7 +633,7 @@ export default function Planillas({ writable, showFeedback }) {
                     className={`ventas-planillas-conciliacionToggle${conciliacionAbierta ? " is-open" : ""}`}
                     aria-expanded={conciliacionAbierta}
                     aria-controls="ventas-planillas-detalle-conciliacion"
-                    onClick={() => setConciliacionAbierta((current) => !current)}
+                    onClick={() => { setConciliacionAbierta(!conciliacionAbierta); setAsignacionesAbiertas(false); }}
                     title={`${sinAsignar.cantidad} venta(s) sin asignar · ${money(sinAsignar.importe_cobrado)}`}
                   >
                     <span>{conciliacionAbierta ? "Ocultar conciliación" : "Ver conciliación"}</span>

@@ -3857,8 +3857,6 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 .ventas-docente-responsable__info strong { font-size: 13px; }
 .ventas-docente-responsable__info small { font-size: 11px; overflow-wrap: anywhere; }
 .ventas-docente-responsable__control { position: relative; display: flex; flex: 1 1 100%; gap: 7px; min-width: 0; }
-.ventas-docente-responsable__control input { flex: 1 1 auto; min-width: 0; padding: 9px; border: 1px solid var(--mov-border, #cbd5df); border-radius: 6px; background: var(--surface-color, #fff); color: inherit; font: inherit; font-size: 12px; }
-.ventas-docente-responsable__control input:focus-visible { outline: 2px solid var(--balto-action, #357cba); outline-offset: 1px; }
 .ventas-docente-responsable__clear { flex: 0 0 auto; padding: 0 10px; border-radius: 6px; border: 1px solid var(--mov-border, #dce3eb); background: transparent; color: inherit; cursor: pointer; }
 .ventas-docente-responsable__results { position: absolute; z-index: 30; top: calc(100% + 3px); left: 0; right: 0; background: var(--surface-color, #fff); border: 1px solid var(--mov-border, #cbd5df); border-radius: 6px; box-shadow: 0 6px 22px #0002; max-height: 260px; overflow-y: auto; }
 .ventas-docente-responsable__results button { width: 100%; border: 0; padding: 9px 10px; background: transparent; color: inherit; text-align: left; display: flex; flex-direction: column; gap: 3px; cursor: pointer; }
@@ -3868,3 +3866,148 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 .ventas-docentes-responsables__toggle { padding: 8px 12px; margin-bottom: 10px; background: transparent; color: inherit; border: 1px solid var(--mov-border, #dce3eb); border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px; }
 .ventas-docentes-responsables__toggle:hover { background: color-mix(in srgb, var(--balto-action, #357cba) 5%, transparent); }
+
+/* Planillas: el cuerpo cede espacio a responsables y conserva el pie visible. */
+.ventas-page--planillas .module-card { min-height: 0; }
+.ventas-page--planillas .module-card > .module-card__head,
+.ventas-page--planillas .ventas-planillas-foundNotice,
+.ventas-page--planillas .ventas-planillas-searchResults { flex-shrink: 0; }
+.ventas-page--planillas .ventas-planillas-panel { flex: 1 1 0; min-height: 180px; }
+.ventas-page--planillas .ventas-planillas-tableCard {
+  flex: 1 1 0; height: auto; min-height: 0;
+}
+.ventas-planillas-tableCard .ventas-planillas-pagination {
+  flex: 0 0 auto; background: var(--mov-card); position: relative; z-index: 1;
+}
+.ventas-planillas-pagination .global-pagination__controls { flex-shrink: 0; }
+.ventas-page--planillas .ventas-docentes-responsables {
+  flex: 0 0 auto; margin: 0; padding: 10px 16px;
+  border: 0; border-top: 1px solid var(--mov-border); border-radius: 0;
+  color: var(--mov-text); background: var(--mov-card);
+}
+.ventas-docentes-responsables__head { flex-wrap: wrap; justify-content: flex-start; gap: 8px 12px; margin: 0; }
+.ventas-docentes-responsables__head .ventas-docentes-responsables__icon {
+  display: grid; place-items: center; flex: 0 0 32px; height: 32px; opacity: 1;
+  background: color-mix(in srgb, var(--balto-action) 9%, var(--mov-card)); color: var(--balto-action);
+}
+.ventas-docentes-responsables__title { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ventas-docentes-responsables__title strong { color: var(--balto-ink); font-size: 12px; font-weight: 600; }
+.ventas-docentes-responsables__title span { color: var(--mov-muted); font-size: 11px; opacity: 1; }
+.ventas-docentes-responsables__head .ventas-docentes-responsables__count {
+  font-size: 11px; opacity: 1; white-space: nowrap; padding: 4px 8px;
+  color: var(--balto-action); background: color-mix(in srgb, var(--balto-action) 8%, var(--mov-card));
+}
+.ventas-docentes-responsables__toggle { display: inline-flex; align-items: center; gap: 9px; margin: 0; padding: 7px 10px; border-radius: 0; color: var(--balto-action); }
+.ventas-docentes-responsables__toggle svg { font-size: 10px; transition: transform 180ms ease; }
+.ventas-docentes-responsables__toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.ventas-docentes-responsables__grid {
+  margin-top: 10px; max-height: 25vh; overflow-y: auto; scrollbar-gutter: stable;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  align-items: start; gap: 8px; padding: 2px; animation: ventas-responsables-entrada 180ms ease-out;
+}
+.ventas-docente-responsable { border-radius: 0; padding: 10px; gap: 8px; background: color-mix(in srgb, var(--balto-action) 3%, var(--mov-card)); }
+.ventas-docente-responsable__info strong { color: var(--balto-action); }
+.ventas-docente-responsable__info small { color: var(--mov-muted); font-size: 10px; line-height: 1.4; }
+.ventas-docente-responsable__control { flex-wrap: wrap; }
+.ventas-docente-responsable__clear { border-radius: 0; font-size: 11px; }
+/* Resultados dentro del área desplazable: ninguna opción queda recortada. */
+.ventas-docente-responsable__results { position: static; flex: 1 0 100%; max-height: 160px; background: var(--mov-card); border-radius: 0; box-shadow: none; }
+.ventas-docente-responsable__results button[aria-selected="true"] { background: color-mix(in srgb, var(--balto-action) 10%, var(--mov-card)); }
+@keyframes ventas-responsables-entrada { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .ventas-docentes-responsables__grid { animation: none; }
+  .ventas-docentes-responsables__toggle svg { transition: none; }
+}
+
+/* Alto definido desde el borde superior real del módulo, no desde sus filas. */
+.mov-page.module-page.ventas-page--planillas {
+  height: var(--ventas-planillas-height, calc(100vh - 100px));
+  min-height: 0;
+}
+.ventas-page--planillas .module-card {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.ventas-page--planillas .ventas-planillas-tableWrap {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.ventas-page--planillas .ventas-planillas-sheetScroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* Buscador con etiqueta flotante y opciones fuera de los contenedores con scroll. */
+/* Solo distribución: tipografía, borde, foco y animación vienen de module.css. */
+.ventas-docente-responsable__field.module-filter {
+  flex: 1 1 0; min-width: 0;
+}
+.ventas-docente-responsable__field .module-floatingLabel {
+  max-width: calc(100% - 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ventas-docente-responsable__results.ventas-docente-responsable__results--portal {
+  position: fixed; z-index: 2147483000; right: auto; margin: 0;
+  box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  box-shadow: 0 8px 24px #0002; border: 1px solid var(--mov-border);
+}
+
+/* Responsables: acción secundaria y lista flotante con esquinas protegidas. */
+.ventas-docente-responsable__clear {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 12px; border-radius: 8px; font: inherit; font-size: 11px; font-weight: 600;
+  color: var(--danger-color, #b42332);
+  border: 1px solid color-mix(in srgb, var(--danger-color, #b42332) 22%, var(--mov-border));
+  background: color-mix(in srgb, var(--danger-color, #b42332) 5%, var(--mov-card));
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.ventas-docente-responsable__clear:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger-color, #b42332) 11%, var(--mov-card));
+  border-color: color-mix(in srgb, var(--danger-color, #b42332) 45%, var(--mov-border));
+}
+.ventas-docente-responsable__clear:focus-visible { outline: 2px solid var(--balto-action); outline-offset: 2px; }
+.ventas-docente-responsable__clear:disabled { opacity: .5; cursor: not-allowed; }
+.ventas-docente-responsable__results.ventas-docente-responsable__results--portal {
+  border-radius: 12px; padding: 5px; overflow: hidden;
+  box-shadow: 0 10px 28px #0002;
+}
+.ventas-docente-responsable__resultsScroll {
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--mov-border) transparent;
+  border-radius: 7px;
+}
+.ventas-docente-responsable__resultsScroll::-webkit-scrollbar { width: 6px; }
+.ventas-docente-responsable__resultsScroll::-webkit-scrollbar-track { background: transparent; margin-block: 5px; }
+.ventas-docente-responsable__resultsScroll::-webkit-scrollbar-thumb { background: var(--mov-border); border-radius: 8px; }
+.ventas-docente-responsable__resultsScroll button {
+  flex-direction: row; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 10px 12px; border-radius: 7px;
+  transition: background 150ms ease;
+}
+.ventas-docente-responsable__optionText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ventas-docente-responsable__optionText strong { font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.ventas-docente-responsable__resultsScroll button small { padding: 0; font-size: 10px; opacity: .65; }
+.ventas-docente-responsable__resultsScroll button > svg { color: var(--balto-action); flex-shrink: 0; font-size: 12px; }
+.ventas-docente-responsable__resultsScroll button:focus-visible { outline: 2px solid var(--balto-action); outline-offset: -2px; }
+.ventas-docente-responsable__empty { display: block; padding: 14px 12px; font-size: 12px; opacity: .7; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) {
+  .ventas-docente-responsable__clear, .ventas-docente-responsable__resultsScroll button { transition: none; }
+}
+
+/* Misma transición que conciliación, conservando el contenido durante el cierre. */
+.ventas-docentes-responsables__collapse {
+  display: grid; grid-template-rows: 0fr; min-height: 0;
+  overflow: hidden; opacity: 0; visibility: hidden;
+  transition: grid-template-rows 280ms ease-in-out, opacity 200ms ease, visibility 0s linear 280ms;
+}
+.ventas-docentes-responsables__collapse.is-open {
+  grid-template-rows: 1fr; opacity: 1; visibility: visible;
+  transition: grid-template-rows 280ms ease-in-out, opacity 200ms ease, visibility 0s;
+}
+.ventas-docentes-responsables__collapseBody { min-height: 0; overflow: hidden; }
+.ventas-docentes-responsables__collapse .ventas-docentes-responsables__grid { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ventas-docentes-responsables__collapse,
+  .ventas-docentes-responsables__collapse.is-open { transition: none; }
+}
