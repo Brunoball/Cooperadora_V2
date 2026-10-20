@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faClipboardList, faCommentDots, faFilePdf, faCircleInfo } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import { VentasCheckbox } from "../VentasUI";
@@ -144,7 +146,7 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
     wide modalClassName="ventas-modal ventas-campaign-modal"
   >
     <EntityTabs
-      tabs={[{ value: "datos", label: "Datos de la venta" }, { value: "mensajes", label: "Mensajes WhatsApp" }]}
+      tabs={[{ value: "datos", label: "Datos de la venta", icon: faClipboardList }, { value: "mensajes", label: "Mensajes WhatsApp", icon: faCommentDots }]}
       value={activeTab} onChange={setActiveTab}
       idPrefix="ventas-campaign-config-tab"
       ariaLabel="Pestañas de configuración de venta"
@@ -227,37 +229,58 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
     <EntityTabPane active={activeTab === "mensajes"} disableWhenInactive>
       <div className="ventas-campaign-messages-tab">
         <section className="ventas-message-panel" aria-label="Mensaje de venta disponible">
-          <div className="ventas-config-group-title">
-            <strong>Mensaje de WhatsApp: venta disponible</strong>
-            <small>Este mensaje aparece después de confirmar los datos del alumno. Escribí directamente cómo querés que lo reciba la familia.</small>
+          <div className="ventas-message-panel__heading">
+            <span className="ventas-message-panel__icon" aria-hidden="true"><FontAwesomeIcon icon={faCommentDots} /></span>
+            <div className="ventas-config-group-title">
+              <strong>Mensaje de WhatsApp: venta disponible</strong>
+              <small>Este mensaje aparece después de confirmar los datos del alumno. Escribí directamente cómo querés que lo reciba la familia.</small>
+            </div>
           </div>
-          <label className="ventas-message-editor">
-            <strong>Mensaje para la familia</strong>
-            <textarea data-preserve-case="true" rows={12}
-              value={mensajeRenderizado(form.mensaje_indicaciones, form, currentProduct)}
-              onChange={(e) => set("mensaje_indicaciones", actualizarMensajeVisual(form.mensaje_indicaciones, e.target.value, form, currentProduct))} />
-            <small className={contarCaracteresMensaje(form.mensaje_indicaciones) > MENSAJE_MAX_CARACTERES ? "ventas-message-count--error" : ""}>{contarCaracteresMensaje(mensajeRenderizado(form.mensaje_indicaciones, form, currentProduct))} caracteres del mensaje</small>
-          </label>
+          <div className="ventas-message-editor">
+            <FloatingField label="Mensaje para la familia" textarea className="ventas-modal-field ventas-message-editor__field">
+              <textarea data-preserve-case="true" rows={12} placeholder="Escribí el mensaje que recibirá la familia…"
+                value={mensajeRenderizado(form.mensaje_indicaciones, form, currentProduct)}
+                onChange={(e) => set("mensaje_indicaciones", actualizarMensajeVisual(form.mensaje_indicaciones, e.target.value, form, currentProduct))} />
+            </FloatingField>
+            <div className="ventas-message-editor__meta">
+              <small className={contarCaracteresMensaje(form.mensaje_indicaciones) > MENSAJE_MAX_CARACTERES ? "ventas-message-count--error" : ""}>
+                <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" /> {contarCaracteresMensaje(mensajeRenderizado(form.mensaje_indicaciones, form, currentProduct))} / {MENSAJE_MAX_CARACTERES} caracteres
+              </small>
+            </div>
+          </div>
         </section>
         <section className="ventas-message-panel" aria-label="Mensajes importantes para el PDF">
-          <div className="ventas-config-group-title">
-            <strong>Mensajes importantes para el PDF</strong>
-            <small>Podés escribir un mensaje distinto para cada situación. Si no querés incluir ninguno, dejá su cuadro vacío.</small>
+          <div className="ventas-message-panel__heading">
+            <span className="ventas-message-panel__icon" aria-hidden="true"><FontAwesomeIcon icon={faFilePdf} /></span>
+            <div className="ventas-config-group-title">
+              <strong>Mensajes importantes para el PDF</strong>
+              <small>Podés escribir un mensaje distinto para cada situación. Si no querés incluir ninguno, dejá su cuadro vacío.</small>
+            </div>
           </div>
-          <label className="ventas-message-editor">
-            <strong>Si paga solo la ganancia (0 productos)</strong>
-            <textarea data-preserve-case="true" rows={4}
-              value={mensajeRenderizado(form.mensaje_pago_ganancia, form, currentProduct)}
-              onChange={(e) => set("mensaje_pago_ganancia", actualizarMensajeVisual(form.mensaje_pago_ganancia, e.target.value, form, currentProduct))} />
-            <small className={contarCaracteresMensaje(form.mensaje_pago_ganancia) > MENSAJE_MAX_CARACTERES ? "ventas-message-count--error" : ""}>{contarCaracteresMensaje(mensajeRenderizado(form.mensaje_pago_ganancia, form, currentProduct))} caracteres del mensaje</small>
-          </label>
-          <label className="ventas-message-editor">
-            <strong>Si compra uno o más productos</strong>
-            <textarea data-preserve-case="true" rows={5}
-              value={mensajeRenderizado(form.mensaje_pago_compra, form, currentProduct)}
-              onChange={(e) => set("mensaje_pago_compra", actualizarMensajeVisual(form.mensaje_pago_compra, e.target.value, form, currentProduct))} />
-            <small className={contarCaracteresMensaje(form.mensaje_pago_compra) > MENSAJE_MAX_CARACTERES ? "ventas-message-count--error" : ""}>{contarCaracteresMensaje(mensajeRenderizado(form.mensaje_pago_compra, form, currentProduct))} caracteres del mensaje</small>
-          </label>
+          <div className="ventas-message-editor">
+            <FloatingField label="Si paga solo la ganancia (0 productos)" textarea className="ventas-modal-field ventas-message-editor__field">
+              <textarea data-preserve-case="true" rows={4} placeholder="Mensaje cuando se paga solamente la ganancia…"
+                value={mensajeRenderizado(form.mensaje_pago_ganancia, form, currentProduct)}
+                onChange={(e) => set("mensaje_pago_ganancia", actualizarMensajeVisual(form.mensaje_pago_ganancia, e.target.value, form, currentProduct))} />
+            </FloatingField>
+            <div className="ventas-message-editor__meta">
+              <small className={contarCaracteresMensaje(form.mensaje_pago_ganancia) > MENSAJE_MAX_CARACTERES ? "ventas-message-count--error" : ""}>
+                <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" /> {contarCaracteresMensaje(mensajeRenderizado(form.mensaje_pago_ganancia, form, currentProduct))} / {MENSAJE_MAX_CARACTERES} caracteres
+              </small>
+            </div>
+          </div>
+          <div className="ventas-message-editor">
+            <FloatingField label="Si compra uno o más productos" textarea className="ventas-modal-field ventas-message-editor__field">
+              <textarea data-preserve-case="true" rows={5} placeholder="Mensaje cuando se compra uno o más productos…"
+                value={mensajeRenderizado(form.mensaje_pago_compra, form, currentProduct)}
+                onChange={(e) => set("mensaje_pago_compra", actualizarMensajeVisual(form.mensaje_pago_compra, e.target.value, form, currentProduct))} />
+            </FloatingField>
+            <div className="ventas-message-editor__meta">
+              <small className={contarCaracteresMensaje(form.mensaje_pago_compra) > MENSAJE_MAX_CARACTERES ? "ventas-message-count--error" : ""}>
+                <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" /> {contarCaracteresMensaje(mensajeRenderizado(form.mensaje_pago_compra, form, currentProduct))} / {MENSAJE_MAX_CARACTERES} caracteres
+              </small>
+            </div>
+          </div>
         </section>
       </div>
     </EntityTabPane>

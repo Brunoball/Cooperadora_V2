@@ -2260,3 +2260,178 @@
 .wp-chat-mode-indicator.is-manual { color: #ff908c; background: rgba(239,83,80,.13); }
 :root[data-botpanel-theme="light"] .wp-chat-mode-indicator.is-bot { color: #047857; background: rgba(4,120,87,.09); }
 :root[data-botpanel-theme="light"] .wp-chat-mode-indicator.is-manual { color: #b91c1c; background: rgba(185,28,28,.08); }
+
+
+/* ======================================================
+   LISTA DE CHATS · COLUMNAS ESTABLES
+   El indicador Bot/Manual mantiene su posicion, aunque
+   varien el telefono, los mensajes y la etiqueta.
+====================================================== */
+.wp-chatrow--status{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px 96px;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.wp-chatrow--status .wp-chatlast{
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.wp-chatrow--status .wp-chat-mode-indicator{
+  box-sizing: border-box;
+  width: 74px;
+  min-width: 0;
+  height: 25px;
+  justify-self: center;
+}
+
+.wp-chatrow--status .wp-tag,
+.wp-chatrow--status .wp-unread{
+  box-sizing: border-box;
+  justify-self: end;
+  max-width: 96px;
+}
+
+.wp-chatrow--status .wp-tag{
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 400px){
+  .wp-chatrow--status{
+    grid-template-columns: minmax(0, 1fr) 68px 82px;
+    column-gap: 5px;
+  }
+  .wp-chatrow--status .wp-chat-mode-indicator{ width: 68px; }
+  .wp-chatrow--status .wp-tag,
+  .wp-chatrow--status .wp-unread{ max-width: 82px; }
+}
+
+/* ======================================================
+   ENCABEZADO · SUBTITULO LEGIBLE EN AMBOS TEMAS
+   Evita el gris oscuro sobre la cabecera verde y el
+   truncamiento del texto cuando falta ancho.
+====================================================== */
+.wp-side-top .wp-brand-sub{
+  display: block;
+  max-width: 100%;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: break-word;
+  opacity: 1;
+}
+
+:root[data-botpanel-theme="light"] .wp-side-top .wp-brand-sub{
+  color: rgba(255, 255, 255, .9);
+}
+
+:root:not([data-botpanel-theme="light"]) .wp-side-top .wp-brand-sub{
+  color: #b3c6ce;
+}
+
+
+/* Lista de chats: el estado Bot/Manual queda sobre el avatar.
+   Así no consume columnas ni corta el teléfono o el número de mensajes. */
+.wp-chatitem > .wp-avatar {
+  position: relative;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+.wp-chatitem .wp-chat-mode-indicator--avatar {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: max-content;
+  min-width: 36px;
+  max-width: 59px;
+  height: 19px;
+  padding: 0 5px;
+  gap: 3px;
+  border: 1px solid var(--wp-border-soft);
+  border-radius: 6px;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 750;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .1);
+}
+.wp-chatitem .wp-chat-mode-indicator--avatar.is-bot {
+  background: #dff6eb;
+  color: #047857;
+  border-color: rgba(4, 120, 87, .18);
+}
+.wp-chatitem .wp-chat-mode-indicator--avatar.is-manual {
+  background: #ffe6e4;
+  color: #ad3232;
+  border-color: rgba(173, 50, 50, .18);
+}
+:root:not([data-botpanel-theme="light"]) .wp-chatitem .wp-chat-mode-indicator--avatar.is-bot {
+  background: #143d33;
+  color: #80f0bd;
+}
+:root:not([data-botpanel-theme="light"]) .wp-chatitem .wp-chat-mode-indicator--avatar.is-manual {
+  background: #4c2626;
+  color: #ffc4c1;
+}
+.wp-chatrow--status {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 96px);
+  column-gap: 9px;
+}
+.wp-chatrow--status .wp-tag,
+.wp-chatrow--status .wp-unread { max-width: 96px; }
+@media (max-width: 400px) {
+  .wp-chatrow--status {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 80px);
+    column-gap: 5px;
+  }
+  .wp-chatrow--status .wp-tag,
+  .wp-chatrow--status .wp-unread { max-width: 80px; }
+}
+
+/* Bot / Manual: icono circular fijo en el avatar.
+   Nunca ocupa espacio de nombre, fecha ni datos del chat. */
+.wp-chatitem .wp-chat-mode-indicator--avatar {
+  position: absolute;
+  top: auto;
+  right: -4px;
+  bottom: -3px;
+  left: auto;
+  transform: none;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  min-width: 20px;
+  max-width: 20px;
+  height: 20px;
+  padding: 0;
+  gap: 0;
+  border: 2px solid var(--wp-sidebar-bg, #fff);
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0,0,0,.14);
+  pointer-events: auto;
+}
+.wp-chatitem .wp-chat-mode-indicator--avatar svg { display: block; }
+@media (max-width: 430px) {
+  .wp-chatitem .wp-chat-mode-indicator--avatar {
+    right: -3px;
+    bottom: -3px;
+  }
+}

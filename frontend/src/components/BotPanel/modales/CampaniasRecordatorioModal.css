@@ -33,7 +33,8 @@
   animation: wpCampaignBackdropIn .12s ease-out;
 }
 
-.wp-campaign-modal {
+.wp-campaign-modal,
+.wp-campaign-info-portal {
   --campaign-green: var(--wp-brand-primary, #00a884);
   --campaign-green-hover: var(--wp-brand-primary-hover, #008f72);
   --campaign-green-strong: var(--wp-brand-strong, #075e54);
@@ -49,7 +50,9 @@
   --campaign-border: var(--wp-border, rgba(255,255,255,.09));
   --campaign-border-soft: var(--wp-border-soft, rgba(255,255,255,.06));
   --campaign-danger-bg: var(--wp-danger-bg, rgba(239,83,80,.12));
+}
 
+.wp-campaign-modal {
   position: relative;
   width: min(1180px, 100%);
   height: min(820px, calc(100dvh - 36px));
@@ -1311,7 +1314,8 @@
   background: rgba(15,23,42,.42);
 }
 
-:root[data-botpanel-theme="light"] .wp-campaign-modal {
+:root[data-botpanel-theme="light"] .wp-campaign-modal,
+:root[data-botpanel-theme="light"] .wp-campaign-info-portal {
   --campaign-bg: #f0f2f5;
   --campaign-panel: #ffffff;
   --campaign-topbar: rgba(240,242,245,.97);
@@ -1321,6 +1325,9 @@
   --campaign-muted: #54656f;
   --campaign-border: rgba(17,27,33,.12);
   --campaign-border-soft: rgba(17,27,33,.075);
+}
+
+:root[data-botpanel-theme="light"] .wp-campaign-modal {
   box-shadow: 0 28px 65px rgba(15,23,42,.20), 0 2px 8px rgba(15,23,42,.08);
 }
 
@@ -2175,3 +2182,593 @@
 .wp-campaign-quota-dialog p { font-size:13px; line-height:1.55; }
 .wp-campaign-quota-dialog > .wp-campaign-primary { margin-top:9px; }
 @media(max-width:640px){.wp-campaign-quota-strip { margin:10px 12px 4px; }.wp-campaign-demo-label { font-size:9px; } }
+
+
+/* =========================================================
+   CAMPAÑAS · Ajustes de distribución y pie anclado
+   El scroll es del contenido; el pie siempre toca el fondo.
+   ========================================================= */
+.wp-campaign-form-wrap {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.wp-campaign-form-wrap > .wp-campaign-tab-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px 3px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--campaign-border) transparent;
+}
+.wp-campaign-form-wrap > .wp-campaign-tab-content > * {
+  flex: 0 0 auto;
+}
+.wp-campaign-form-wrap > .wp-campaign-form-actions {
+  position: relative;
+  inset: auto;
+  z-index: 3;
+  flex: 0 0 auto;
+  margin: -14px -18px 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--campaign-border-soft);
+  background: var(--campaign-panel);
+  backdrop-filter: none;
+}
+
+/* Programación: fecha + destinatarios a la izquierda,
+   plan a la derecha, ambos comenzando desde arriba. */
+.wp-campaign-schedule { display: block; }
+.wp-campaign-schedule > h3 { margin: 0 0 14px; }
+.wp-campaign-schedule-grid {
+  display: grid;
+  grid-template-columns: minmax(235px, .86fr) minmax(0, 1.64fr);
+  align-items: start;
+  gap: 15px;
+}
+.wp-campaign-schedule-controls {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 14px;
+}
+.wp-campaign-schedule-controls .wp-campaign-date-help {
+  display: block;
+  margin-top: 1px;
+}
+.wp-campaign-schedule-controls .wp-campaign-audience-summary {
+  min-width: 0;
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 7px;
+  background: var(--campaign-card);
+  border-color: var(--campaign-border);
+}
+.wp-campaign-schedule-controls .wp-campaign-audience-summary > strong,
+.wp-campaign-schedule-controls .wp-campaign-audience-summary > span {
+  max-width: 100%;
+  line-height: 1.4;
+}
+.wp-campaign-schedule-controls .wp-campaign-audience-summary button {
+  margin-left: 0;
+  margin-top: 1px;
+  padding: 4px 0;
+}
+.wp-campaign-schedule-grid > .wp-campaign-delivery-summary.is-expanded {
+  min-width: 0;
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: 10px;
+  background: var(--campaign-card);
+  gap: 7px;
+}
+.wp-campaign-delivery-head {
+  gap: 8px 12px;
+  padding-bottom: 9px;
+  margin-bottom: 1px;
+  border-bottom: 1px solid var(--campaign-border-soft);
+}
+.wp-campaign-delivery-head > strong { font-size: 12.5px; }
+.wp-campaign-delivery-head .wp-campaign-info-link {
+  font-size: 11px;
+  text-decoration: none;
+}
+.wp-campaign-delivery-summary > span {
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.wp-campaign-delivery-summary > small {
+  margin-top: 5px;
+  padding-top: 9px;
+  border-top: 1px solid var(--campaign-border-soft);
+  font-size: 10.5px;
+}
+
+/* Información de cupos: lectura sencilla y un único scroll. */
+.wp-campaign-info-layer { padding: 16px; }
+.wp-campaign-quota-dialog {
+  width: min(590px, 100%);
+  max-width: 100%;
+  max-height: min(640px, calc(100dvh - 40px));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+}
+.wp-campaign-quota-dialog-head {
+  flex: 0 0 auto;
+  gap: 12px;
+  padding: 17px 19px;
+  border-bottom: 1px solid var(--campaign-border-soft);
+  color: var(--campaign-text);
+}
+.wp-campaign-info-heading-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--campaign-green-soft);
+  color: var(--campaign-green);
+  font-size: 16px;
+}
+.wp-campaign-quota-dialog-head > div { min-width: 0; flex: 1; }
+.wp-campaign-quota-dialog-head h3 { font-size: 16px; line-height: 1.25; }
+.wp-campaign-quota-dialog-head small {
+  display: block;
+  margin-top: 2px;
+  color: var(--campaign-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.wp-campaign-quota-dialog-head button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  font-size: 15px;
+}
+.wp-campaign-quota-dialog-head button:hover { background: var(--campaign-card-2); }
+.wp-campaign-quota-dialog-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 16px 19px 19px;
+  scrollbar-width: thin;
+}
+.wp-campaign-quota-intro {
+  margin: 0 0 13px !important;
+  padding: 12px 14px;
+  border: 1px solid var(--campaign-border);
+  border-radius: 9px;
+  background: var(--campaign-card);
+  color: var(--campaign-text);
+  font-size: 12px !important;
+  line-height: 1.6 !important;
+}
+.wp-campaign-quota-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--campaign-border-soft);
+}
+.wp-campaign-quota-detail:last-child { border-bottom: 0; }
+.wp-campaign-quota-detail-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--campaign-green-soft);
+  color: var(--campaign-green);
+  font-size: 12px;
+}
+.wp-campaign-quota-detail > div { min-width: 0; }
+.wp-campaign-quota-detail strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--campaign-text);
+}
+.wp-campaign-quota-detail p {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--campaign-muted);
+}
+.wp-campaign-quota-dialog-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 11px 19px;
+  border-top: 1px solid var(--campaign-border-soft);
+  background: var(--campaign-panel);
+}
+@media (max-width: 900px) {
+  .wp-campaign-schedule-grid { grid-template-columns: 1fr; }
+  .wp-campaign-schedule-controls .wp-campaign-audience-summary button { width: auto; }
+}
+@media (max-width: 620px) {
+  .wp-campaign-form-wrap > .wp-campaign-form-actions {
+    margin: -14px -12px 0;
+    padding: 11px 12px;
+  }
+  .wp-campaign-quota-dialog-head { padding: 13px 14px; }
+  .wp-campaign-quota-dialog-body { padding: 12px 14px; }
+  .wp-campaign-quota-dialog-actions { padding: 11px 14px; }
+  .wp-campaign-quota-detail { gap: 9px; }
+}
+
+/* La información de cupos se monta en document.body, nunca dentro del modal
+   principal (que usa overflow: hidden). No se recorta ni queda encerrada. */
+.wp-campaign-info-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482200;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: rgba(11, 20, 26, .72);
+  backdrop-filter: blur(4px);
+}
+:root[data-botpanel-theme="light"] .wp-campaign-info-portal {
+  background: rgba(15, 23, 42, .46);
+}
+.wp-campaign-info-portal .wp-campaign-quota-dialog {
+  flex: 0 1 auto;
+  width: min(590px, 100%);
+  max-height: min(640px, calc(100dvh - 40px));
+  margin: auto;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, .32);
+}
+@media (max-width: 620px) {
+  .wp-campaign-info-portal { padding: 12px; }
+  .wp-campaign-info-portal .wp-campaign-quota-dialog {
+    max-height: calc(100dvh - 24px);
+  }
+}
+
+/* =========================================================
+   CAMPAÑAS · Encabezado verde en los cuadros de información
+   Ambos accesos ("Más información" y "Cómo funciona el límite")
+   comparten este diálogo montado en document.body.
+   ========================================================= */
+.wp-campaign-info-portal .wp-campaign-quota-dialog-head {
+  min-height: 84px;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, .14);
+  background: linear-gradient(135deg, #075e54 0%, #008069 48%, #00a884 100%);
+  box-shadow: 0 7px 20px rgba(7, 94, 84, .15);
+  color: #fff;
+}
+.wp-campaign-info-portal .wp-campaign-info-heading-icon {
+  width: 43px;
+  height: 43px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .16);
+  color: #fff;
+  font-size: 17px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, .12);
+}
+.wp-campaign-info-portal .wp-campaign-quota-dialog-head h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.wp-campaign-info-portal .wp-campaign-quota-dialog-head small {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, .83);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+.wp-campaign-info-portal .wp-campaign-quota-close {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .24);
+  border-radius: 10px;
+  background: rgba(0, 75, 65, .32);
+  color: #fff;
+  font-size: 17px;
+  transition: background .15s ease, border-color .15s ease;
+}
+.wp-campaign-info-portal .wp-campaign-quota-close:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, .48);
+  background: rgba(0, 62, 54, .55);
+}
+.wp-campaign-info-portal .wp-campaign-quota-close:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+@media (max-width: 620px) {
+  .wp-campaign-info-portal .wp-campaign-quota-dialog-head {
+    min-height: 72px;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .wp-campaign-info-portal .wp-campaign-info-heading-icon {
+    width: 38px;
+    height: 38px;
+    font-size: 15px;
+  }
+  .wp-campaign-info-portal .wp-campaign-quota-dialog-head h3 { font-size: 16px; }
+  .wp-campaign-info-portal .wp-campaign-quota-dialog-head small { font-size: 10.5px; }
+  .wp-campaign-info-portal .wp-campaign-quota-close {
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+  }
+}
+
+
+/* =========================================================
+   Plan estimado de envío · métricas, tandas y aviso discreto
+   Mantiene los colores del tema y el cálculo original de cupos.
+   ========================================================= */
+.wp-campaign-delivery-summary {
+  gap: 12px;
+  margin: 10px 0 3px;
+  padding: 15px;
+  border: 1px solid var(--campaign-border);
+  border-radius: 12px;
+  background: var(--campaign-card);
+  color: var(--campaign-text);
+}
+.wp-campaign-schedule-grid > .wp-campaign-delivery-summary.is-expanded {
+  padding: 15px;
+  gap: 12px;
+  border-radius: 12px;
+}
+.wp-campaign-delivery-head {
+  margin: 0;
+  padding: 0 0 11px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 9px 14px;
+  border-bottom: 1px solid var(--campaign-border-soft);
+}
+.wp-campaign-delivery-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+.wp-campaign-delivery-title > strong {
+  color: var(--campaign-text);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+.wp-campaign-delivery-title-icon {
+  flex: 0 0 31px;
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--campaign-green-soft);
+  color: var(--campaign-green);
+  font-size: 13px;
+}
+.wp-campaign-delivery-head .wp-campaign-info-link {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: var(--campaign-green);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .15s ease;
+}
+.wp-campaign-delivery-head .wp-campaign-info-link:hover {
+  background: var(--campaign-green-soft);
+  text-decoration: none;
+}
+.wp-campaign-delivery-head .wp-campaign-info-link:focus-visible {
+  outline: 2px solid var(--campaign-green);
+  outline-offset: 2px;
+}
+.wp-campaign-delivery-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.wp-campaign-delivery-metric {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  min-height: 89px;
+  padding: 12px 10px;
+  border: 1px solid var(--campaign-border-soft);
+  border-radius: 9px;
+  background: var(--campaign-bg);
+}
+.wp-campaign-delivery-metric.is-primary {
+  border-color: var(--campaign-ring);
+  background: var(--campaign-green-soft);
+}
+.wp-campaign-delivery-metric-icon {
+  flex: 0 0 14px;
+  width: 14px;
+  margin-top: 2px;
+  color: var(--campaign-green);
+  font-size: 12px;
+}
+.wp-campaign-delivery-metric > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.wp-campaign-delivery-metric-label,
+.wp-campaign-delivery-metric-subtitle {
+  color: var(--campaign-muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.wp-campaign-delivery-metric-value {
+  color: var(--campaign-text);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.wp-campaign-delivery-metric.is-primary .wp-campaign-delivery-metric-value {
+  color: var(--campaign-green);
+}
+.wp-campaign-delivery-next {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wp-campaign-delivery-waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--campaign-border-soft);
+  background: var(--campaign-card-2);
+}
+.wp-campaign-delivery-waiting > svg {
+  flex: 0 0 15px;
+  margin-top: 2px;
+  color: var(--campaign-green);
+}
+.wp-campaign-delivery-waiting > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.wp-campaign-delivery-waiting strong {
+  font-size: 11.5px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+.wp-campaign-delivery-waiting span,
+.wp-campaign-delivery-turns-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--campaign-muted);
+}
+.wp-campaign-delivery-waiting.is-available {
+  background: var(--campaign-green-soft);
+  border-color: var(--campaign-ring);
+}
+.wp-campaign-delivery-waiting.is-available span { color: var(--campaign-text); }
+.wp-campaign-delivery-turns {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wp-campaign-delivery-turns-label {
+  color: var(--campaign-text);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.wp-campaign-delivery-turns-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+.wp-campaign-delivery-turn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 6px 9px 6px 6px;
+  border: 1px solid var(--campaign-border);
+  border-radius: 8px;
+  background: var(--campaign-bg);
+  color: var(--campaign-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.wp-campaign-delivery-turn strong {
+  color: var(--campaign-text);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.wp-campaign-delivery-turn-index {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--campaign-green-soft);
+  color: var(--campaign-green);
+  font-size: 10px;
+  font-weight: 750;
+}
+.wp-campaign-delivery-turn.is-extra { padding: 8px 10px; }
+.wp-campaign-delivery-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--campaign-border-soft);
+  color: var(--campaign-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.wp-campaign-delivery-note svg {
+  flex: 0 0 13px;
+  margin-top: 2px;
+  color: var(--campaign-green);
+}
+/* Las tarjetas del listado comparten el mismo diseño, más compacto. */
+.wp-campaign-delivery-summary:not(.is-expanded) {
+  gap: 9px;
+  padding: 12px;
+}
+.wp-campaign-delivery-summary:not(.is-expanded) .wp-campaign-delivery-metric {
+  min-height: 75px;
+  padding: 9px;
+}
+/* En contenedores angostos evitamos que las métricas recorten información. */
+.wp-campaign-delivery-summary { container-type: inline-size; }
+@container (max-width: 570px) {
+  .wp-campaign-delivery-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wp-campaign-delivery-metric.is-primary { grid-column: 1 / -1; min-height: 0; }
+}
+@container (max-width: 360px) {
+  .wp-campaign-delivery-metrics { grid-template-columns: minmax(0, 1fr); }
+  .wp-campaign-delivery-metric.is-primary { grid-column: auto; }
+  .wp-campaign-delivery-head { align-items: flex-start; flex-direction: column; }
+  .wp-campaign-delivery-head .wp-campaign-info-link { margin-left: -8px; }
+}
+@media (max-width: 620px) {
+  .wp-campaign-schedule-grid > .wp-campaign-delivery-summary.is-expanded { padding: 12px; }
+  .wp-campaign-delivery-metric-value { font-size: 13px; }
+}

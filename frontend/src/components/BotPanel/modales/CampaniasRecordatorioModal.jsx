@@ -1,4 +1,5 @@
 import TableEmptyIcon from "../../Global/TableEmptyIcon";
+import { createPortal } from "react-dom";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Picker from "@emoji-mart/react";
 import data from "../emojiDataEs";
@@ -50,24 +51,78 @@ const CampaignQuotaSummary = ({ total, cupo, when, onInfo, expanded = false }) =
   return (
     <div className={`wp-campaign-delivery-summary${expanded ? " is-expanded" : ""}`}>
       <div className="wp-campaign-delivery-head">
-        <strong><FontAwesomeIcon icon={faClock} /> Plan estimado de envío</strong>
+        <div className="wp-campaign-delivery-title">
+          <span className="wp-campaign-delivery-title-icon"><FontAwesomeIcon icon={faClock} /></span>
+          <strong>Plan estimado de envío</strong>
+        </div>
         <button type="button" className="wp-campaign-info-link" onClick={onInfo} aria-label="Información sobre límite de WhatsApp">
           <FontAwesomeIcon icon={faCircleInfo} /> ¿Cómo funciona el límite?
         </button>
       </div>
-      <span><b>Inicio:</b> {formatDateTime(when)} (hora de Argentina)</span>
-      <span><b>Destinatarios:</b> {plan.count} teléfonos únicos.</span>
-      {plan.remaining ? (
-        <>
-          <span><b>Primer turno estimado:</b> hasta {plan.first} mensajes si el cupo disponible se mantiene.</span>
-          <span><b>Después:</b> {plan.remaining} quedarían en espera de las siguientes ventanas móviles de 24 horas.</span>
-          {plan.laterTurns.map((cantidad, index) => (
-            <span key={index}>Turno posterior {index + 1}: hasta {cantidad} mensajes, cuando se libere cupo y dentro del horario permitido.</span>
-          ))}
-          {plan.otherWindows > plan.laterTurns.length ? <span>Y {plan.otherWindows - plan.laterTurns.length} turnos adicionales estimados.</span> : null}
-        </>
-      ) : <span>Con el cupo que se ve ahora, podrían entrar en el primer turno.</span>}
-      <small>El cupo es compartido con recordatorios. Los horarios de reintento pueden variar y no se asegura la entrega.</small>
+
+      <div className="wp-campaign-delivery-metrics">
+        <div className="wp-campaign-delivery-metric">
+          <FontAwesomeIcon className="wp-campaign-delivery-metric-icon" icon={faCalendarDays} />
+          <div>
+            <span className="wp-campaign-delivery-metric-label">Inicio programado</span>
+            <strong className="wp-campaign-delivery-metric-value">{formatDateTime(when)}</strong>
+            <span className="wp-campaign-delivery-metric-subtitle">Hora de Argentina</span>
+          </div>
+        </div>
+        <div className="wp-campaign-delivery-metric">
+          <FontAwesomeIcon className="wp-campaign-delivery-metric-icon" icon={faUsers} />
+          <div>
+            <span className="wp-campaign-delivery-metric-label">Destinatarios</span>
+            <strong className="wp-campaign-delivery-metric-value">{plan.count}</strong>
+            <span className="wp-campaign-delivery-metric-subtitle">Teléfonos únicos</span>
+          </div>
+        </div>
+        <div className="wp-campaign-delivery-metric is-primary">
+          <FontAwesomeIcon className="wp-campaign-delivery-metric-icon" icon={faBullhorn} />
+          <div>
+            <span className="wp-campaign-delivery-metric-label">Primer turno estimado</span>
+            <strong className="wp-campaign-delivery-metric-value">Hasta {plan.first}</strong>
+            <span className="wp-campaign-delivery-metric-subtitle">Mensajes, si se mantiene el cupo</span>
+          </div>
+        </div>
+      </div>
+
+      {plan.remaining > 0 ? (
+        <div className="wp-campaign-delivery-next">
+          <div className="wp-campaign-delivery-waiting">
+            <FontAwesomeIcon icon={faClock} />
+            <div>
+              <strong>{plan.remaining} mensajes en espera</strong>
+              <span>Se distribuirían en las siguientes ventanas móviles de 24 horas.</span>
+            </div>
+          </div>
+          <div className="wp-campaign-delivery-turns">
+            <span className="wp-campaign-delivery-turns-label">Turnos posteriores estimados</span>
+            <div className="wp-campaign-delivery-turns-list">
+              {plan.laterTurns.map((cantidad, index) => (
+                <span className="wp-campaign-delivery-turn" key={index}>
+                  <span className="wp-campaign-delivery-turn-index">{index + 1}</span>
+                  Hasta <strong>{cantidad}</strong> mensajes
+                </span>
+              ))}
+              {plan.otherWindows > plan.laterTurns.length ? (
+                <span className="wp-campaign-delivery-turn is-extra">+{plan.otherWindows - plan.laterTurns.length} turnos estimados</span>
+              ) : null}
+            </div>
+            <span className="wp-campaign-delivery-turns-note">Al liberarse cupo y dentro del horario permitido.</span>
+          </div>
+        </div>
+      ) : (
+        <div className="wp-campaign-delivery-waiting is-available">
+          <FontAwesomeIcon icon={faCircleInfo} />
+          <span>Con el cupo disponible actualmente, todos los mensajes podrían entrar en el primer turno.</span>
+        </div>
+      )}
+
+      <div className="wp-campaign-delivery-note">
+        <FontAwesomeIcon icon={faCircleInfo} />
+        <span>El cupo es compartido con recordatorios. Los horarios de reintento pueden variar y no se asegura la entrega.</span>
+      </div>
     </div>
   );
 };
@@ -1024,56 +1079,60 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
 
                 <section className="wp-campaign-section wp-campaign-schedule">
                   <h3>Programación</h3>
-                  <label>
-                    <span>Fecha y hora de envío</span>
-                    <input
-                      ref={dateTimeInputRef}
-                      className="wp-campaign-datetime"
-                      type="datetime-local"
-                      value={form.programada_para}
-                      min={minDateTime()}
-                      step="300"
-                      onClick={openDateTimePicker}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openDateTimePicker(e);
-                        }
-                      }}
-                      onChange={(e) => {
-                        const nextValue = e.target.value;
-                        if (!nextValue) {
-                          setForm((f) => ({ ...f, programada_para: "" }));
-                          return;
-                        }
+                  <div className="wp-campaign-schedule-grid">
+                    <div className="wp-campaign-schedule-controls">
+                      <label>
+                        <span>Fecha y hora de envío</span>
+                        <input
+                          ref={dateTimeInputRef}
+                          className="wp-campaign-datetime"
+                          type="datetime-local"
+                          value={form.programada_para}
+                          min={minDateTime()}
+                          step="300"
+                          onClick={openDateTimePicker}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openDateTimePicker(e);
+                            }
+                          }}
+                          onChange={(e) => {
+                            const nextValue = e.target.value;
+                            if (!nextValue) {
+                              setForm((f) => ({ ...f, programada_para: "" }));
+                              return;
+                            }
 
-                        const restriction = campaignDateError(nextValue, { horario: horarioEnvio });
-                        if (restriction) {
-                          setFormError(restriction);
-                          return;
-                        }
+                            const restriction = campaignDateError(nextValue, { horario: horarioEnvio });
+                            if (restriction) {
+                              setFormError(restriction);
+                              return;
+                            }
 
-                        setFormError("");
-                        setForm((f) => ({ ...f, programada_para: nextValue }));
-                      }}
-                    />
-                    <small className="wp-campaign-date-help">Solo de lunes a viernes, de {String(horarioEnvio.desde).padStart(2, "0")}:00 a antes de las {String(horarioEnvio.hasta).padStart(2, "0")}:00 (marzo a diciembre).</small>
-                  </label>
-                  {destinatarios && !loadingRecipients ? (
-                    <CampaignQuotaSummary total={selectedAudience.telefonos} cupo={cupo24h} when={form.programada_para} onInfo={() => setQuotaInfoOpen(true)} expanded />
-                  ) : null}
-                  <div className="wp-campaign-audience-summary">
-                    {loadingRecipients ? (
-                      <span><FontAwesomeIcon icon={faSpinner} spin /> Calculando audiencia…</span>
-                    ) : destinatarios ? (
-                      <>
-                        <strong><FontAwesomeIcon icon={faUsers} /> {selectedAudience.telefonos} teléfonos seleccionados</strong>
-                        <span>{selectedAudience.alumnos} alumnos seleccionados · {Number(destinatarios.sin_telefono || 0)} sin teléfono válido</span>
-                        <button type="button" onClick={() => { setEmojiOpen(false); setActiveTab("destinatarios"); }}>Ver destinatarios</button>
-                      </>
-                    ) : (
-                      <span>No se pudo calcular la audiencia.</span>
-                    )}
+                            setFormError("");
+                            setForm((f) => ({ ...f, programada_para: nextValue }));
+                          }}
+                        />
+                        <small className="wp-campaign-date-help">Solo de lunes a viernes, de {String(horarioEnvio.desde).padStart(2, "0")}:00 a antes de las {String(horarioEnvio.hasta).padStart(2, "0")}:00 (marzo a diciembre).</small>
+                      </label>
+                      <div className="wp-campaign-audience-summary">
+                        {loadingRecipients ? (
+                          <span><FontAwesomeIcon icon={faSpinner} spin /> Calculando audiencia…</span>
+                        ) : destinatarios ? (
+                          <>
+                            <strong><FontAwesomeIcon icon={faUsers} /> {selectedAudience.telefonos} teléfonos seleccionados</strong>
+                            <span>{selectedAudience.alumnos} alumnos seleccionados · {Number(destinatarios.sin_telefono || 0)} sin teléfono válido</span>
+                            <button type="button" onClick={() => { setEmojiOpen(false); setActiveTab("destinatarios"); }}>Ver destinatarios</button>
+                          </>
+                        ) : (
+                          <span>No se pudo calcular la audiencia.</span>
+                        )}
+                      </div>
+                    </div>
+                    {destinatarios && !loadingRecipients ? (
+                      <CampaignQuotaSummary total={selectedAudience.telefonos} cupo={cupo24h} when={form.programada_para} onInfo={() => setQuotaInfoOpen(true)} expanded />
+                    ) : null}
                   </div>
                 </section>
               </div>
@@ -1242,21 +1301,42 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
           </div>
         )}
 
-        {quotaInfoOpen ? (
-          <div className="wp-campaign-confirm-layer wp-campaign-info-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuotaInfoOpen(false); }}>
-            <div className="wp-campaign-quota-dialog" role="dialog" aria-modal="true" aria-labelledby="wp-campaign-quota-title">
-              <div className="wp-campaign-quota-dialog-head">
-                <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" />
-                <h3 id="wp-campaign-quota-title">Importante: límite de WhatsApp</h3>
-                <button type="button" onClick={() => setQuotaInfoOpen(false)} aria-label="Cerrar información"><FontAwesomeIcon icon={faXmark} /></button>
+        {quotaInfoOpen ? createPortal(
+          <div className="wp-campaign-confirm-layer wp-campaign-info-layer wp-campaign-info-portal" role="presentation">
+            <div className="wp-campaign-quota-dialog" role="dialog" aria-modal="true" aria-labelledby="wp-campaign-quota-title" aria-describedby="wp-campaign-quota-intro">
+              <header className="wp-campaign-quota-dialog-head">
+                <span className="wp-campaign-info-heading-icon" aria-hidden="true"><FontAwesomeIcon icon={faCircleInfo} /></span>
+                <div>
+                  <h3 id="wp-campaign-quota-title">Límite de WhatsApp</h3>
+                  <small>Cómo se distribuyen los envíos programados</small>
+                </div>
+                <button type="button" className="wp-campaign-close wp-campaign-quota-close" onClick={() => setQuotaInfoOpen(false)} aria-label="Cerrar información"><FontAwesomeIcon icon={faXmark} /></button>
+              </header>
+              <div className="wp-campaign-quota-dialog-body">
+                <p id="wp-campaign-quota-intro" className="wp-campaign-quota-intro">La Cooperadora tiene configurado un máximo de <strong>{Number(cupo24h?.limite || 250)} destinatarios nuevos</strong> dentro de una ventana móvil de 24 horas.</p>
+                <div className="wp-campaign-quota-detail">
+                  <span className="wp-campaign-quota-detail-icon"><FontAwesomeIcon icon={faClock} /></span>
+                  <div><strong>El cupo no se reinicia a medianoche</strong><p>Las 24 horas se cuentan de manera móvil, según los envíos anteriores.</p></div>
+                </div>
+                <div className="wp-campaign-quota-detail">
+                  <span className="wp-campaign-quota-detail-icon"><FontAwesomeIcon icon={faUsers} /></span>
+                  <div><strong>Si hay más destinatarios que cupo</strong><p>La campaña comienza en la fecha y hora programadas. Los teléfonos restantes esperan hasta que vuelva a haber cupo disponible.</p></div>
+                </div>
+                <div className="wp-campaign-quota-detail">
+                  <span className="wp-campaign-quota-detail-icon"><FontAwesomeIcon icon={faCalendarDays} /></span>
+                  <div><strong>Horario permitido de envío</strong><p>De lunes a viernes, desde las {String(horarioEnvio.desde).padStart(2, "0")}:00 hasta antes de las {String(horarioEnvio.hasta).padStart(2, "0")}:00. Si el cupo se libera fuera de ese horario, el sistema continúa en el siguiente período permitido.</p></div>
+                </div>
+                <div className="wp-campaign-quota-detail">
+                  <span className="wp-campaign-quota-detail-icon"><FontAwesomeIcon icon={faCircleInfo} /></span>
+                  <div><strong>Cupo compartido y estimación</strong><p>El cupo se comparte con recordatorios. Otros mensajes, las restricciones de Meta o los fallos de entrega pueden modificar las cantidades y los horarios. No se garantiza un turno exacto ni la entrega.</p></div>
+                </div>
               </div>
-              <p>La Cooperadora tiene configurado un máximo de <b>{Number(cupo24h?.limite || 250)} destinatarios nuevos en un período móvil de 24 horas</b>. No se reinicia a las 00:00.</p>
-              <p>Si elegís más personas, se empieza a enviar en la <b>fecha y hora programadas</b>, hasta donde alcance el cupo real. Los demás esperan a que se libere, normalmente después de salir los envíos anteriores de esa ventana.</p>
-              <p>Las campañas se procesan <b>de lunes a viernes, desde las {String(horarioEnvio.desde).padStart(2, "0")}:00 hasta antes de las {String(horarioEnvio.hasta).padStart(2, "0")}:00</b> según la configuración actual. Si el cupo se libera fuera de ese horario, el sistema retoma en el siguiente período permitido.</p>
-              <p>El cupo es <b>compartido con recordatorios</b>. Otros mensajes del mismo negocio, restricciones de Meta o fallos de entrega pueden modificar el resultado. El resumen es una estimación, no un turno exacto ni una garantía.</p>
-              <button type="button" className="wp-campaign-primary" onClick={() => setQuotaInfoOpen(false)}>Entendido</button>
+              <div className="wp-campaign-quota-dialog-actions">
+                <button type="button" className="wp-campaign-primary" onClick={() => setQuotaInfoOpen(false)}>Entendido</button>
+              </div>
             </div>
           </div>
+          , document.body
         ) : null}
 
         {toast.mostrar ? (

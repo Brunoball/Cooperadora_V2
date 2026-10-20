@@ -2436,8 +2436,15 @@ const BotPanel = () => {
                 className={`wp-chatitem ${active ? "is-active" : ""} ${urgent ? "is-urgent" : ""} ${toneClass}`}
                 onClick={() => openChat(c.id)}
               >
-                <div className="wp-avatar" aria-hidden="true">
-                  <FontAwesomeIcon icon={faUser} />
+                <div className="wp-avatar">
+                  <FontAwesomeIcon icon={faUser} aria-hidden="true" />
+                  <span
+                    className={`wp-chat-mode-indicator wp-chat-mode-indicator--avatar ${c.modo === "manual" ? "is-manual" : "is-bot"}`}
+                    title={c.modo === "manual" ? "Atención manual: el bot está pausado" : "Bot activo: respuestas automáticas habilitadas"}
+                    aria-label={c.modo === "manual" ? "Modo manual" : "Modo bot activo"}
+                  >
+                    <FontAwesomeIcon icon={c.modo === "manual" ? faHand : faRobot} aria-hidden="true" />
+                  </span>
                 </div>
 
                 <div className="wp-chatmeta">
@@ -2464,21 +2471,13 @@ const BotPanel = () => {
                     <div className="wp-chattime" title={fechaHoraTitle}>{fechaHora}</div>
                   </div>
 
-                  <div className="wp-chatrow">
+                  <div className="wp-chatrow wp-chatrow--status">
                     <div className="wp-chatlast">
                       {c.id} • {totalTxt}
                       {comprobantesPendientes > 0 ? " • 🧾 comprobante" : c.prioridad === "alta" && Number(c.consultasPendientes || 0) === 0 ? " • ⚠️" : ""}
 
                     </div>
 
-                    <span
-                      className={`wp-chat-mode-indicator ${c.modo === "manual" ? "is-manual" : "is-bot"}`}
-                      title={c.modo === "manual" ? "Atención manual: el bot está pausado" : "Bot activo: respuestas automáticas habilitadas"}
-                      aria-label={c.modo === "manual" ? "Modo manual" : "Modo bot activo"}
-                    >
-                      <FontAwesomeIcon icon={c.modo === "manual" ? faHand : faRobot} />
-                      <span>{c.modo === "manual" ? "Manual" : "Bot"}</span>
-                    </span>
                     {c.unread > 0 ? (
                       <span
                         className={`wp-unread ${tone !== "normal" ? `wp-unread--${tone}` : ""}`}

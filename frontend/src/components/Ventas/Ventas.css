@@ -4088,3 +4088,89 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 /* Aviso discreto si el texto personalizado supera el límite permitido. */
 .ventas-message-editor small.ventas-message-count--error { color: #b42318; font-weight: 600; }
+
+/* Edición de configuración de venta — mensajes con componentes y foco globales. */
+.ventas-campaign-messages-tab .ventas-message-panel {
+  min-width: 0;
+  gap: 18px;
+  padding: 17px;
+  border-color: var(--entity-modal-border);
+  border-radius: 13px;
+  background: var(--entity-modal-bg);
+}
+.ventas-campaign-messages-tab .ventas-message-panel__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+}
+.ventas-campaign-messages-tab .ventas-message-panel__heading .ventas-config-group-title {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 6px;
+}
+.ventas-campaign-messages-tab .ventas-message-panel__heading .ventas-config-group-title strong {
+  color: var(--entity-modal-ink);
+  font-size: 13px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+.ventas-campaign-messages-tab .ventas-message-panel__heading .ventas-config-group-title small {
+  color: var(--entity-modal-text);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.ventas-campaign-messages-tab .ventas-message-panel__icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--entity-modal-action) 16%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--entity-modal-action) 7%, transparent);
+  color: var(--entity-modal-action);
+  font-size: 14px;
+}
+.ventas-campaign-messages-tab .ventas-message-editor {
+  min-width: 0;
+  gap: 6px;
+}
+/* Conserva FloatingField global: border, foco, label flotante y tema del modal.
+   Solo se ajustan las dimensiones de los mensajes, sin rehacer el componente. */
+.ventas-campaign-messages-tab .ventas-message-editor .entity-floating-field {
+  width: 100%;
+  min-width: 0;
+  margin-top: 5px;
+}
+.ventas-campaign-messages-tab .ventas-message-editor .entity-floating-field > textarea {
+  min-height: 104px;
+  padding: 19px 12px 11px;
+  line-height: 1.52;
+  font-size: 12.5px;
+  resize: vertical;
+}
+.ventas-campaign-messages-tab .ventas-message-editor__meta {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 2px;
+}
+.ventas-campaign-messages-tab .ventas-message-editor__meta small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--entity-modal-text);
+  font-size: 10.5px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.ventas-campaign-messages-tab .ventas-message-editor__meta .ventas-message-count--error {
+  color: var(--entity-modal-danger);
+  font-weight: 650;
+}
+@media (max-width: 560px) {
+  .ventas-campaign-messages-tab .ventas-message-panel { padding: 12px; gap: 15px; }
+  .ventas-campaign-messages-tab .ventas-message-panel__icon { width: 30px; height: 30px; font-size: 12px; }
+}
