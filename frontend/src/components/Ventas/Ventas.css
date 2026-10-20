@@ -4175,62 +4175,110 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   .ventas-campaign-messages-tab .ventas-message-panel__icon { width: 30px; height: 30px; font-size: 12px; }
 }
 
-/* Ventas registradas: totales de TODAS las órdenes del filtro, no solo la página. */
-.ventas-orders-totals {
+/* VENTAS REGISTRADAS · Pie de tabla integrado.
+   Usa el mismo SummaryCards (variante footer) que Contabilidad → Resumen.
+   Totales y paginación conviven dentro del pie; no hay una fila extra de tarjetas. */
+.ventas-page--orders .ventas-tableFooter {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 9px 12px;
+}
+
+.ventas-page--orders .ventas-tableFooter .global-pagination__left {
+  min-width: 0;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ventas-page--orders .ventas-tableFooter .global-pagination__summary {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.ventas-page--orders .ventas-orders-summary.global-summaryCards--footer {
+  display: block;
+  flex: 1 1 0%;
+  min-width: 340px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px 16px 18px;
-  border-top: 1px solid var(--border-color, #e4e7ec);
+  gap: 7px;
 }
-.ventas-orders-total-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--border-color, #e4e7ec);
-  border-radius: 12px;
-  background: var(--surface-color, #fff);
+  padding: 8px 10px;
 }
-.ventas-orders-total-card__icon {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--primary-50, #eef4ff);
-  color: var(--primary-600, #2454a6);
-  font-size: 18px;
-}
-.ventas-orders-total-card__content {
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__label,
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__detail,
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.ventas-orders-total-card__label {
-  color: var(--text-secondary, #667085);
-  font-size: 12px;
-  font-weight: 700;
+
+/* El ancho disponible se mide en la tarjeta, incluso con el sidebar abierto. */
+@container (max-width: 1060px) {
+  .ventas-page--orders .ventas-tableFooter {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__left,
+  .ventas-page--orders .ventas-tableFooter .global-pagination__right {
+    grid-column: 1;
+    width: 100%;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__right {
+    justify-self: end;
+    justify-content: flex-end;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
+    min-width: 0;
+    flex-basis: 390px;
+  }
 }
-.ventas-orders-total-card__content strong {
-  color: var(--text-primary, #182230);
-  font-size: clamp(18px, 1.7vw, 24px);
-  font-weight: 800;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
+
+@container (max-width: 640px) {
+  .ventas-page--orders .ventas-tableFooter .global-pagination__left {
+    align-items: stretch;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
+    flex: 1 1 100%;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
+    padding: 7px;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__summary {
+    flex: 1 1 100%;
+  }
 }
-.ventas-orders-total-card__content small {
-  color: var(--text-muted, #667085);
-  font-size: 11px;
-  line-height: 1.35;
-}
-@media (max-width: 1000px) {
-  .ventas-orders-totals { grid-template-columns: 1fr; }
-}
-@media (max-width: 700px) {
-  .ventas-orders-totals { padding: 10px; gap: 8px; }
-  .ventas-orders-total-card { padding: 12px; }
+
+@container (max-width: 450px) {
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:last-child {
+    grid-column: 1 / -1;
+  }
 }

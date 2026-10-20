@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBox, faCheckCircle, faCoins, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan, faWallet } from "@fortawesome/free-solid-svg-icons";
+import { faCheckCircle, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
+import SummaryCards from "../../Global/SummaryCards";
 import BotonExportarGlobal from "../../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../../Global/Modales/ModalExportarGlobal";
 import ModalEliminarGlobal from "../../Global/Modales/ModalEliminarGlobal";
@@ -285,53 +286,55 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         ariaLabel="Paginación de ventas registradas"
         onPageChange={setPage}
         compactPageItems
+        showSummary={false}
         className="ventas-tableFooter"
         leftContent={(
-          <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
-            {writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today())) ? <button
-              type="button"
-              className="ventas-footer-action ventas-footer-action--new"
-              onClick={() => setModal({ open: true, id: null })}
-            >
-              <FontAwesomeIcon icon={faPlus} />
-              <span>Nueva venta</span>
-            </button> : null}
-            <BotonExportarGlobal
-              label="Exportar"
-              className="ventas-footer-action ventas-footer-action--export"
-              onClick={() => setExportOpen(true)}
-              disabled={loading || Number(pagination.total || 0) <= 0}
+          <>
+            <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
+              {writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today())) ? <button
+                type="button"
+                className="ventas-footer-action ventas-footer-action--new"
+                onClick={() => setModal({ open: true, id: null })}
+              >
+                <FontAwesomeIcon icon={faPlus} />
+                <span>Nueva venta</span>
+              </button> : null}
+              <BotonExportarGlobal
+                label="Exportar"
+                className="ventas-footer-action ventas-footer-action--export"
+                onClick={() => setExportOpen(true)}
+                disabled={loading || Number(pagination.total || 0) <= 0}
+              />
+            </div>
+            <SummaryCards
+              title=""
+              ariaLabel="Totales de ventas registradas"
+              variant="footer"
+              className="ventas-orders-summary"
+              items={[
+                {
+                  key: "unidades",
+                  label: "Cantidades vendidas",
+                  detail: "Unidades de productos cobrados",
+                  value: loading ? "—" : Number(totals.cantidades_vendidas || 0).toLocaleString("es-AR"),
+                },
+                {
+                  key: "recaudado",
+                  label: "Recaudado",
+                  detail: "Total cobrado, incluidas las ganancias",
+                  value: loading ? "—" : money(totals.recaudado),
+                },
+                {
+                  key: "ganancias",
+                  label: "Ganancias cobradas",
+                  detail: "Incluidas en el total recaudado",
+                  value: loading ? "—" : money(totals.ganancias_cobradas),
+                },
+              ]}
             />
-          </div>
+          </>
         )}
       />
-
-      <section className="ventas-orders-totals" aria-label="Totales de ventas registradas">
-        <article className="ventas-orders-total-card">
-          <span className="ventas-orders-total-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faBox} /></span>
-          <div className="ventas-orders-total-card__content">
-            <span className="ventas-orders-total-card__label">Cantidades vendidas</span>
-            <strong>{loading ? "—" : Number(totals.cantidades_vendidas || 0).toLocaleString("es-AR")}</strong>
-            <small>Unidades de productos cobrados</small>
-          </div>
-        </article>
-        <article className="ventas-orders-total-card">
-          <span className="ventas-orders-total-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faWallet} /></span>
-          <div className="ventas-orders-total-card__content">
-            <span className="ventas-orders-total-card__label">Recaudado</span>
-            <strong>{loading ? "—" : money(totals.recaudado)}</strong>
-            <small>Total cobrado, incluidas las ganancias</small>
-          </div>
-        </article>
-        <article className="ventas-orders-total-card">
-          <span className="ventas-orders-total-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faCoins} /></span>
-          <div className="ventas-orders-total-card__content">
-            <span className="ventas-orders-total-card__label">Ganancias cobradas</span>
-            <strong>{loading ? "—" : money(totals.ganancias_cobradas)}</strong>
-            <small>Incluidas en el total recaudado</small>
-          </div>
-        </article>
-      </section>
 
       <VentaModal open={modal.open} initialId={modal.id} catalogs={catalogs} saving={saving} onClose={() => setModal({ open: false, id: null })} onSave={save} onFeedback={showFeedback} />
 
