@@ -6,17 +6,47 @@ export const MENSAJE_CANTIDAD_DEFECTO = `🛒 *Venta disponible:* {venta}
 *Producto:* {producto}
 *Precio unitario:* {precio_unitario}
 {detalle_objetivo}
-*Indicá la cantidad que querés comprar.*{opcion_ganancia}`;
+*Indicá cuántas unidades vendiste hoy.*{opcion_ganancia}`;
 export const MENSAJE_GANANCIA_DEFECTO = "¡Gracias por colaborar con la cooperadora! Tu aporte quedó registrado.";
 export const MENSAJE_MAX_CARACTERES = 1200;
 export const contarCaracteresMensaje = (value) => Array.from(String(value ?? "")).length;
-export const MENSAJE_COMPRA_DEFECTO = "¡Gracias por tu compra! Retirá {producto} el {fecha_entrega}, {horarios_entrega}. Presentá este comprobante.";
+export const MENSAJE_COMPRA_DEFECTO = "¡Gracias por tu compra! Retirá {producto} el {fecha_entrega} {horarios_entrega}.";
+
+// Unicamente los modelos antiguos EXACTOS se actualizan al abrir/guardar una
+// campaña. Los mensajes personalizados de la cooperadora se respetan.
+const MENSAJES_COMPRA_ANTERIORES = new Set([
+  "¡Gracias por tu compra! Retirá {producto} el {fecha_entrega}, {horarios_entrega}. Presentá este comprobante.",
+  "¡Gracias por tu compra! Pasá a retirar {producto} el {fecha_entrega}, {horarios_entrega}. Presentá este comprobante.",
+]);
+// Convertir exclusivamente los rótulos agregados automáticamente por la
+// versión anterior; no reinterpretar indicaciones personalizadas.
+const normalizarEtiquetasRetiroAnteriores = (plantilla) => {
+  const original = String(plantilla);
+  const etiquetas = /(?:^|\n)\s*(?:(?:📅|🕒)\s*)?\*(?:Fecha de entrega|Horarios de entrega):\*\s*\{(?:fecha_entrega|horarios_entrega)\}\s*(?=\n|$)/gu;
+  if (!etiquetas.test(original)) return original;
+  const sinEtiquetas = original.replace(new RegExp(etiquetas.source, 'gu'), '').trimEnd();
+  const frase = "Retirá {producto} el {fecha_entrega} {horarios_entrega}.";
+  const antigua = /(?:Retir[aá]|Pas[aá] a retirar)\s+\{producto\}[^\n.!?]*(?:[.]|$)/iu;
+  if (antigua.test(sinEtiquetas)) return sinEtiquetas.replace(antigua, frase);
+  return sinEtiquetas ? `${sinEtiquetas}\n${frase}` : frase;
+};
+export const mensajeCompraInicial = (valor) => {
+  if (valor == null || MENSAJES_COMPRA_ANTERIORES.has(String(valor).trim())) {
+    return MENSAJE_COMPRA_DEFECTO;
+  }
+  return normalizarEtiquetasRetiroAnteriores(valor);
+};
 
 // El editor anterior solo guardaba una indicación breve. Al reabrir campañas
 // con ESE valor exacto, ofrecer la nueva plantilla completa sin pisar mensajes
 // personalizados que los responsables ya hayan escrito.
-export const mensajeVentaInicial = (valor) =>
-  valor == null || valor === MENSAJE_CANTIDAD_ANTERIOR ? MENSAJE_CANTIDAD_DEFECTO : valor;
+export const mensajeVentaInicial = (valor) => {
+  if (valor == null || valor === MENSAJE_CANTIDAD_ANTERIOR) return MENSAJE_CANTIDAD_DEFECTO;
+  // Reemplazo puntual del aviso anterior; no modifica el resto del texto que
+  // haya redactado el usuario. Se mantiene la variable para futuras campañas.
+  return String(valor).replace(/Para pagar solo la ganancia,?\s*escrib[ií]\s*\*?0\*?\.?/giu,
+    "Si todavía no vendiste, escribí *0* (sin cargo).");
+};
 
 // Admitidas por el sistema/API para sustituir datos al integrar el bot.
 // No es necesario mostrar este catálogo técnico en los modales.
@@ -26,7 +56,7 @@ export const VARIABLES_MENSAJE_VENTA = [
   { variable: "precio_unitario", label: "Precio por unidad" },
   { variable: "cantidad_minima", label: "Objetivo en unidades" },
   { variable: "detalle_objetivo", label: "Detalle del objetivo, si existe" },
-  { variable: "opcion_ganancia", label: "Opción 0, solo si hay objetivo" },
+  { variable: "opcion_ganancia", label: "Opción 0 sin cobro" },
   { variable: "ganancia_unidad", label: "Ganancia por faltante" },
   { variable: "ganancia_sin_ventas", label: "Ganancia con 0 unidades" },
   { variable: "fecha_entrega", label: "Fecha de entrega" },
@@ -72,9 +102,10 @@ const pesos = (value) => new Intl.NumberFormat("es-AR", {
 const datosParaMensaje = (form = {}, product = {}, example = {}) => {
   const minimo = Number(form.cantidad_minima_persona || 0);
   const detalle = minimo > 0 ? [
-    `🎯 *Objetivo:* ${minimo} unidades por persona.`,
-    `*Cada unidad faltante:* ${pesos(form.ganancia_unidad_faltante)}.`,
-    `*Sin unidades:* ${pesos(form.ganancia_total_sin_ventas)} en total.`,
+    `🎯 *Objetivo mínimo:* ${minimo} unidades por persona.`,
+    `*Ganancia por faltante al cierre:* ${pesos(form.ganancia_unidad_faltante)}.`,
+    `*Si no vende ninguna al cierre:* ${pesos(form.ganancia_total_sin_ventas)} en total.`,
+    `Las ganancias se liquidan después de la fecha de fin.`,
   ].join("\n") : "";
   return {
     venta: form.nombre || "(venta)",
@@ -82,7 +113,7 @@ const datosParaMensaje = (form = {}, product = {}, example = {}) => {
     precio_unitario: pesos(precioUnitarioVenta(product)),
     cantidad_minima: String(form.cantidad_minima_persona ?? 0),
     detalle_objetivo: detalle,
-    opcion_ganancia: minimo > 0 ? "\nPara pagar solo la ganancia, escribí 0." : "",
+    opcion_ganancia: "\nSi todavía no vendiste, escribí 0 (sin cargo).",
     ganancia_unidad: pesos(form.ganancia_unidad_faltante),
     ganancia_sin_ventas: pesos(form.ganancia_total_sin_ventas),
     fecha_entrega: fechaLegible(form.fecha_entrega),
@@ -203,4 +234,42 @@ export const actualizarMensajeVisual = (plantilla, textoEditado, form = {}, prod
     cursor = tramo.fin;
   }
   return resultado + actual.slice(cursor);
+};
+
+/** Restaura fecha/horarios como variables para que cambien con la campaña.
+ * En el comprobante se conservan en una sola frase, sin rótulos técnicos:
+ * «Retirá PRODUCTO el DD/MM/AAAA de HH:MM a HH:MM».
+ * No se altera ninguna plantilla que ya conserve ambos datos automáticos.
+ */
+export const reponerDatoEntrega = (plantilla, campo, tipo = "venta") => {
+  const variable = campo === "fecha_entrega" ? "fecha_entrega" :
+    campo === "horarios_entrega" ? "horarios_entrega" : null;
+  let texto = String(plantilla ?? "");
+  if (!variable || texto.includes(`{${variable}}`)) return texto;
+
+  const fecha = "{fecha_entrega}";
+  const horario = "{horarios_entrega}";
+  if (tipo === "compra") {
+    // Si queda una frase de retiro, reconstruirla completa: también resuelve
+    // las comas y palabras sueltas que pueden quedar tras un borrado manual.
+    const fraseRetiro = /(?:Retir[aá]|Pas[aá] a retirar)\s+\{producto\}[^\n.!?]*(?:[.]|$)/iu;
+    if (fraseRetiro.test(texto)) {
+      return texto.replace(fraseRetiro, `Retirá {producto} el ${fecha} ${horario}.`);
+    }
+    // Si se borró incluso la frase de retiro, no reescribir otros textos de la
+    // cooperadora: incorporar una indicación de entrega breve al final.
+    const nuevaFrase = `Retirá {producto} el ${fecha} ${horario}.`;
+    return texto.trimEnd() ? `${texto.trimEnd()}\n${nuevaFrase}` : nuevaFrase;
+  }
+
+  // En el mensaje general (venta disponible), usar una frase sencilla y no
+  // «Horarios de retiro» ni «Fecha de entrega» como etiquetas separadas.
+  if (texto.includes(fecha) && !texto.includes(horario)) {
+    return texto.replace(fecha, `${fecha} ${horario}`);
+  }
+  if (texto.includes(horario) && !texto.includes(fecha)) {
+    return texto.replace(horario, `el ${fecha} ${horario}`);
+  }
+  const linea = `Entrega el ${fecha} ${horario}.`;
+  return texto.trimEnd() ? `${texto.trimEnd()}\n${linea}` : linea;
 };

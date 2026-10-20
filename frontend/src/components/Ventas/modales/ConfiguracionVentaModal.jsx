@@ -7,7 +7,7 @@ import { VentasCheckbox } from "../VentasUI";
 import { asId, campaniaOpcion, ordenarCampanias, upper, yes } from "../ventasUtils";
 import {
   MENSAJE_CANTIDAD_DEFECTO, MENSAJE_GANANCIA_DEFECTO, MENSAJE_COMPRA_DEFECTO,
-  parseHorariosEntrega, mensajeRenderizado, actualizarMensajeVisual, mensajeVentaInicial, VARIABLES_MENSAJE_VENTA, contarCaracteresMensaje, MENSAJE_MAX_CARACTERES,
+  parseHorariosEntrega, mensajeRenderizado, actualizarMensajeVisual, mensajeVentaInicial, mensajeCompraInicial, reponerDatoEntrega, VARIABLES_MENSAJE_VENTA, contarCaracteresMensaje, MENSAJE_MAX_CARACTERES,
 } from "../ventaMensajes";
 
 const defaults = {
@@ -48,7 +48,7 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       horarios_entrega: parseHorariosEntrega(initial?.horarios_entrega),
       mensaje_indicaciones: mensajeVentaInicial(initial?.mensaje_indicaciones),
       mensaje_pago_ganancia: initial?.mensaje_pago_ganancia ?? MENSAJE_GANANCIA_DEFECTO,
-      mensaje_pago_compra: initial?.mensaje_pago_compra ?? MENSAJE_COMPRA_DEFECTO,
+      mensaje_pago_compra: mensajeCompraInicial(initial?.mensaje_pago_compra),
     });
   }, [open, initial]);
 
@@ -56,12 +56,31 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
   const hasSales = !isNew && Number(initial?.cantidad_ordenes || 0) > 0;
   const minimum = Number(form.cantidad_minima_persona || 0);
   const options = useMemo(() => ordenarCampanias(campaigns), [campaigns]);
-  const set = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  // Si una familia borró del texto la fecha o los horarios, volver a insertar
+  // sus campos dinámicos al modificarlos desde Datos de la venta. No se toca
+  // el mensaje de pago solo de ganancia, ya que no hay productos para retirar.
+  const conEntregaActualizada = (current, campo) => ({
+    ...current,
+    mensaje_indicaciones: reponerDatoEntrega(current.mensaje_indicaciones, campo),
+    mensaje_pago_compra: reponerDatoEntrega(current.mensaje_pago_compra, campo, "compra"),
+  });
+  const set = (field, value) => setForm((current) => {
+    if (field === "fecha_entrega" && value && value !== current.fecha_entrega) {
+      return { ...conEntregaActualizada(current, field), [field]: value };
+    }
+    return { ...current, [field]: value };
+  });
   const currentProduct = products.find((item) => String(item.id_producto) === String(form.id_producto_principal));
   const addHorario = () => setForm((current) => ({ ...current, horarios_entrega: [...current.horarios_entrega, { desde: "", hasta: "" }] }));
-  const changeHorario = (index, field, value) => setForm((current) => ({
-    ...current, horarios_entrega: current.horarios_entrega.map((item, i) => i === index ? { ...item, [field]: value } : item),
-  }));
+  const changeHorario = (index, field, value) => setForm((current) => {
+    const updated = current.horarios_entrega.map((item, i) => i === index ? { ...item, [field]: value } : item);
+    // Reponer el marcador solamente con rangos válidos y completos: así el
+    // texto no muestra horarios "por definir" mientras se están cargando.
+    const completos = updated.some((item) => item.desde && item.hasta && item.desde < item.hasta);
+    const next = completos && updated[index]?.[field] !== current.horarios_entrega[index]?.[field]
+      ? conEntregaActualizada(current, "horarios_entrega") : current;
+    return { ...next, horarios_entrega: updated };
+  });
   const removeHorario = (index) => setForm((current) => ({
     ...current, horarios_entrega: current.horarios_entrega.filter((_, i) => i !== index),
   }));
@@ -80,7 +99,7 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       visible_menu: true,
       mensaje_indicaciones: mensajeVentaInicial(source.mensaje_indicaciones),
       mensaje_pago_ganancia: source.mensaje_pago_ganancia ?? MENSAJE_GANANCIA_DEFECTO,
-      mensaje_pago_compra: source.mensaje_pago_compra ?? MENSAJE_COMPRA_DEFECTO,
+      mensaje_pago_compra: mensajeCompraInicial(source.mensaje_pago_compra),
       // Se copian textos, pero no horarios ni fechas de entregas anteriores.
       fecha_inicio: "", fecha_fin: "", fecha_entrega: "", horarios_entrega: [],
     }));

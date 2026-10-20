@@ -151,7 +151,7 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
         open={Boolean(closeConfirm)} row={closeConfirm} operacion="advertencia" showLoadingEffect={false}
         tone="warning" icon={faArchive}
         title="Cerrar venta y conservar historial"
-        message="El cierre es definitivo: los registros siguen asociados a esta venta y sus planillas quedan disponibles desde Planillas."
+        message="El cierre es definitivo: antes de confirmar, registrá las liquidaciones finales de ganancias que ya se hayan cobrado. Al cerrar no se podrán cargar nuevos cobros de esta campaña; los registros y las planillas quedan en el historial."
         warning={`Cobros pendientes: ${closeConfirm?.cobros_pendientes || 0}. Retiros pendientes: ${closeConfirm?.retiros_pendientes || 0}. Revisalos antes de confirmar.`}
         confirmLabel="Cerrar definitivamente"
         details={closeConfirm ? [

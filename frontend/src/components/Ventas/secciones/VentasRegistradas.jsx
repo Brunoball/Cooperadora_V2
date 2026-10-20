@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faBox, faCheckCircle, faCoins, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan, faWallet } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -42,6 +42,7 @@ const exportRecord = (row) => ({
 
 export default function VentasRegistradas({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
+  const [totals, setTotals] = useState({ cantidades_vendidas: 0, recaudado: 0, ganancias_cobradas: 0 });
   const [catalogs, setCatalogs] = useState({ productos: [], campanias: [], medios_pago: [], meses_ventas: [] });
   const [pagination, setPagination] = useState({ pagina: 1, total_paginas: 1, total: 0 });
   const [page, setPage] = useState(1);
@@ -89,6 +90,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
     try {
       const data = await ventasApi.ordenes({ pagina: page, por_pagina: 20, ...queryFilters });
       setRows(data.items || []);
+      setTotals(data.totales || { cantidades_vendidas: 0, recaudado: 0, ganancias_cobradas: 0 });
       setPagination(data.paginacion || {});
     } catch (err) {
       showFeedback("error", err.message);
@@ -303,6 +305,33 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           </div>
         )}
       />
+
+      <section className="ventas-orders-totals" aria-label="Totales de ventas registradas">
+        <article className="ventas-orders-total-card">
+          <span className="ventas-orders-total-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faBox} /></span>
+          <div className="ventas-orders-total-card__content">
+            <span className="ventas-orders-total-card__label">Cantidades vendidas</span>
+            <strong>{loading ? "—" : Number(totals.cantidades_vendidas || 0).toLocaleString("es-AR")}</strong>
+            <small>Unidades de productos cobrados</small>
+          </div>
+        </article>
+        <article className="ventas-orders-total-card">
+          <span className="ventas-orders-total-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faWallet} /></span>
+          <div className="ventas-orders-total-card__content">
+            <span className="ventas-orders-total-card__label">Recaudado</span>
+            <strong>{loading ? "—" : money(totals.recaudado)}</strong>
+            <small>Total cobrado, incluidas las ganancias</small>
+          </div>
+        </article>
+        <article className="ventas-orders-total-card">
+          <span className="ventas-orders-total-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faCoins} /></span>
+          <div className="ventas-orders-total-card__content">
+            <span className="ventas-orders-total-card__label">Ganancias cobradas</span>
+            <strong>{loading ? "—" : money(totals.ganancias_cobradas)}</strong>
+            <small>Incluidas en el total recaudado</small>
+          </div>
+        </article>
+      </section>
 
       <VentaModal open={modal.open} initialId={modal.id} catalogs={catalogs} saving={saving} onClose={() => setModal({ open: false, id: null })} onSave={save} onFeedback={showFeedback} />
 

@@ -148,9 +148,9 @@ trait VentasConfiguracion
         $startMessage = 'Indicá la cantidad que querés comprar.';
         $approvedMessage = 'Pago aprobado. Te enviamos el comprobante.';
 
-        $newSaleMessage = "🛒 *Venta disponible:* {venta}\n*Producto:* {producto}\n*Precio unitario:* {precio_unitario}\n{detalle_objetivo}\n*Indicá la cantidad que querés comprar.*{opcion_ganancia}";
+        $newSaleMessage = "🛒 *Venta disponible:* {venta}\n*Producto:* {producto}\n*Precio unitario:* {precio_unitario}\n{detalle_objetivo}\n*Indicá cuántas unidades vendiste hoy.*{opcion_ganancia}";
         $newGainMessage = '¡Gracias por colaborar con la cooperadora! Tu aporte quedó registrado.';
-        $newPurchaseMessage = '¡Gracias por tu compra! Pasá a retirar {producto} el {fecha_entrega}, {horarios_entrega}. Presentá este comprobante.';
+        $newPurchaseMessage = '¡Gracias por tu compra! Retirá {producto} el {fecha_entrega} {horarios_entrega}.';
         // Para actualizaciones desde clientes previos, conservar los valores existentes.
         $providedSaleMessage = array_key_exists('mensaje_indicaciones', $body) ? self::saleMessage($body['mensaje_indicaciones'], $newSaleMessage, 'de indicaciones') : null;
         $providedGainMessage = array_key_exists('mensaje_pago_ganancia', $body) ? self::saleMessage($body['mensaje_pago_ganancia'], $newGainMessage, 'de ganancia', true) : null;

@@ -19,6 +19,7 @@ const emptyOrder = {
   referencia_pago: "",
   observacion: "",
   ganancia_objetivo: 0,
+  liquidar_ganancia: false,
   items: [blankItem()],
 };
 
@@ -53,7 +54,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const campaigns = catalogs?.campanias || [];
   const payments = catalogs?.medios_pago || [];
   const selectableCampaigns = campaigns.filter(
-    (campaign) => (yes(campaign.activo) && campaign.estado_cierre !== "cerrada" && (!campaign.fecha_inicio || campaign.fecha_inicio <= today()) && (!campaign.fecha_fin || campaign.fecha_fin >= today())) || (initialId && String(campaign.id_campania) === String(form.id_campania))
+    (campaign) => (campaign.estado_cierre !== "cerrada" && (yes(campaign.activo) || (campaign.fecha_fin && campaign.fecha_fin < today())) && (!campaign.fecha_inicio || campaign.fecha_inicio <= today())) || (initialId && String(campaign.id_campania) === String(form.id_campania))
   );
 
   const selectedCampaign = useMemo(
@@ -89,6 +90,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           nombre_apellido: upper(row.nombre_apellido || "", 160),
           referencia_pago: upper(row.referencia_pago || "", 180),
           observacion: upper(row.observacion || "", 3000),
+          liquidar_ganancia: false, // operaciones históricas: su importe ya fue cobrado
           items: (row.items || []).length ? row.items.map((item) => ({ ...item, producto_nombre: upper(item.producto_nombre || "", 150), id_producto: asId(item.id_producto), tipo_precio: item.tipo_precio || "personalizado" })) : [blankItem()],
         });
         setPersonSearch(row.nombre_apellido || row.dni || "");
@@ -111,6 +113,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setForm((current) => ({
       ...current,
       id_campania: value,
+      liquidar_ganancia: false,
       items: campaign ? [itemDeCampania(campaign, products)] : [blankItem()],
     }));
   };
@@ -150,6 +153,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   const addConcept = () => setForm((current) => ({
     ...current,
+    liquidar_ganancia: false,
     items: [...current.items, { ...blankItem(), tipo_precio: "personalizado" }],
   }));
 
@@ -162,6 +166,12 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const objectivePerMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
   const objectiveNoSales = Math.max(0, Number(selectedCampaign?.ganancia_total_sin_ventas || 0));
   const objectiveEnabled = objectiveMinimum > 0 && Number(selectedCampaign?.id_producto_principal || 0) > 0;
+  // La liquidación se habilita solo después de fecha_fin y antes de cerrar
+  // definitivamente la campaña. Mientras está abierta no existen multas.
+  const finalSettlementAvailable = Boolean(!initialId && objectiveEnabled &&
+    selectedCampaign?.estado_cierre !== "cerrada" && selectedCampaign?.fecha_fin &&
+    selectedCampaign.fecha_fin < today());
+  const isFinalSettlement = finalSettlementAvailable && Boolean(form.liquidar_ganancia);
   const personDni = String(form.dni || "").replace(/\D/g, "");
   const hasPersonReference = Boolean(form.id_venta_persona || personDni.length >= 5);
 
@@ -246,8 +256,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   };
 
   const itemsSubtotal = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
-  // Cantidad 0 equivale a no vender ese producto. Puede cobrarse únicamente
-  // la ganancia por objetivo (sin generar ítems ni movimientos de stock).
+  // En una venta común, 0 es simplemente cero artículos. La ganancia no se
+  // cobra automáticamente: se liquida expresamente luego de fecha_fin.
   const billableItems = form.items.filter((item) => String(item.cantidad ?? "").trim() === "" || Number(item.cantidad) !== 0);
   const configuredItems = billableItems.filter((item) => String(item.producto_nombre || "").trim());
   const hasConfiguredItems = configuredItems.length > 0 && configuredItems.length === billableItems.length && configuredItems.every((item) => (
@@ -278,13 +288,14 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       : objectiveMissing * objectivePerMissing;
   const objectiveReady = objectiveBase.ready && !objectiveBase.loading;
   const objectiveDue = Math.max(0, objectiveRuleDue - Math.max(0, Number(objectiveBase.ganancia_cobrada_previa || 0)));
-  const objectiveGainForTotal = objectiveEnabled && hasPersonReference && objectiveReady && form.estado === "aprobada"
+  const objectiveGainForTotal = isFinalSettlement && hasPersonReference && objectiveReady && form.estado === "aprobada"
     ? objectiveDue
     : 0;
-  const canSettleGainOnly = !hasConfiguredItems && configuredItems.length === 0 && objectiveGainForTotal > 0;
-  const canSave = (hasConfiguredItems || canSettleGainOnly)
-    && !(objectiveEnabled && hasPersonReference && !objectiveReady);
-  const total = itemsSubtotal + objectiveGainForTotal;
+  const canSettleGainOnly = isFinalSettlement && !hasConfiguredItems && configuredItems.length === 0 && objectiveGainForTotal > 0;
+  const endedCampaign = Boolean(selectedCampaign?.fecha_fin && selectedCampaign.fecha_fin < today());
+  const canSave = isFinalSettlement ? (canSettleGainOnly && objectiveReady)
+    : (hasConfiguredItems && (Boolean(initialId) || !endedCampaign));
+  const total = (isFinalSettlement ? 0 : itemsSubtotal) + objectiveGainForTotal;
 
   const submit = (event) => {
     event.preventDefault();
@@ -295,9 +306,9 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     }
     if (!canSave) {
       if (!objectiveReady && objectiveEnabled && hasPersonReference) {
-        onFeedback("error", "Esperá a que termine el cálculo de la ganancia antes de guardar.");
+        onFeedback("error", "Esperá a que termine el cálculo del objetivo antes de registrar la liquidación final.");
       } else {
-        onFeedback("error", "Agregá un concepto válido o liquidá una ganancia pendiente.");
+        onFeedback("error", isFinalSettlement ? "No hay ganancia para liquidar, o falta seleccionar la persona." : "Agregá al menos un concepto válido.");
         if (!canSettleGainOnly) setActiveTab("venta");
       }
       return;
@@ -308,6 +319,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       id_venta_persona: form.id_venta_persona || null,
       dni: form.dni.replace(/\D/g, ""),
       nombre_apellido: upper(form.nombre_apellido, 160),
+      liquidar_ganancia: canSettleGainOnly,
       items: canSettleGainOnly ? [] : billableItems
         .filter((item) => String(item.producto_nombre || "").trim())
         .map((item) => ({ ...item, cantidad: Number(item.cantidad || 0), precio_unitario: Number(item.precio_unitario || 0) })),
@@ -421,7 +433,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                   </tr>
                 );
               })}
-              {form.items.length === 0 ? <tr><td colSpan={6} className="ventas-inline-concepts__empty">Sin conceptos. Podés agregar uno o liquidar solo la ganancia pendiente del objetivo.</td></tr> : null}
+              {form.items.length === 0 ? <tr><td colSpan={6} className="ventas-inline-concepts__empty">{isFinalSettlement ? "Liquidación final de ganancia: sin productos ni movimiento de stock." : "Sin conceptos. Agregá un producto para registrar la venta."}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -468,7 +480,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           <div className="ventas-objective-card__head">
             <div>
               <strong><VentasSectionIcon kind="objective" />Objetivo de venta</strong>
-              <span>Ganancia pendiente calculada según las ventas de esta persona en la campaña.</span>
+              <span>Las unidades se acumulan entre compras. Los faltantes solo se cobran al finalizar la campaña.</span>
             </div>
             <span className={`ventas-pill ${hasPersonReference && objectiveMissing === 0 ? "success" : "warning"}`}>
               {!hasPersonReference ? "SELECCIONAR PERSONA" : objectiveMissing === 0 ? "OBJETIVO CUMPLIDO" : "OBJETIVO PENDIENTE"}
@@ -509,9 +521,9 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       {/* Ambas tarjetas se ubican después de la fila superior para ocupar el ancho completo. */}
       {objectiveEnabled ? (
         <div className="ventas-order-objective__payable" aria-busy={objectiveBase.loading}>
-          <span>Ganancia a pagar</span>
+          <span>{isFinalSettlement ? "Ganancia final a cobrar" : "Ganancia estimada al cierre (no se cobra ahora)"}</span>
           <strong className="ventas-money">{objectiveBase.loading || !hasPersonReference ? "—" : money(objectiveDue)}</strong>
-          <small>{!hasPersonReference ? "Seleccioná una persona para calcular el importe." : objectiveBase.loading ? "Actualizando el cálculo..." : objectiveDue === 0 ? "No hay ganancia pendiente por cobrar." : "Importe pendiente de esta campaña."}</small>
+          <small>{!hasPersonReference ? "Seleccioná una persona para ver su objetivo." : objectiveBase.loading ? "Actualizando el cálculo..." : objectiveDue === 0 ? "Objetivo cumplido o ganancia ya saldada." : isFinalSettlement ? "Solo se registrará al confirmar esta liquidación." : "Estimación informativa: pueden seguir vendiéndose unidades hasta el cierre."}</small>
         </div>
       ) : null}
 
@@ -521,6 +533,18 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
           {Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 && objectiveReady ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
           {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
+          {!finalSettlementAvailable && !initialId ? <span>El cobro de ganancias se habilita después de la fecha de fin y antes de cerrar definitivamente la campaña.</span> : null}
+          {finalSettlementAvailable && !isFinalSettlement ? <span>El plazo de venta de productos terminó. Para registrar una ganancia ya cobrada, seleccioná la liquidación final.</span> : null}
+          {finalSettlementAvailable ? (
+            <label className="ventas-note" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={isFinalSettlement} onChange={(event) => setForm((v) => ({
+                ...v, liquidar_ganancia: event.target.checked,
+                estado: event.target.checked ? "aprobada" : v.estado,
+                items: event.target.checked ? [] : [itemDeCampania(selectedCampaign, products)],
+              }))} />
+              Registrar solamente la ganancia final ya cobrada (sin productos)
+            </label>
+          ) : null}
           {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
         </div>
       ) : null}

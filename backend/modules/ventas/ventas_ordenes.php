@@ -293,18 +293,19 @@ trait VentasOrdenes
         array $items,
         ?array $before,
         array $oldItems,
-        string $newState
+        string $newState,
+        bool $finalSettlement = false
     ): void {
         $campaignId = (int)$campaign['id_campania'];
         $sameHistoricalCampaign = $before !== null && (int)$before['id_campania'] === $campaignId;
         if (($campaign['estado_cierre'] ?? 'abierta') === 'cerrada') {
             api_error('La campaña está cerrada. Consultá el historial; no se admiten cambios.', 'VENTA_CAMPANIA_CERRADA', 409);
         }
-        if (!$sameHistoricalCampaign && ((isset($campaign['fecha_inicio']) && $campaign['fecha_inicio'] && $campaign['fecha_inicio'] > date('Y-m-d')) ||
+        if (!$finalSettlement && !$sameHistoricalCampaign && ((isset($campaign['fecha_inicio']) && $campaign['fecha_inicio'] && $campaign['fecha_inicio'] > date('Y-m-d')) ||
             (isset($campaign['fecha_fin']) && $campaign['fecha_fin'] && $campaign['fecha_fin'] < date('Y-m-d')))) {
             api_error('La campaña está fuera del período de venta. No admite ventas nuevas.', 'VENTA_FUERA_DE_VIGENCIA', 409);
         }
-        if ((int)$campaign['activo'] !== 1) {
+        if ((int)$campaign['activo'] !== 1 && !$finalSettlement) {
             $wasApproved = $before !== null && ($before['estado'] ?? '') === 'aprobada';
             if (!$sameHistoricalCampaign || ($newState === 'aprobada' && !$wasApproved)) {
                 api_error('La campaña seleccionada está inactiva y no admite ventas nuevas.', 'VENTA_CAMPANIA_INACTIVA', 409);
@@ -584,6 +585,24 @@ trait VentasOrdenes
             $count->execute($params);
             $total = (int)$count->fetchColumn();
 
+            // Tarjetas inferiores de Ventas registradas: TODOS los registros
+            // del filtro (no solo la página actual). Solo las aprobadas generan
+            // recaudación y unidades efectivamente vendidas. Agrupar ítems
+            // primero evita duplicar total y ganancia en órdenes multiartículo.
+            $stage = 'totales';
+            $summary = $db->prepare(
+                'SELECT COALESCE(SUM(COALESCE(unidades.cantidad, 0)), 0) AS cantidades_vendidas,'
+                . ' COALESCE(SUM(o.total), 0) AS recaudado,'
+                . ' COALESCE(SUM(o.ganancia_objetivo), 0) AS ganancias_cobradas'
+                . ' FROM ventas_ordenes o'
+                . $searchJoins
+                . ' LEFT JOIN (SELECT id_orden, SUM(CASE WHEN id_producto IS NOT NULL THEN cantidad ELSE 0 END) AS cantidad FROM ventas_orden_items GROUP BY id_orden) unidades'
+                . ' ON unidades.id_orden = o.id_orden'
+                . ' WHERE ' . $whereSql . " AND o.estado = 'aprobada'"
+            );
+            $summary->execute($params);
+            $totals = $summary->fetch(PDO::FETCH_ASSOC) ?: [];
+
             $stage = 'registros';
             $statement = $db->prepare(
                 'SELECT o.*, c.nombre AS campania_nombre, c.estado_cierre, vp.dni, vp.nombre_apellido,'
@@ -630,6 +649,11 @@ trait VentasOrdenes
             $stage = 'respuesta';
             api_success([
                 'items' => $items,
+                'totales' => [
+                    'cantidades_vendidas' => (int)($totals['cantidades_vendidas'] ?? 0),
+                    'recaudado' => (float)($totals['recaudado'] ?? 0),
+                    'ganancias_cobradas' => (float)($totals['ganancias_cobradas'] ?? 0),
+                ],
                 'paginacion' => [
                     'pagina' => $page,
                     'por_pagina' => $perPage,
@@ -673,8 +697,10 @@ trait VentasOrdenes
         $reference=optional_text($body['referencia_pago'] ?? null,180);
         [$items,$itemsTotal]=self::normalizeItems($db,$body['items'] ?? []);
         $allDoor=self::allDoorPrice($items);
+        // Nunca liquidar faltantes de manera automática en las ventas comunes.
+        $liquidarGanancia = !empty($body['liquidar_ganancia']);
 
-        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor){
+        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor,$liquidarGanancia){
             $campaign=self::campaign($db,$campaignId,true);
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
@@ -685,12 +711,28 @@ trait VentasOrdenes
             if ($before && $before['origen'] === 'bot_whatsapp' && $state !== 'aprobada') {
                 api_error('Las ventas de WhatsApp ya están pagadas y no pueden pasar a pendientes.', 'VALIDATION_ERROR');
             }
-            if ($before === null && (($campaign['fecha_inicio'] && $saleDate < $campaign['fecha_inicio'])
+            // Una orden histórica que incluye una ganancia ya cobrada no debe
+            // volver a facturarla al editar el detalle de los artículos.
+            // Se mantiene íntegro el comprobante original; para corregirla,
+            // anular con motivo y conciliar el pago real por separado.
+            if ($before && (float)$before['ganancia_objetivo'] > 0) {
+                api_error('Esta venta ya incluye una ganancia cobrada y no puede editarse sin alterar el importe histórico. Usá anulación con motivo y conciliación.', 'VENTA_GANANCIA_HISTORICA_INMUTABLE', 409);
+            }
+            if ($before === null && !$liquidarGanancia && (($campaign['fecha_inicio'] && $saleDate < $campaign['fecha_inicio'])
                 || ($campaign['fecha_fin'] && $saleDate > $campaign['fecha_fin']))) {
                 api_error('La fecha de venta tiene que estar dentro de la vigencia de la campaña.', 'VENTA_FECHA_FUERA_DE_RANGO', 409);
             }
             $oldItems=$id?self::orderItems($db,$id):[];
-            self::assertOrderCatalogAvailability($db,$campaign,$items,$before,$oldItems,$state);
+            $fechaFin = (string)($campaign['fecha_fin'] ?? '');
+            $finalSettlement = $liquidarGanancia && !$id && $state==='aprobada'
+                && $items===[] && $fechaFin!=='' && $fechaFin<date('Y-m-d');
+            if ($liquidarGanancia && !$finalSettlement) {
+                api_error('Solo se puede liquidar la ganancia después de la fecha de fin, antes del cierre definitivo, sin productos y con pago aprobado.', 'VENTA_LIQUIDACION_NO_DISPONIBLE', 409);
+            }
+            if ($finalSettlement && ($saleDate <= $fechaFin || $saleDate > date('Y-m-d'))) {
+                api_error('La fecha de liquidación debe ser posterior al último día de venta y no puede ser futura.', 'VENTA_FECHA_LIQUIDACION_INVALIDA', 409);
+            }
+            self::assertOrderCatalogAvailability($db,$campaign,$items,$before,$oldItems,$state,$finalSettlement);
             if($before && $before['estado']==='aprobada' && self::isStockManagedOrder($before)) self::adjustStock($db,$oldItems,+1);
             $personId=self::resolvePerson($db,$body);
             if(!$personId && !$allDoor) api_error('Esta venta debe estar asociada a una persona o alumno.','VALIDATION_ERROR');
@@ -700,11 +742,14 @@ trait VentasOrdenes
                 self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona=? FOR UPDATE', [$personId]);
             }
 
-            // La ganancia por objetivo forma parte del importe final de la venta.
-            // Se calcula siempre en backend para que no pueda alterarse desde el navegador.
-            $objectiveGain=self::objectiveChargeForOrder($db,$campaign,$personId,$id,$items,$state);
-            if ($items === [] && !($state === 'aprobada' && $personId && $objectiveGain > 0)) {
-                api_error('Agregá un concepto válido o liquidá una ganancia por objetivo pendiente.', 'VALIDATION_ERROR');
+            // La venta parcial factura únicamente artículos. La deuda del
+            // objetivo se calcula por persona al finalizar y solo se registra
+            // mediante el modo explícito de liquidación final.
+            $objectiveGain=$finalSettlement
+                ? self::objectiveChargeForOrder($db,$campaign,$personId,null,[],'aprobada')
+                : (($before && $state==='aprobada') ? max(0.0,(float)$before['ganancia_objetivo']) : 0.0);
+            if ($items===[] && !($finalSettlement && $personId && $objectiveGain>0)) {
+                api_error('Agregá un producto. La ganancia por objetivo solo puede liquidarse al terminar la campaña.', 'VALIDATION_ERROR');
             }
             $finalTotal=round((float)$itemsTotal+$objectiveGain,2);
             /** @disregard P1012 */
@@ -732,6 +777,11 @@ trait VentasOrdenes
                 $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,?,\'manual\',?,?,?,?,?)')
                     ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt]);
                 $orderId=(int)$db->lastInsertId();
+                // Una liquidación de ganancia no tiene productos para retirar.
+                if ($finalSettlement) {
+                    $db->prepare('UPDATE ventas_ordenes SET retirado=1,retirado_en=? WHERE id_orden=?')
+                        ->execute([$approvedAt,$orderId]);
+                }
             }
             $insert=$db->prepare('INSERT INTO ventas_orden_items (id_orden,id_producto,producto_nombre,cantidad,precio_unitario,subtotal,tipo_precio) VALUES (?,?,?,?,?,?,?)');
             foreach($items as $item)$insert->execute([$orderId,$item['id_producto'],$item['producto_nombre'],$item['cantidad'],$item['precio_unitario'],$item['subtotal'],$item['tipo_precio']]);
@@ -773,9 +823,8 @@ trait VentasOrdenes
             $db->prepare("UPDATE ventas_ordenes SET estado='cancelada',cancelado_en=NOW(),retirado=0,retirado_en=NULL,observacion=? WHERE id_orden=?")->execute([$obs,$id]);
             $after=self::order($db,$id);audit_change($db,$auth,'VENTAS','ANULAR_VENTA','ventas_ordenes',$id,'La venta se anuló conservando trazabilidad.',$before,$after);
 
-            // Al anular una venta con ganancia, puede reaparecer una obligación
-            // por objetivo. No generar ingresos ni modificar otras órdenes:
-            // una ganancia solo se cobra al registrar explícitamente su pago.
+            // No agregar cargos a ventas previas al anular una operación:
+            // las diferencias se calculan en la liquidación final.
             if ($before['estado'] !== 'aprobada' || (float)($before['ganancia_objetivo'] ?? 0) <= 0) return 0.0;
             $personId = self::nullablePositiveId($before['id_venta_persona'] ?? null);
             if (!$personId) return 0.0;
@@ -784,8 +833,7 @@ trait VentasOrdenes
         });
         $message='Venta anulada. Se conservó el historial y se revirtió Contabilidad/stock.';
         if ($balance > 0) {
-            $message .= ' Atención: quedan $' . number_format($balance, 2, ',', '.')
-                . ' de ganancia por objetivo pendientes. Registrá la liquidación manual cuando se cobre.';
+            $message .= ' Se recalculará la ganancia al cierre, según las ventas aprobadas.';
         }
         api_success(['ganancia_pendiente'=>$balance], $message);
     }

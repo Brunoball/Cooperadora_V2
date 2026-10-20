@@ -4174,3 +4174,63 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   .ventas-campaign-messages-tab .ventas-message-panel { padding: 12px; gap: 15px; }
   .ventas-campaign-messages-tab .ventas-message-panel__icon { width: 30px; height: 30px; font-size: 12px; }
 }
+
+/* Ventas registradas: totales de TODAS las órdenes del filtro, no solo la página. */
+.ventas-orders-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px 18px;
+  border-top: 1px solid var(--border-color, #e4e7ec);
+}
+.ventas-orders-total-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border-color, #e4e7ec);
+  border-radius: 12px;
+  background: var(--surface-color, #fff);
+}
+.ventas-orders-total-card__icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--primary-50, #eef4ff);
+  color: var(--primary-600, #2454a6);
+  font-size: 18px;
+}
+.ventas-orders-total-card__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ventas-orders-total-card__label {
+  color: var(--text-secondary, #667085);
+  font-size: 12px;
+  font-weight: 700;
+}
+.ventas-orders-total-card__content strong {
+  color: var(--text-primary, #182230);
+  font-size: clamp(18px, 1.7vw, 24px);
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.ventas-orders-total-card__content small {
+  color: var(--text-muted, #667085);
+  font-size: 11px;
+  line-height: 1.35;
+}
+@media (max-width: 1000px) {
+  .ventas-orders-totals { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .ventas-orders-totals { padding: 10px; gap: 8px; }
+  .ventas-orders-total-card { padding: 12px; }
+}
