@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faEye, faEyeSlash } from "@fortawesome/free-solid-svg-icons";
 import { apiPost } from "../_shared/api/apiClient";
 import { saveSession } from "../_shared/auth/session";
+import { botPanelPrimeHostingerSession } from "../BotPanel/botPanelRequest";
 import Toast from "../Global/Toast";
 import bannerCooperadora from "../../imagenes/logo_ipet50.png";
 import "./inicio.css";
@@ -90,6 +91,11 @@ export default function Inicio() {
         usuario: data.usuario,
         organizacion: data.organizacion,
       });
+
+      // Una sola autenticación visible: si el backend principal es LOCAL,
+      // obtenemos en paralelo la sesión REAL de Hostinger para Campañas/Reportes.
+      // No bloqueamos el ingreso a Cooperadora si Hostinger está caído.
+      void botPanelPrimeHostingerSession(usuarioNormalizado, contrasena);
 
       if (recordarCuenta) {
         saveRememberedAccount(usuarioNormalizado, contrasena);

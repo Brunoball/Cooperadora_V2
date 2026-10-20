@@ -1,0 +1,27 @@
+.wp-hostinger-auth {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 18px;
+  border: 1px solid rgba(59, 130, 246, .35);
+  border-radius: 12px;
+  background: rgba(59, 130, 246, .07);
+  color: inherit;
+}
+.wp-hostinger-auth strong { font-size: 15px; }
+.wp-hostinger-auth p { margin: 0; font-size: 13px; line-height: 1.5; }
+.wp-hostinger-auth-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.wp-hostinger-auth label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.wp-hostinger-auth input {
+  width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 10px 12px; border: 1px solid #9ca3af; border-radius: 8px;
+  background: #fff; color: #111827; font: inherit;
+}
+.wp-hostinger-auth > button {
+  justify-self: start; padding: 10px 15px; border: 0; border-radius: 8px;
+  background: #2563eb; color: #fff; font: inherit; font-weight: 700; cursor: pointer;
+}
+.wp-hostinger-auth > button:disabled { opacity: .6; cursor: wait; }
+.wp-hostinger-auth-error { color: #dc2626; font-weight: 600; }
+.wp-hostinger-auth small { opacity: .75; font-size: 11px; line-height: 1.45; }
+@media (max-width: 640px) { .wp-hostinger-auth-fields { grid-template-columns: 1fr; } }

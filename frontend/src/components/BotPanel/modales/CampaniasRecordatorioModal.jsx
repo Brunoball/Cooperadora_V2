@@ -21,7 +21,6 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Toast from "../../Global/Toast";
 import { botPanelRequest } from "../botPanelRequest";
-import { isBotPanelLocalPreview } from "../botPanelLocalPreview";
 import { useModalEscapeStack } from "./useModalEscapeStack";
 import "./CampaniasRecordatorioModal.css";
 
@@ -381,7 +380,11 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
   });
 
   const fetchJson = useCallback(async (url, options = {}) => {
-    return botPanelRequest(url, options);
+    try {
+      return await botPanelRequest(url, options);
+    } catch (e) {
+      throw e;
+    }
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -685,7 +688,6 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
               <p>Programá avisos y elegí libremente cursos, divisiones y categorías.</p>
             </div>
           </div>
-          {isBotPanelLocalPreview() ? <span className="wp-campaign-demo-label" title="No se envían mensajes reales">Vista local · datos de ejemplo</span> : null}
           <button type="button" className="wp-campaign-close" onClick={closeModal} disabled={saving || Boolean(deletingId)} aria-label="Cerrar">
             <FontAwesomeIcon icon={faXmark} />
           </button>
@@ -712,6 +714,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
               {error ? (
                 <div className="wp-campaign-error" role="alert">
                   {error}
+                  
                   <div style={{ marginTop: 10 }}>
                     <button type="button" className="wp-campaign-secondary" onClick={loadAll} disabled={loading}>
                       Reintentar carga
@@ -799,7 +802,10 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
             {loadingHistory ? (
               <div className="wp-campaign-empty"><FontAwesomeIcon icon={faSpinner} spin /> Cargando historial…</div>
             ) : historyError ? (
-              <div className="wp-campaign-error">{historyError}</div>
+              <>
+                <div className="wp-campaign-error">{historyError}</div>
+                
+              </>
             ) : historyData?.campania ? (
               <div className="wp-campaign-history-content">
                 <section className="wp-campaign-section wp-campaign-history-summary">
@@ -954,6 +960,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
             </div>
 
             {formError ? <div className="wp-campaign-error">{formError}</div> : null}
+            
 
             {activeTab === "mensaje" ? (
               <div className="wp-campaign-tab-content">

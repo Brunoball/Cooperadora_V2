@@ -11,7 +11,7 @@ function defaultApiBaseUrl() {
   // Esta condición se resuelve al compilar (NODE_ENV=production).
   if (process.env.NODE_ENV === "production") return HOSTINGER_API_URL;
 
-  if (typeof window === "undefined") return "http://localhost:3001/routes";
+  if (typeof window === "undefined") return "https://cooperadora.ipet50.edu.ar/api/routes";
 
   const hostname = String(window.location.hostname || "").toLowerCase();
   const isLoopback = ["localhost", "127.0.0.1", "::1"].includes(hostname);
