@@ -83,7 +83,7 @@ test.describe("Ingresantes - integración y trazabilidad", () => {
     expect((reopened.items || []).some((x) => Number(x.id_ingresante) === Number(incoming.id_ingresante))).toBeTruthy();
   });
 
-  test("DNI+ciclo no se duplica y una matrícula cobrada queda inmutable", async ({ request }) => {
+  test("DNI+ciclo no se duplica y una matrícula cobrada permite corregir el importe y los datos", async ({ request }) => {
     const t = token();
     const dni = testDni();
     const incoming = await createIncoming(request, t, {
@@ -111,26 +111,51 @@ test.describe("Ingresantes - integración y trazabilidad", () => {
     expect(duplicate.status).toBe(409);
     expect(duplicate.body.codigo).toBe("INGRESANTE_DUPLICADO");
 
-    const immutable = await apiFetch(request, "ingresantes_guardar", {
+    const dniCorregido = testDni();
+    const updated = await ok(request, "ingresantes_guardar", {
       token: t,
       method: "POST",
       data: {
         id_ingresante: incoming.id_ingresante,
         apellido: incoming.apellido,
-        nombre: incoming.nombre,
-        num_documento: incoming.num_documento,
+        nombre: "MATRICULA CORREGIDA",
+        num_documento: dniCorregido,
         id_anio_destino: incoming.id_anio_destino,
-        ciclo_lectivo: incoming.ciclo_lectivo,
+        ciclo_lectivo: currentYear() + 1,
         fecha_inscripcion: incoming.fecha_inscripcion,
         matricula_pagada: 1,
         monto_matricula: 9999.99,
         id_medio_pago: incoming.id_medio_pago,
         fecha_pago_matricula: incoming.fecha_pago_matricula,
-        observaciones: incoming.observaciones || "PW E2E",
+        observaciones: "PW E2E CORRECCION DE MATRICULA",
       },
     });
-    expect(immutable.status).toBe(409);
-    expect(immutable.body.codigo).toBe("MATRICULA_INGRESANTE_INMUTABLE");
+    expect(updated.item.nombre).toBe("MATRICULA CORREGIDA");
+    expect(updated.item.num_documento).toBe(dniCorregido);
+    expect(Number(updated.item.ciclo_lectivo)).toBe(currentYear() + 1);
+    expect(Number(updated.item.monto_matricula)).toBeCloseTo(9999.99, 2);
+
+    // También se puede revertir el estado de pago, sin dejar los datos del
+    // cobro anterior asociados a una matrícula que ahora figura no pagada.
+    const unpaid = await ok(request, "ingresantes_guardar", {
+      token: t,
+      method: "POST",
+      data: {
+        id_ingresante: incoming.id_ingresante,
+        apellido: incoming.apellido,
+        nombre: "MATRICULA CORREGIDA",
+        num_documento: dniCorregido,
+        id_anio_destino: incoming.id_anio_destino,
+        ciclo_lectivo: currentYear() + 1,
+        fecha_inscripcion: incoming.fecha_inscripcion,
+        matricula_pagada: 0,
+        observaciones: "PW E2E CORRECCION DE MATRICULA",
+      },
+    });
+    expect(unpaid.item.matricula_pagada).toBe(false);
+    expect(unpaid.item.monto_matricula).toBeNull();
+    expect(unpaid.item.id_medio_pago).toBeNull();
+    expect(unpaid.item.fecha_pago_matricula).toBeNull();
   });
 
   test("rechaza fechas futuras de inscripción y de pago de matrícula", async ({ request }) => {

@@ -22,13 +22,77 @@ trait VentasConfiguracion
     // El mismo valor y visibilidad que Ventas::MONEY_MAX. PHP 8.2+
     // permite declarar una constante compatible en la clase y en su trait.
     private const MONEY_MAX = 9999999999.99;
+    // Estos textos se guardan por campaña y se utilizarán al integrar el bot/PDF.
+    // No se modifican los mensajes legados que el bot actual ya consume.
+    private static function saleMessage(mixed $input, string $default, string $field, bool $optional = false): string
+    {
+        if (!is_string($input)) api_error("El mensaje {$field} debe ser texto.", 'VALIDATION_ERROR');
+        // Validar ANTES de trim: trim elimina bytes NUL al principio/final y
+        // ocultaría entradas inválidas en lugar de rechazarlas.
+        $value = str_replace("\r", '', $input);
+        if (preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', $value)) {
+            api_error("El mensaje {$field} contiene caracteres inválidos.", 'VALIDATION_ERROR');
+        }
+        $value = trim($value);
+        if ($value === '' && !$optional) $value = $default;
+        // Contar caracteres Unicode reales, incluso cuando mbstring no está instalado.
+        // strlen mide bytes y rechazaba incorrectamente mensajes con emojis.
+        $length = preg_match_all('/./us', $value);
+        if ($length === false) api_error("El mensaje {$field} contiene texto inválido.", 'VALIDATION_ERROR');
+        if ($length > 1200) api_error("El mensaje {$field} supera 1200 caracteres.", 'VALIDATION_ERROR');
+        // Cualquier variable futura en el texto debe estar expresamente contemplada.
+        preg_match_all('/\{([^{}]+)\}/u', $value, $tokens);
+        foreach ($tokens[1] as $token) {
+            if (!in_array($token, ['venta', 'producto', 'precio_unitario', 'cantidad_minima', 'detalle_objetivo', 'opcion_ganancia', 'ganancia_unidad', 'ganancia_sin_ventas', 'fecha_entrega', 'horarios_entrega', 'cantidad', 'nombre'], true)) {
+                api_error("Variable no permitida en el mensaje {$field}: {{$token}}.", 'VALIDATION_ERROR');
+            }
+        }
+        // Evitar campos escritos a medias ({producto, {venta} extra, etc.)
+        // que el editor visual no podría completar automáticamente.
+        $sinVariablesValidas = preg_replace('/\{(?:venta|producto|precio_unitario|cantidad_minima|detalle_objetivo|opcion_ganancia|ganancia_unidad|ganancia_sin_ventas|fecha_entrega|horarios_entrega|cantidad|nombre)\}/u', '', $value);
+        if ($sinVariablesValidas === null || str_contains($sinVariablesValidas, '{') || str_contains($sinVariablesValidas, '}')) {
+            api_error("El mensaje {$field} tiene un dato automático incompleto.", 'VALIDATION_ERROR');
+        }
+        return $value;
+    }
+
+    private static function deliverySlots(mixed $input): string
+    {
+        if ($input === null || $input === '') return '[]';
+        if (is_string($input)) {
+            $input = json_decode($input, true);
+        }
+        if (!is_array($input) || !array_is_list($input) || count($input) > 8) {
+            api_error('La entrega admite hasta 8 rangos horarios.', 'VALIDATION_ERROR');
+        }
+        $ranges = [];
+        foreach ($input as $range) {
+            if (!is_array($range) || !is_string($range['desde'] ?? null) || !is_string($range['hasta'] ?? null)) {
+                api_error('Completá el inicio y el fin de cada horario de entrega.', 'VALIDATION_ERROR');
+            }
+            $from = $range['desde']; $to = $range['hasta'];
+            if (!preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $from) ||
+                !preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D', $to) || $from >= $to) {
+                api_error('Cada horario debe tener horas válidas y finalizar después de comenzar.', 'VALIDATION_ERROR');
+            }
+            $ranges[] = ['desde' => $from, 'hasta' => $to];
+        }
+        usort($ranges, static fn($a, $b) => strcmp($a['desde'], $b['desde']));
+        for ($i = 1; $i < count($ranges); $i++) {
+            if ($ranges[$i]['desde'] < $ranges[$i - 1]['hasta']) {
+                api_error('Los rangos de entrega no pueden superponerse.', 'VALIDATION_ERROR');
+            }
+        }
+        return json_encode($ranges, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+    }
+
     // Campañas y configuración
     public static function campanias(): never
     {
         $db = self::db();
         $statement = $db->query(
             "SELECT c.*, COALESCE(c.fecha_inicio, (SELECT MIN(COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en))) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania), DATE(c.creado_en)) AS fecha_referencia,
-                    p.nombre AS producto_principal_nombre, p.precio_anticipada, p.precio_puerta, p.stock AS producto_stock,
+                    p.nombre AS producto_principal_nombre, p.precio, p.precio_anticipada, p.precio_puerta, p.stock AS producto_stock,
                     (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania = c.id_campania) AS cantidad_ordenes,
                     (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='pendiente') AS cobros_pendientes,
                     (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='aprobada' AND o.retirado=0) AS retiros_pendientes,
@@ -54,6 +118,7 @@ trait VentasConfiguracion
         $productId = self::nullablePositiveId($body['id_producto_principal'] ?? null);
         $start = valid_date($body['fecha_inicio'] ?? null, 'inicio', false);
         $end = valid_date($body['fecha_fin'] ?? null, 'fin', false);
+        $deliveryProvided = array_key_exists('fecha_entrega', $body);
         $delivery = valid_date($body['fecha_entrega'] ?? null, 'entrega', false);
         if ($delivery && $end && $delivery < $end) api_error('La entrega no puede ser anterior al cierre de ventas.', 'VALIDATION_ERROR');
         if ($start && $end && $end < $start) api_error('La fecha de fin no puede ser anterior a la fecha de inicio.', 'VALIDATION_ERROR');
@@ -76,12 +141,21 @@ trait VentasConfiguracion
             }
         }
 
-        // Los mensajes no se personalizan por campaña: el bot usa el mismo flujo.
-        // Conservar los mensajes de campañas anteriores al editar para no alterar su historial.
-        // Los valores siguen guardándose para compatibilidad con el bot existente.
+        // Los mensajes legados se usan solo como valor inicial de campañas nuevas.
+        // Al editar, se conservan los valores anteriores para NO sobrescribir el
+        // flujo actual del bot con textos fijos. La integración se hará después.
         $question = 'Ingresá el DNI de la persona o alumno que va a realizar la compra/pago.';
         $startMessage = 'Indicá la cantidad que querés comprar.';
         $approvedMessage = 'Pago aprobado. Te enviamos el comprobante.';
+
+        $newSaleMessage = "🛒 *Venta disponible:* {venta}\n*Producto:* {producto}\n*Precio unitario:* {precio_unitario}\n{detalle_objetivo}\n*Indicá la cantidad que querés comprar.*{opcion_ganancia}";
+        $newGainMessage = '¡Gracias por colaborar con la cooperadora! Tu aporte quedó registrado.';
+        $newPurchaseMessage = '¡Gracias por tu compra! Pasá a retirar {producto} el {fecha_entrega}, {horarios_entrega}. Presentá este comprobante.';
+        // Para actualizaciones desde clientes previos, conservar los valores existentes.
+        $providedSaleMessage = array_key_exists('mensaje_indicaciones', $body) ? self::saleMessage($body['mensaje_indicaciones'], $newSaleMessage, 'de indicaciones') : null;
+        $providedGainMessage = array_key_exists('mensaje_pago_ganancia', $body) ? self::saleMessage($body['mensaje_pago_ganancia'], $newGainMessage, 'de ganancia', true) : null;
+        $providedPurchaseMessage = array_key_exists('mensaje_pago_compra', $body) ? self::saleMessage($body['mensaje_pago_compra'], $newPurchaseMessage, 'de compra', true) : null;
+        $providedSlots = array_key_exists('horarios_entrega', $body) ? self::deliverySlots($body['horarios_entrega']) : null;
 
         // La suite E2E necesita poder crear su campaña aislada como inactiva para no
         // tocar la configuración real. En uso normal, una nueva configuración siempre
@@ -99,17 +173,30 @@ trait VentasConfiguracion
             api_error('Definí las fechas de inicio, fin y entrega de la campaña.', 'VENTA_FECHAS_REQUERIDAS');
         }
 
-        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate, $delivery) {
+        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate, $delivery, $providedSaleMessage, $providedGainMessage, $providedPurchaseMessage, $providedSlots, $newSaleMessage, $newGainMessage, $newPurchaseMessage, $deliveryProvided) {
             // Bloqueamos primero el producto solicitado y después la configuración.
             // De esta forma una edición de una configuración activa no puede aprobar un
             // producto que fue dado de baja concurrentemente.
             $product = $productId !== null ? self::product($db, $productId, true) : null;
             $before = $id ? self::campaign($db, $id, true) : null;
             if ($before && $before['estado_cierre'] === 'cerrada') api_error('La campaña está cerrada: el historial no puede modificarse.', 'VENTA_CAMPANIA_CERRADA', 409);
+            if ($before && !$deliveryProvided) $delivery = $before['fecha_entrega'];
+            if ($delivery && $end && $delivery < $end) api_error('La entrega no puede ser anterior al cierre de ventas.', 'VALIDATION_ERROR');
             if ($before) {
                 $question = $before['pregunta_persona'];
                 $startMessage = $before['mensaje_inicio'];
                 $approvedMessage = $before['mensaje_aprobado'];
+            }
+            $saleMessage = $providedSaleMessage ?? ($before['mensaje_indicaciones'] ?? $newSaleMessage);
+            $gainMessage = $providedGainMessage ?? ($before['mensaje_pago_ganancia'] ?? $newGainMessage);
+            $purchaseMessage = $providedPurchaseMessage ?? ($before['mensaje_pago_compra'] ?? $newPurchaseMessage);
+            $deliverySlots = $providedSlots ?? ($before['horarios_entrega'] ?? '[]');
+            if (!$before) {
+                // Aplicar los defaults también cuando el cliente no envía nuevos campos.
+                $saleMessage = $providedSaleMessage ?? $newSaleMessage;
+                $gainMessage = $providedGainMessage ?? $newGainMessage;
+                $purchaseMessage = $providedPurchaseMessage ?? $newPurchaseMessage;
+                $deliverySlots = $providedSlots ?? '[]';
             }
 
             // Editar conserva el estado; una nueva campaña no desactiva las demás
@@ -151,9 +238,9 @@ trait VentasConfiguracion
                         (int)($before['cantidad_minima_persona'] ?? 0) !== $minimumQuantity
                         || round((float)($before['ganancia_unidad_faltante'] ?? 0), 2) !== round((float)$missingUnitGain, 2)
                         || round((float)($before['ganancia_total_sin_ventas'] ?? 0), 2) !== round((float)$noSalesGain, 2);
-                    if ($beforeProductId !== $productId || $objectiveChanged || $start !== $before['fecha_inicio'] || $end !== $before['fecha_fin'] || $delivery !== $before['fecha_entrega']) {
+                    if ($beforeProductId !== $productId || $objectiveChanged || $start !== $before['fecha_inicio'] || $end !== $before['fecha_fin']) {
                         api_error(
-                            'Esta campaña ya tiene ventas: el producto, las fechas y el objetivo económico forman parte del historial y no se pueden modificar.',
+                            'Esta campaña ya tiene ventas: el producto, la vigencia y el objetivo económico no se pueden modificar. La entrega y los mensajes sí.',
                             'VENTA_CAMPANIA_REGLA_HISTORICA',
                             409
                         );
@@ -165,12 +252,12 @@ trait VentasConfiguracion
                     'UPDATE ventas_campanias
                         SET nombre=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?, fecha_entrega=?,
                             cantidad_minima_persona=?, ganancia_unidad_faltante=?, ganancia_total_sin_ventas=?,
-                            pregunta_persona=?, mensaje_inicio=?, mensaje_aprobado=?
+                            mensaje_indicaciones=?, mensaje_pago_ganancia=?, mensaje_pago_compra=?, horarios_entrega=?
                       WHERE id_campania=?'
                 )->execute([
                     $name, $visible, $productId, $start, $end, $delivery,
                     $minimumQuantity, $missingUnitGain, $noSalesGain,
-                    $question, $startMessage, $approvedMessage, $id
+                    $saleMessage, $gainMessage, $purchaseMessage, $deliverySlots, $id
                 ]);
                 $recordId = $id;
             } else {
@@ -178,12 +265,14 @@ trait VentasConfiguracion
                     'INSERT INTO ventas_campanias
                         (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin, fecha_entrega,
                          cantidad_minima_persona, ganancia_unidad_faltante, ganancia_total_sin_ventas,
-                         tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?)'
+                         tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado,
+                         mensaje_indicaciones, mensaje_pago_ganancia, mensaje_pago_compra, horarios_entrega)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?, ?, ?, ?, ?)'
                 )->execute([
                     $name, $active, $visible, $productId, $start, $end, $delivery,
                     $minimumQuantity, $missingUnitGain, $noSalesGain,
-                    $question, $startMessage, $approvedMessage
+                    $question, $startMessage, $approvedMessage,
+                    $saleMessage, $gainMessage, $purchaseMessage, $deliverySlots
                 ]);
                 $recordId = (int)$db->lastInsertId();
             }

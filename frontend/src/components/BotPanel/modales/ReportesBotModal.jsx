@@ -1,4 +1,5 @@
 import { botPanelRequest } from "../botPanelRequest";
+import { isBotPanelLocalPreview } from "../botPanelLocalPreview";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -241,6 +242,7 @@ const ReportesBotModal = ({ open, onClose }) => {
             </div>
           </div>
 
+          {isBotPanelLocalPreview() ? <span title="Sin conexión a estadísticas reales" style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>VISTA LOCAL · DATOS DE EJEMPLO</span> : null}
           <div className="wp-report-head-actions">
             <div
               className={`wp-report-period ${periodMenuOpen ? "is-open" : ""}`}
@@ -313,6 +315,15 @@ const ReportesBotModal = ({ open, onClose }) => {
         </nav>
 
         <div className="wp-report-body">
+          {isBotPanelLocalPreview() ? (
+            <div className="wp-report-info-box is-warning" role="note">
+              <FontAwesomeIcon icon={faTriangleExclamation} />
+              <div>
+                <b>Vista de diseño local</b>
+                <span>Los valores en cero son de demostración. Este informe no consultó la base real ni valida tu sesión en producción.</span>
+              </div>
+            </div>
+          ) : null}
           {error ? (
             <div className="wp-report-error">
               <FontAwesomeIcon icon={faTriangleExclamation} />

@@ -10,6 +10,7 @@ import { useAutoRefresh } from "../hooks/useAutoRefresh";
 import ConfiguracionVentaModal from "../modales/ConfiguracionVentaModal";
 import { ActionButton } from "../VentasUI";
 import { campaniaOpcion, money, ordenarCampanias, upper, yes, today } from "../ventasUtils";
+import { precioUnitarioVenta } from "../ventaMensajes";
 
 /** Un solo espacio de trabajo; el historial se consulta en Registradas/Planillas. */
 export default function ConfiguracionVentas({ writable, showFeedback }) {
@@ -88,7 +89,7 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
             </div>
             <div className="mov-gridCell entity-main-cell">
               <strong>{upper(row.producto_principal_nombre || "SIN PRODUCTO", 150)}</strong>
-              {row.precio_anticipada != null ? <small>{Number(row.precio_anticipada) === Number(row.precio_puerta) ? `PRECIO ÚNICO ${money(row.precio_anticipada)}` : `PRINCIPAL ${money(row.precio_anticipada)} · ALTERNATIVO ${money(row.precio_puerta)}`}</small> : null}
+              {row.precio_anticipada != null ? <small>{Number(precioUnitarioVenta(row)) === Number(row.precio_puerta) ? `PRECIO ÚNICO ${money(precioUnitarioVenta(row))}` : `PRINCIPAL ${money(precioUnitarioVenta(row))} · ALTERNATIVO ${money(row.precio_puerta)}`}</small> : null}
             </div>
             <div className="mov-gridCell entity-main-cell ventas-objective-cell">
               {Number(row.cantidad_minima_persona || 0) ? <>
@@ -98,7 +99,7 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
             </div>
             <div className="mov-gridCell is-center entity-main-cell ventas-validity-cell">
               <strong>{row.fecha_inicio || "SIN FECHA"} AL {row.fecha_fin || "SIN FECHA"}</strong>
-              <small>ENTREGA: {row.fecha_entrega || "SIN DEFINIR"}</small>
+              <small>ENTREGA: {row.fecha_entrega || "SIN DEFINIR"} · {(() => { try { const h = JSON.parse(row.horarios_entrega || "[]"); return h.length ? h.map((r) => `${r.desde}-${r.hasta}`).join(" / ") : "SIN HORARIOS"; } catch { return "SIN HORARIOS"; } })()}</small>
             </div>
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${yes(row.disponible_bot) ? "whatsapp" : "neutral"}`}>
@@ -110,7 +111,7 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
               <div className="mov-actionsInline">
                 {writable && <>
                   <ActionButton icon={faPen} title="Editar venta" onClick={() => setModal({ open: true, row })} />
-                  <ActionButton icon={faCopy} title="Repetir esta venta con otras fechas" onClick={() => setModal({ open: true, row: { ...row, id_campania: "", fecha_inicio: "", fecha_fin: "", fecha_entrega: "", activo: 1, visible_menu: 1 } })} />
+                  <ActionButton icon={faCopy} title="Repetir esta venta con otras fechas" onClick={() => setModal({ open: true, row: { ...row, id_campania: "", fecha_inicio: "", fecha_fin: "", fecha_entrega: "", horarios_entrega: [], activo: 1, visible_menu: 1 } })} />
                   <ActionButton icon={faArchive} title="Cerrar y enviar al historial" disabled={Boolean(row.fecha_fin && row.fecha_fin >= today())} onClick={() => setCloseConfirm(row)} />
                   <ActionButton icon={yes(row.activo) ? faPowerOff : faCheckCircle} title={yes(row.activo) ? "Pausar" : "Reactivar"} tone={yes(row.activo) ? "danger" : ""} disabled={changingStateId !== null} onClick={() => setStateConfirm(row)} />
                 </>}

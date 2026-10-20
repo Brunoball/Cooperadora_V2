@@ -41,33 +41,52 @@ export function filaPlanilla(row, tipo, indice = 0) {
   };
 }
 
-function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPaginas, totalCurso, totalCursoCobrado, totalGeneral = null, docenteResponsable = "") {
+/** Mantiene intactas las ventas reales: solo vacía una COPIA para el archivo Excel. */
+export function prepararSeccionesPlanilla(secciones, modo = "datos") {
+  if (modo !== "vacia") return secciones;
+  // La conciliación es un reporte interno, no forma parte de la hoja que los
+  // docentes completan a mano; no revelar cantidades ni cobros al exportar.
+  return secciones.filter((seccion) => seccion.hoja !== "Sin asignar").map((seccion) => ({
+    ...seccion,
+    subtitulo: (seccion.subtitulo || "").replace(/ · Docente responsable:.*$/, ""),
+    registros: (seccion.registros || []).map((fila) => ({
+      ...fila,
+      docenteResponsable: "", orden: "",
+      vendidas: "", faltantes: "", ganancia: "", gananciaCobrada: "",
+      productos: "", cobrado: "", observaciones: "",
+    })),
+  }));
+}
+
+function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPaginas, totalCurso, totalCursoCobrado, totalGeneral = null, docenteResponsable = "", modo = "datos") {
   const cursoTexto = `${curso || "SIN AÑO"} ${division || ""}`.trim();
   const paginaTexto = totalPaginas > 1 ? ` · Hoja ${nroPagina} de ${totalPaginas}` : "";
+  const vacia = modo === "vacia";
   const subtotal = rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
   return `<section class="legacy-sheet">
-    <div class="legacy-meta"><span>Curso: ${escapeHtml(cursoTexto)} · Alumnos: ${totalCurso}${paginaTexto}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docente responsable: ${docenteResponsable ? escapeHtml(docenteResponsable) : "_______________________________"}</span></div>
+    <div class="legacy-meta"><span>Curso: ${escapeHtml(cursoTexto)} · Alumnos: ${totalCurso}${paginaTexto}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docente responsable: ${!vacia && docenteResponsable ? escapeHtml(docenteResponsable) : "_______________________________"}</span></div>
     <table class="legacy-grid legacy-grid--course">
       <colgroup><col class="c-name"><col class="c-dni"><col class="c-year"><col class="c-div"><col class="c-qty"><col class="c-qty"><col class="c-gain"><col class="c-paid"><col class="c-notes"></colgroup>
       <tbody>
         <tr><th class="legacy-school" colspan="9">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
         <tr class="legacy-top"><th colspan="2">ALUMNOS</th><th colspan="6">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
-        <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(cursoTexto)}</th><th colspan="5">DATOS ACTUALIZADOS DE VENTAS</th></tr>
+        <tr class="legacy-course-line"><th colspan="4">CURSO ${escapeHtml(cursoTexto)}</th><th colspan="5">${vacia ? "PLANILLA PARA COMPLETAR" : "DATOS ACTUALIZADOS DE VENTAS"}</th></tr>
         <tr class="legacy-columns"><th rowspan="2">APELLIDO Y NOMBRES</th><th rowspan="2">DNI</th><th colspan="2">CURSO</th><th colspan="2">UNIDADES</th><th rowspan="2">GANANCIA<br>PENDIENTE</th><th rowspan="2">TOTAL<br>COBRADO</th><th rowspan="2">OBSERVACIONES</th></tr>
         <tr class="legacy-columns legacy-columns--sub"><th>AÑO</th><th>DIV.</th><th>VEND.</th><th>FALT.</th></tr>
         ${rows.map((row) => {
           const f = filaPlanilla(row, "cursos");
-          return `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${escapeHtml(f.anio)}</td><td>${escapeHtml(f.division)}</td><td>${f.vendidas}</td><td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td><td class="legacy-amount">${escapeHtml(money(f.cobrado))}${f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
+          return `<tr class="legacy-data-row"><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${escapeHtml(f.anio)}</td><td>${escapeHtml(f.division)}</td><td>${vacia ? "" : f.vendidas}</td><td>${vacia ? "" : f.faltantes}</td><td class="legacy-amount">${vacia ? "" : escapeHtml(money(f.ganancia))}</td><td class="legacy-amount">${vacia ? "" : escapeHtml(money(f.cobrado))}${!vacia && f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${vacia ? "" : escapeHtml(f.observaciones)}</td></tr>`;
         }).join("")}
       </tbody>
     </table>
-    <div class="legacy-total">${totalPaginas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${escapeHtml(money(subtotal))}</strong></div>
-    ${nroPagina === totalPaginas && totalPaginas > 1 ? `<div class="legacy-final-total">TOTAL DEL CURSO: <strong>${escapeHtml(money(totalCursoCobrado))}</strong></div>` : ""}
-    ${totalGeneral !== null ? `<div class="legacy-final-total">TOTAL GENERAL DE PLANILLA: <strong>${escapeHtml(money(totalGeneral))}</strong></div>` : ""}
+    <div class="legacy-total">${totalPaginas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${vacia ? "" : escapeHtml(money(subtotal))}</strong></div>
+    ${nroPagina === totalPaginas && totalPaginas > 1 ? `<div class="legacy-final-total">TOTAL DEL CURSO: <strong>${vacia ? "" : escapeHtml(money(totalCursoCobrado))}</strong></div>` : ""}
+    ${totalGeneral !== null ? `<div class="legacy-final-total">TOTAL GENERAL DE PLANILLA: <strong>${vacia ? "" : escapeHtml(money(totalGeneral))}</strong></div>` : ""}
   </section>`;
 }
 
-function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTexto, anio, conObjetivo, totalDocentes) {
+function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTexto, anio, conObjetivo, totalDocentes, modo = "datos") {
+  const vacia = modo === "vacia";
   const subtotal = rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
   const span = conObjetivo ? 8 : 6;
   const columnas = conObjetivo
@@ -80,16 +99,16 @@ function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTex
       <tbody>
         <tr><th class="legacy-school" colspan="${span}">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
         <tr class="legacy-top"><th colspan="2">PROFESORES / DOCENTES</th><th colspan="${span - 3}">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
-        <tr class="legacy-course-line"><th colspan="${Math.floor(span / 2)}">PRODUCTO: ${escapeHtml(producto.toLocaleUpperCase("es-AR"))}</th><th colspan="${span - Math.floor(span / 2)}">PRECIO UNITARIO: ${precioTexto ? escapeHtml(precioTexto) : "SIN VENTAS"}</th></tr>
+        <tr class="legacy-course-line"><th colspan="${Math.floor(span / 2)}">PRODUCTO: ${escapeHtml(producto.toLocaleUpperCase("es-AR"))}</th><th colspan="${span - Math.floor(span / 2)}">PRECIO UNITARIO: ${vacia ? "" : precioTexto ? escapeHtml(precioTexto) : "SIN VENTAS"}</th></tr>
         <tr class="legacy-columns"><th>ORDEN</th><th>DOCENTE</th><th>DNI</th><th>CANT.</th>${conObjetivo ? "<th>FALT.</th><th>GANANCIA PENDIENTE</th>" : ""}<th>TOTAL COBRADO</th><th>OBSERVACIONES</th></tr>
         ${rows.map((row, index) => {
           const f = filaPlanilla(row, "docentes", (pagina - 1) * DOCENTES_POR_HOJA + index);
-          return `<tr class="legacy-data-row"><td>${f.orden}</td><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${f.vendidas}</td>${conObjetivo ? `<td>${f.faltantes}</td><td class="legacy-amount">${escapeHtml(money(f.ganancia))}</td>` : ""}<td class="legacy-amount">${escapeHtml(money(f.cobrado))}${f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${escapeHtml(f.observaciones)}</td></tr>`;
+          return `<tr class="legacy-data-row"><td>${vacia ? "" : f.orden}</td><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${vacia ? "" : f.vendidas}</td>${conObjetivo ? `<td>${vacia ? "" : f.faltantes}</td><td class="legacy-amount">${vacia ? "" : escapeHtml(money(f.ganancia))}</td>` : ""}<td class="legacy-amount">${vacia ? "" : escapeHtml(money(f.cobrado))}${!vacia && f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${vacia ? "" : escapeHtml(f.observaciones)}</td></tr>`;
         }).join("")}
       </tbody>
     </table>
-    <div class="legacy-total">${cantidadHojas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${escapeHtml(money(subtotal))}</strong></div>
-    ${cantidadHojas > 1 && pagina === cantidadHojas ? `<div class="legacy-final-total">TOTAL DOCENTES: <strong>${escapeHtml(money(totalDocentes))}</strong></div>` : ""}
+    <div class="legacy-total">${cantidadHojas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${vacia ? "" : escapeHtml(money(subtotal))}</strong></div>
+    ${cantidadHojas > 1 && pagina === cantidadHojas ? `<div class="legacy-final-total">TOTAL DOCENTES: <strong>${vacia ? "" : escapeHtml(money(totalDocentes))}</strong></div>` : ""}
   </section>`;
 }
 
@@ -125,7 +144,7 @@ const ESTILOS = `
   @media print{.legacy-sheet{margin:0;width:200mm;height:287mm;min-height:287mm}}
 `;
 
-export function crearDocumentoPlanillas(data, tipo) {
+export function crearDocumentoPlanillas(data, tipo, { modo = "datos" } = {}) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const campania = String(data?.campania?.nombre || "VENTA ESCOLAR");
   const producto = String(data?.campania?.producto_principal_nombre || "PRODUCTO");
@@ -138,7 +157,7 @@ export function crearDocumentoPlanillas(data, tipo) {
     const grupos = separarEnHojas(items, DOCENTES_POR_HOJA);
     const conObjetivo = Number(data?.campania?.cantidad_minima_persona || 0) > 0;
     const totalDocentes = items.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
-    paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio, conObjetivo, totalDocentes));
+    paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio, conObjetivo, totalDocentes, modo));
   } else {
     const responsables = new Map((data?.docentes_responsables || [])
       .map((asignacion) => [JSON.stringify([String(asignacion.id_anio), String(asignacion.id_division)]), asignacion.docente_nombre]));
@@ -158,11 +177,11 @@ export function crearDocumentoPlanillas(data, tipo) {
       return hojas.map((rows, i) => hojaCurso(rows, grupo.curso, grupo.division, campania, anio,
         i + 1, hojas.length, grupo.rows.length, totalCurso,
         (valoresCurso.length > 1 && grupoIndex === valoresCurso.length - 1 && i === hojas.length - 1) ? totalGeneral : null,
-        responsables.get(grupo.key) || ""));
+        responsables.get(grupo.key) || "", modo));
     });
   }
 
-  return { titulo: `${campania} - Planillas`, css: ESTILOS, paginas };
+  return { titulo: `${campania} - Planillas ${modo === "vacia" ? "vacías" : "con datos"}`, css: ESTILOS, paginas };
 }
 
 export function imprimirDocumentoPlanillas(documento, popup) {

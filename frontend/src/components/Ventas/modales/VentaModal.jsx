@@ -246,8 +246,11 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   };
 
   const itemsSubtotal = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
-  const configuredItems = form.items.filter((item) => String(item.producto_nombre || "").trim());
-  const hasConfiguredItems = configuredItems.length > 0 && configuredItems.length === form.items.length && configuredItems.every((item) => (
+  // Cantidad 0 equivale a no vender ese producto. Puede cobrarse únicamente
+  // la ganancia por objetivo (sin generar ítems ni movimientos de stock).
+  const billableItems = form.items.filter((item) => String(item.cantidad ?? "").trim() === "" || Number(item.cantidad) !== 0);
+  const configuredItems = billableItems.filter((item) => String(item.producto_nombre || "").trim());
+  const hasConfiguredItems = configuredItems.length > 0 && configuredItems.length === billableItems.length && configuredItems.every((item) => (
     item.precio_unitario !== ""
     && item.precio_unitario != null
     && Number(item.precio_unitario) >= 0
@@ -305,7 +308,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       id_venta_persona: form.id_venta_persona || null,
       dni: form.dni.replace(/\D/g, ""),
       nombre_apellido: upper(form.nombre_apellido, 160),
-      items: canSettleGainOnly ? [] : form.items
+      items: canSettleGainOnly ? [] : billableItems
         .filter((item) => String(item.producto_nombre || "").trim())
         .map((item) => ({ ...item, cantidad: Number(item.cantidad || 0), precio_unitario: Number(item.precio_unitario || 0) })),
     });
@@ -410,7 +413,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                     </td>
                     <td data-label="Cantidad">
                       <FloatingField label="Cantidad" className="ventas-concept-field">
-                        <input aria-label={`Cantidad del concepto ${index + 1}`} type="number" min="1" max="100000" step="1" placeholder=" " value={item.cantidad ?? 1} onChange={(event) => editItem(index, { cantidad: event.target.value })} />
+                        <input aria-label={`Cantidad del concepto ${index + 1}`} type="number" min="0" max="100000" step="1" placeholder=" " value={item.cantidad ?? 1} onChange={(event) => editItem(index, { cantidad: event.target.value })} />
                       </FloatingField>
                     </td>
                     <td data-label="Subtotal" className="ventas-inline-concepts__subtotal">{money(Number(item.cantidad || 0) * Number(item.precio_unitario || 0))}</td>

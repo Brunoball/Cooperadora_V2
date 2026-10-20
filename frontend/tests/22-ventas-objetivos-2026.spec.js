@@ -3,7 +3,7 @@
  * ganancia, stock, contabilidad y trazabilidad. Solo datos aislados PW E2E.
  */
 const { test, expect } = require('./helpers/playwright.helper');
-const { token } = require('./helpers/auth.helper');
+const { token, authenticatePage } = require('./helpers/auth.helper');
 const { ok, apiFetch } = require('./helpers/api.helper');
 const { createSalesProduct, createSalesCampaign } = require('./helpers/entities.helper');
 const { suffix, testDni, today } = require('./helpers/data.helper');
@@ -101,6 +101,52 @@ for (const [quantity, gain] of [[0, 10000], [1, 6000], [2, 3000], [3, 0], [4, 0]
     expect(Number(excluding.ganancia_cobrada_previa)).toBe(0);
   });
 }
+
+test('interfaz: permite registrar 0 unidades y cobrar solamente la ganancia del objetivo', async ({ page, request }) => {
+  test.setTimeout(95_000);
+  const f = await fixture(request);
+  await authenticatePage(page);
+  await page.goto('/ventas/registradas');
+  await page.getByRole('button', { name: /nueva venta/i }).first().click();
+  const modal = page.getByRole('dialog', { name: /nueva venta/i });
+  await expect(modal).toBeVisible();
+  await modal.getByRole('combobox', { name: 'Venta / campaña' }).selectOption(String(f.campaign.id_campania));
+  await modal.getByRole('combobox', { name: 'Medio de pago' }).selectOption(String(f.payment.id_medio_pago));
+  const quantity = modal.getByRole('spinbutton', { name: 'Cantidad del concepto 1' });
+  await quantity.fill('0');
+  await expect(quantity).toHaveValue('0');
+  await modal.getByRole('tab', { name: /comprador y objetivo/i }).click();
+  await modal.getByRole('textbox', { name: 'DNI', exact: true }).fill(f.dni);
+  await modal.getByRole('textbox', { name: 'Nombre y apellido' }).fill(`PW E2E VTA PERSONA ${f.marker}`);
+  await expect(modal.locator('.ventas-order-objective__payable strong')).toContainText('10.000', { timeout: 20_000 });
+  const save = modal.getByRole('button', { name: /^guardar$/i });
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(modal).toBeHidden({ timeout: 20_000 });
+  const listing = await ok(request, 'ventas_ordenes_listar', {
+    token: f.t, query: { id_campania: f.campaign.id_campania, buscar: f.dni },
+  });
+  const saved = (listing.items || []).find((row) => String(row.dni) === f.dni);
+  expect(saved).toBeTruthy();
+  expect(Number(saved.ganancia_objetivo)).toBe(10000);
+  expect(Number(saved.total)).toBe(10000);
+  const detail = await ok(request, 'ventas_orden_detalle', { token: f.t, query: { id_orden: saved.id_orden } });
+  expect(detail.item.items).toHaveLength(0);
+  expect(Number((await currentProduct(request, f)).stock)).toBe(35);
+});
+
+test('API: una línea con cantidad 0 se omite sin cobrar producto ni descontar stock', async ({ request }) => {
+  const f = await fixture(request);
+  const saved = (await order(request, f, 0, { items: [{
+    id_producto: f.product.id_producto, producto_nombre: f.product.nombre,
+    tipo_precio: 'anticipada', cantidad: 0, precio_unitario: 100,
+  }] })).item;
+  expect(Number(saved.ganancia_objetivo)).toBe(10000);
+  expect(Number(saved.total)).toBe(10000);
+  const detail = await ok(request, 'ventas_orden_detalle', { token: f.t, query: { id_orden: saved.id_orden } });
+  expect(detail.item.items).toHaveLength(0);
+  expect(Number((await currentProduct(request, f)).stock)).toBe(35);
+});
 
 test('objetivo: segunda compra de la misma persona no cobra otra vez la ganancia ya liquidada', async ({ request }) => {
   const f = await fixture(request);

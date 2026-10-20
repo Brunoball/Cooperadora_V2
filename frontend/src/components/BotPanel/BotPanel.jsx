@@ -2468,9 +2468,17 @@ const BotPanel = () => {
                     <div className="wp-chatlast">
                       {c.id} • {totalTxt}
                       {comprobantesPendientes > 0 ? " • 🧾 comprobante" : c.prioridad === "alta" && Number(c.consultasPendientes || 0) === 0 ? " • ⚠️" : ""}
-                      {c.modo === "manual" ? " • ✋ manual" : ""}
+
                     </div>
 
+                    <span
+                      className={`wp-chat-mode-indicator ${c.modo === "manual" ? "is-manual" : "is-bot"}`}
+                      title={c.modo === "manual" ? "Atención manual: el bot está pausado" : "Bot activo: respuestas automáticas habilitadas"}
+                      aria-label={c.modo === "manual" ? "Modo manual" : "Modo bot activo"}
+                    >
+                      <FontAwesomeIcon icon={c.modo === "manual" ? faHand : faRobot} />
+                      <span>{c.modo === "manual" ? "Manual" : "Bot"}</span>
+                    </span>
                     {c.unread > 0 ? (
                       <span
                         className={`wp-unread ${tone !== "normal" ? `wp-unread--${tone}` : ""}`}

@@ -2240,3 +2240,23 @@
     font-size: 14px;
   }
 }
+
+/* Estado de cada chat visible también cuando no está seleccionado */
+.wp-chat-mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 49px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.wp-chat-mode-indicator.is-bot { color: #4be4a0; background: rgba(16,185,129,.14); }
+.wp-chat-mode-indicator.is-manual { color: #ff908c; background: rgba(239,83,80,.13); }
+:root[data-botpanel-theme="light"] .wp-chat-mode-indicator.is-bot { color: #047857; background: rgba(4,120,87,.09); }
+:root[data-botpanel-theme="light"] .wp-chat-mode-indicator.is-manual { color: #b91c1c; background: rgba(185,28,28,.08); }

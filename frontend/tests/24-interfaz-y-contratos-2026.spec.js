@@ -111,7 +111,10 @@ test("Planillas: buscador integral, curso automático y descomposición contable
   expect(source).toContain('key: "gananciaCobrada"');
   expect(source).toContain('key: "productos"');
   expect(source).toContain('key: "cobrado"');
-  expect(source).toContain('imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type), popup)');
+  expect(source).toContain('imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type, { modo }), popup)');
+  expect(source).toContain('transformarSecciones={prepararSeccionesPlanilla}');
+  expect(source).toContain('defaultContenido="vacia"');
+  expect(document).toContain('prepararSeccionesPlanilla');
   expect(source).toContain('exportarDocumentoPlanillasPdf(documento, exportFileName)');
   expect(document).toContain('function hojaCurso(');
   expect(document).toContain('function hojaDocentes(');

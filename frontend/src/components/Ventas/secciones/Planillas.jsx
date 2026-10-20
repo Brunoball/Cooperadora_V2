@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronDown, faFileLines, faPrint, faUsers, faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
+import { faChevronDown, faFileLines, faPrint, faUsers, faMagnifyingGlass, faTimes } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalPagination from "../../Global/GlobalPagination";
 import BotonExportarGlobal from "../../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../../Global/Modales/ModalExportarGlobal";
-import { crearDocumentoPlanillas, imprimirDocumentoPlanillas, exportarDocumentoPlanillasPdf, filaPlanilla } from "../../../utils/planillasDocumento";
+import { crearDocumentoPlanillas, imprimirDocumentoPlanillas, exportarDocumentoPlanillasPdf, filaPlanilla, prepararSeccionesPlanilla } from "../../../utils/planillasDocumento";
+import useGlobalModalEscape from "../../Global/Modales/useGlobalModalEscape";
 import ventasApi from "../api/ventasApi";
 import DocenteResponsableSelector from "./DocenteResponsableSelector";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -34,6 +36,11 @@ function TextoResaltado({ texto, busqueda }) {
   return partes.length ? <>{partes}</> : original;
 }
 
+const OPCIONES_CONTENIDO = [
+  { value: "vacia", label: "Planilla vacía", description: "Solo apellido y nombres, DNI y curso; ventas, ganancias, cobros y observaciones en blanco." },
+  { value: "datos", label: "Planilla con datos", description: "Incluye las unidades, importes y observaciones reales registradas en el sistema." },
+];
+
 const filaId = (row, tipo) => String(tipo === "docentes" ? row.id_docente : row.id_alumno);
 
 export default function Planillas({ writable, showFeedback }) {
@@ -52,7 +59,10 @@ export default function Planillas({ writable, showFeedback }) {
   const [docenteSaving, setDocenteSaving] = useState(false);
   const [asignacionesAbiertas, setAsignacionesAbiertas] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printMode, setPrintMode] = useState("vacia");
   const [exportData, setExportData] = useState(null);
+  useGlobalModalEscape(printOpen, () => setPrintOpen(false));
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
   // Vincular los datos al filtro con el que fueron consultados evita mostrar
@@ -272,7 +282,7 @@ export default function Planillas({ writable, showFeedback }) {
     setExportData(null);
   };
 
-  const print = async () => {
+  const print = async (modo = "vacia") => {
     // La ventana se abre durante el click, antes de esperar la API.
     // Así los bloqueadores no descartan la impresión.
     const popup = window.open("", "_blank", "width=1100,height=900");
@@ -280,6 +290,7 @@ export default function Planillas({ writable, showFeedback }) {
       showFeedback("error", "El navegador bloqueó la ventana de impresión.");
       return;
     }
+    setPrintOpen(false);
     try {
       popup.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><title>Preparando planilla</title><body>Preparando planilla...</body></html>');
       const data = await fetchCurrentData();
@@ -290,17 +301,17 @@ export default function Planillas({ writable, showFeedback }) {
         showFeedback("warning", "No hay registros para imprimir con los filtros seleccionados.");
         return;
       }
-      imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type), popup);
+      imprimirDocumentoPlanillas(crearDocumentoPlanillas(data, type, { modo }), popup);
     } catch (err) {
       popup.close();
       showFeedback("error", err.message);
     }
   };
 
-  const exportarPdfComoImpresion = async () => {
+  const exportarPdfComoImpresion = async ({ contenido = "vacia", nombreArchivo } = {}) => {
     if (!exportData) throw new Error("No hay datos de planilla para generar el PDF.");
-    const documento = crearDocumentoPlanillas(exportData, type);
-    await exportarDocumentoPlanillasPdf(documento, exportFileName);
+    const documento = crearDocumentoPlanillas(exportData, type, { modo: contenido });
+    await exportarDocumentoPlanillasPdf(documento, nombreArchivo || `${exportFileName}_${contenido}`);
   };
 
   const previewItems = previewData?.items || [];
@@ -426,7 +437,7 @@ export default function Planillas({ writable, showFeedback }) {
         />
       )}
       secondaryActions={[
-        { key: "imprimir", label: "Imprimir", icon: faPrint, className: "mov-btn--primary", onClick: print, disabled: loading || previewLoading || !campaign },
+        { key: "imprimir", label: "Imprimir", icon: faPrint, className: "mov-btn--primary", onClick: () => { setPrintMode("vacia"); setPrintOpen(true); }, disabled: loading || previewLoading || !campaign },
       ]}
     >
       {busqueda.trim() && buscarAbierto && campaign && (
@@ -684,10 +695,46 @@ export default function Planillas({ writable, showFeedback }) {
         </section>
       </div>
 
+      {printOpen && createPortal(
+        <div className="global-exportHistorial-overlay" role="dialog" aria-modal="true" aria-labelledby="planillas-imprimir-titulo">
+          <form className="global-exportHistorial-modal" onSubmit={(event) => { event.preventDefault(); print(printMode); }}>
+            <header className="global-exportHistorial-header">
+              <div>
+                <h2 id="planillas-imprimir-titulo">Imprimir planilla</h2>
+                <p>Elegí si querés entregarla vacía a los docentes o imprimir los datos actuales.</p>
+              </div>
+              <button type="button" className="global-exportHistorial-close" aria-label="Cerrar" onClick={() => setPrintOpen(false)}>
+                <FontAwesomeIcon icon={faTimes} />
+              </button>
+            </header>
+            <section className="global-exportHistorial-body">
+              <div className="global-exportHistorial-groupTitle">Contenido de la planilla</div>
+              <div className="global-exportHistorial-options" role="radiogroup" aria-label="Contenido para imprimir">
+                {OPCIONES_CONTENIDO.map((opcion) => (
+                  <label key={opcion.value} className={`global-exportHistorial-option ${printMode === opcion.value ? "is-active" : ""}`} data-tone="scope">
+                    <input type="radio" name="contenido_imprimir_planilla" value={opcion.value}
+                      checked={printMode === opcion.value} onChange={() => setPrintMode(opcion.value)} />
+                    <span className="global-exportHistorial-icon is-scope"><FontAwesomeIcon icon={faFileLines} /></span>
+                    <span><b>{opcion.label}</b><small>{opcion.description}</small></span>
+                  </label>
+                ))}
+              </div>
+            </section>
+            <footer className="global-exportHistorial-footer">
+              <button type="button" className="global-exportHistorial-action global-exportHistorial-action--secondary" onClick={() => setPrintOpen(false)}>Cancelar</button>
+              <button type="submit" className="global-exportHistorial-action global-exportHistorial-action--primary"><FontAwesomeIcon icon={faPrint} /> Imprimir</button>
+            </footer>
+          </form>
+        </div>, document.body
+      )}
+
       <ModalExportarGlobal
         open={exportOpen}
         title="Exportar planilla"
-        subtitle="Elegí el formato para exportar la planilla filtrada."
+        subtitle="Elegí si necesitás una planilla vacía para los docentes o una con los datos registrados."
+        opcionesContenido={OPCIONES_CONTENIDO}
+        defaultContenido="vacia"
+        transformarSecciones={prepararSeccionesPlanilla}
         tituloArchivo={exportCampaignName ? `Planilla de ventas · ${exportCampaignName}` : "Planilla de ventas"}
         subtituloArchivoActual={exportSubtitle}
         nombreArchivo={exportFileName}

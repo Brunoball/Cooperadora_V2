@@ -236,11 +236,14 @@ trait VentasOrdenes
         $total = 0.0;
         foreach ($rawItems as $index => $raw) {
             if (!is_array($raw)) continue;
+            // Una cantidad 0 no representa un producto vendido: no se persiste
+            // como ítem. Permite registrar únicamente la ganancia por objetivo.
+            $quantity = self::integer($raw['cantidad'] ?? 1, 'cantidad', 0, 100000);
+            if ($quantity === 0) continue;
             $productId = self::nullablePositiveId($raw['id_producto'] ?? null);
             $product = $productId ? self::product($db, $productId) : null;
             $name = clean_text($raw['producto_nombre'] ?? $product['nombre'] ?? '', 150, true);
             if ($name === '') api_error('Cada concepto debe tener un nombre.', 'VALIDATION_ERROR', 422, ['item' => $index]);
-            $quantity = self::integer($raw['cantidad'] ?? 1, 'cantidad', 1, 100000);
             $type = strtolower(trim((string)($raw['tipo_precio'] ?? $raw['precio_tipo'] ?? 'personalizado')));
             /** @disregard P1012 */
             if (!in_array($type, self::PRICE_TYPES, true)) $type = 'personalizado';

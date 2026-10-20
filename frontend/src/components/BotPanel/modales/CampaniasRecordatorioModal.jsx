@@ -16,10 +16,12 @@ import {
   faSpinner,
   faTrash,
   faUsers,
+  faCircleInfo,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import Toast from "../../Global/Toast";
 import { botPanelRequest } from "../botPanelRequest";
+import { isBotPanelLocalPreview } from "../botPanelLocalPreview";
 import { useModalEscapeStack } from "./useModalEscapeStack";
 import "./CampaniasRecordatorioModal.css";
 
@@ -29,6 +31,47 @@ const PANEL_API =
 
 const ENDPOINT = `${PANEL_API}/panel_campanias_recordatorio.php`;
 const MAX_MESSAGE = 900;
+
+/** Estimación visual, no reserva cupo ni agenda una hora de reintento. */
+export const campaignDeliveryEstimate = (total, cupo) => {
+  const count = Math.max(0, Math.floor(Number(total) || 0));
+  const limit = Math.max(1, Math.floor(Number(cupo?.limite) || 250));
+  const available = Math.max(0, Math.min(limit, Math.floor(Number(cupo?.disponibles ?? limit) || 0)));
+  const first = Math.min(count, available);
+  const remaining = Math.max(0, count - first);
+  const otherWindows = Math.ceil(remaining / limit);
+  // Cantidades orientativas por turnos, no fechas reservadas (cupo móvil).
+  const laterTurns = Array.from({ length: Math.min(otherWindows, 6) }, (_, i) =>
+    Math.min(limit, remaining - i * limit));
+  return { count, limit, available, first, remaining, otherWindows, laterTurns };
+};
+
+const CampaignQuotaSummary = ({ total, cupo, when, onInfo, expanded = false }) => {
+  const plan = campaignDeliveryEstimate(total, cupo);
+  return (
+    <div className={`wp-campaign-delivery-summary${expanded ? " is-expanded" : ""}`}>
+      <div className="wp-campaign-delivery-head">
+        <strong><FontAwesomeIcon icon={faClock} /> Plan estimado de envío</strong>
+        <button type="button" className="wp-campaign-info-link" onClick={onInfo} aria-label="Información sobre límite de WhatsApp">
+          <FontAwesomeIcon icon={faCircleInfo} /> ¿Cómo funciona el límite?
+        </button>
+      </div>
+      <span><b>Inicio:</b> {formatDateTime(when)} (hora de Argentina)</span>
+      <span><b>Destinatarios:</b> {plan.count} teléfonos únicos.</span>
+      {plan.remaining ? (
+        <>
+          <span><b>Primer turno estimado:</b> hasta {plan.first} mensajes si el cupo disponible se mantiene.</span>
+          <span><b>Después:</b> {plan.remaining} quedarían en espera de las siguientes ventanas móviles de 24 horas.</span>
+          {plan.laterTurns.map((cantidad, index) => (
+            <span key={index}>Turno posterior {index + 1}: hasta {cantidad} mensajes, cuando se libere cupo y dentro del horario permitido.</span>
+          ))}
+          {plan.otherWindows > plan.laterTurns.length ? <span>Y {plan.otherWindows - plan.laterTurns.length} turnos adicionales estimados.</span> : null}
+        </>
+      ) : <span>Con el cupo que se ve ahora, podrían entrar en el primer turno.</span>}
+      <small>El cupo es compartido con recordatorios. Los horarios de reintento pueden variar y no se asegura la entrega.</small>
+    </div>
+  );
+};
 
 const normalizeIds = (value) => {
   const raw = Array.isArray(value)
@@ -60,7 +103,7 @@ const padDatePart = (n) => String(n).padStart(2, "0");
 const dateTimeInputValue = (date) =>
   `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}`;
 
-const campaignDateError = (value, { requireFuture = true } = {}) => {
+const campaignDateError = (value, { requireFuture = true, horario = { desde: 9, hasta: 18 } } = {}) => {
   if (!value) return "Seleccioná la fecha y hora de envío.";
 
   const d = new Date(String(value).replace(" ", "T"));
@@ -80,20 +123,29 @@ const campaignDateError = (value, { requireFuture = true } = {}) => {
     return "La campaña debe programarse para una fecha y hora futura.";
   }
 
+  const desde = Number(horario?.desde ?? 9);
+  const hasta = Number(horario?.hasta ?? 18);
+  if (d.getHours() < desde || d.getHours() >= hasta) {
+    return `Elegí una hora desde las ${String(desde).padStart(2, "0")}:00 y antes de las ${String(hasta).padStart(2, "0")}:00.`;
+  }
+
   return "";
 };
 
-const defaultDateTime = () => {
+const defaultDateTime = (horario = { desde: 9, hasta: 18 }) => {
+  const inicio = Number(horario?.desde ?? 9);
+  const fin = Number(horario?.hasta ?? 18);
   const d = new Date(Date.now() + 60 * 60 * 1000);
   d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0);
-
-  // Si la fecha sugerida cae en enero/febrero o fin de semana, avanza
-  // hasta el siguiente día permitido y propone las 09:00.
+  if (d.getHours() < inicio) d.setHours(inicio, 0, 0, 0);
+  if (d.getHours() >= fin) {
+    d.setDate(d.getDate() + 1);
+    d.setHours(inicio, 0, 0, 0);
+  }
   while ([1, 2].includes(d.getMonth() + 1) || d.getDay() === 0 || d.getDay() === 6) {
     d.setDate(d.getDate() + 1);
-    d.setHours(9, 0, 0, 0);
+    d.setHours(inicio, 0, 0, 0);
   }
-
   return dateTimeInputValue(d);
 };
 
@@ -219,6 +271,8 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
   const [activeTab, setActiveTab] = useState("mensaje");
   const [campanias, setCampanias] = useState([]);
   const [cupo24h, setCupo24h] = useState(null);
+  const [horarioEnvio, setHorarioEnvio] = useState({ desde: 9, hasta: 18 });
+  const [quotaInfoOpen, setQuotaInfoOpen] = useState(false);
   const [opciones, setOpciones] = useState({ anios: [], divisiones: [], categorias: [] });
   const [form, setForm] = useState(emptyForm());
   const [destinatarios, setDestinatarios] = useState(null);
@@ -255,6 +309,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
     closeToast();
     setEmojiOpen(false);
     setConfirmDelete(null);
+    setQuotaInfoOpen(false);
     onClose?.();
   }, [closeToast, onClose]);
 
@@ -310,6 +365,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
   }, [emojiOpen]);
 
   useModalEscapeStack(open, () => {
+    if (quotaInfoOpen) { setQuotaInfoOpen(false); return; }
     if (emojiOpen) {
       setEmojiOpen(false);
       return;
@@ -338,6 +394,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
       ]);
       setCampanias(Array.isArray(list.campanias) ? list.campanias : []);
       setCupo24h(list.cupo_24h && typeof list.cupo_24h === "object" ? list.cupo_24h : null);
+      setHorarioEnvio(list.horario_envio && typeof list.horario_envio === "object" ? list.horario_envio : { desde: 9, hasta: 18 });
       setOpciones(opts.opciones || { anios: [], divisiones: [], categorias: [] });
     } catch (e) {
       setError(e?.message || "No se pudieron cargar las campañas.");
@@ -363,6 +420,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
     setRecipientSearch("");
     setEmojiOpen(false);
     setConfirmDelete(null);
+    setQuotaInfoOpen(false);
     setHistoryData(null);
     setHistoryError("");
     setLoadingHistory(false);
@@ -424,7 +482,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
     setSelectedStudentIds([]);
     setRecipientSearch("");
     setEmojiOpen(false);
-    setForm({ ...emptyForm(), programada_para: defaultDateTime() });
+    setForm({ ...emptyForm(), programada_para: defaultDateTime(horarioEnvio) });
     setDestinatarios(null);
     setFormError("");
     setRecipientsError("");
@@ -487,7 +545,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
       setActiveTab("mensaje");
       return;
     }
-    const dateError = campaignDateError(form.programada_para);
+    const dateError = campaignDateError(form.programada_para, { horario: horarioEnvio });
     if (dateError) {
       setFormError(dateError);
       setActiveTab("mensaje");
@@ -627,6 +685,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
               <p>Programá avisos y elegí libremente cursos, divisiones y categorías.</p>
             </div>
           </div>
+          {isBotPanelLocalPreview() ? <span className="wp-campaign-demo-label" title="No se envían mensajes reales">Vista local · datos de ejemplo</span> : null}
           <button type="button" className="wp-campaign-close" onClick={closeModal} disabled={saving || Boolean(deletingId)} aria-label="Cerrar">
             <FontAwesomeIcon icon={faXmark} />
           </button>
@@ -644,20 +703,11 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
               </button>
             </div>
 
-            {cupo24h && !error && (
-              <div role="status" style={{ margin: "12px 24px 0", padding: "11px 14px", border: "1px solid var(--wp-border, #d7dce2)", borderRadius: 10, fontSize: 13 }}>
-                <strong>Cupo WhatsApp · últimas 24 horas: </strong>
-                {Number(cupo24h.usados || 0)} de {Number(cupo24h.limite || 250)} destinatarios únicos.
-                <span style={{ marginLeft: 8 }}>
-                  {Number(cupo24h.disponibles || 0) > 0
-                    ? `${Number(cupo24h.disponibles)} disponibles`
-                    : "Cupo completo: los envíos pendientes se reprograman automáticamente"}
-                </span>
-                <div style={{ opacity: 0.7, fontSize: 12, marginTop: 4 }}>
-                  Compartido con recordatorios. No incluye mensajes iniciados desde otras plataformas del mismo negocio.
-                </div>
-              </div>
-            )}
+            <div className="wp-campaign-quota-strip">
+              <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" />
+              <span><strong>Los envíos pueden hacerse en varias tandas.</strong> WhatsApp permite hasta {Number(cupo24h?.limite || 250)} destinatarios nuevos en 24 horas.</span>
+              <button type="button" onClick={() => setQuotaInfoOpen(true)}>Más información</button>
+            </div>
             <div className="wp-campaign-content">
               {error ? (
                 <div className="wp-campaign-error" role="alert">
@@ -692,6 +742,9 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                           </div>
                           <strong>{filterLabel(campaign)}</strong>
                           <p>{campaign.mensaje}</p>
+                          {campaign.estado === "programada" ? (
+                            <CampaignQuotaSummary total={campaign.destinatarios_estimados} cupo={cupo24h} when={campaign.programada_para} onInfo={() => setQuotaInfoOpen(true)} />
+                          ) : null}
                           <div className="wp-campaign-card-meta">
                             <span><FontAwesomeIcon icon={faUsers} /> {Number(campaign.destinatarios_estimados || 0)} teléfonos</span>
                             {campaign.estado !== "programada" ? (
@@ -987,7 +1040,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                           return;
                         }
 
-                        const restriction = campaignDateError(nextValue);
+                        const restriction = campaignDateError(nextValue, { horario: horarioEnvio });
                         if (restriction) {
                           setFormError(restriction);
                           return;
@@ -997,8 +1050,11 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                         setForm((f) => ({ ...f, programada_para: nextValue }));
                       }}
                     />
-                    <small className="wp-campaign-date-help">Solo se permiten días de lunes a viernes entre marzo y diciembre.</small>
+                    <small className="wp-campaign-date-help">Solo de lunes a viernes, de {String(horarioEnvio.desde).padStart(2, "0")}:00 a antes de las {String(horarioEnvio.hasta).padStart(2, "0")}:00 (marzo a diciembre).</small>
                   </label>
+                  {destinatarios && !loadingRecipients ? (
+                    <CampaignQuotaSummary total={selectedAudience.telefonos} cupo={cupo24h} when={form.programada_para} onInfo={() => setQuotaInfoOpen(true)} expanded />
+                  ) : null}
                   <div className="wp-campaign-audience-summary">
                     {loadingRecipients ? (
                       <span><FontAwesomeIcon icon={faSpinner} spin /> Calculando audiencia…</span>
@@ -1178,6 +1234,23 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
             </div>
           </div>
         )}
+
+        {quotaInfoOpen ? (
+          <div className="wp-campaign-confirm-layer wp-campaign-info-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuotaInfoOpen(false); }}>
+            <div className="wp-campaign-quota-dialog" role="dialog" aria-modal="true" aria-labelledby="wp-campaign-quota-title">
+              <div className="wp-campaign-quota-dialog-head">
+                <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" />
+                <h3 id="wp-campaign-quota-title">Importante: límite de WhatsApp</h3>
+                <button type="button" onClick={() => setQuotaInfoOpen(false)} aria-label="Cerrar información"><FontAwesomeIcon icon={faXmark} /></button>
+              </div>
+              <p>La Cooperadora tiene configurado un máximo de <b>{Number(cupo24h?.limite || 250)} destinatarios nuevos en un período móvil de 24 horas</b>. No se reinicia a las 00:00.</p>
+              <p>Si elegís más personas, se empieza a enviar en la <b>fecha y hora programadas</b>, hasta donde alcance el cupo real. Los demás esperan a que se libere, normalmente después de salir los envíos anteriores de esa ventana.</p>
+              <p>Las campañas se procesan <b>de lunes a viernes, desde las {String(horarioEnvio.desde).padStart(2, "0")}:00 hasta antes de las {String(horarioEnvio.hasta).padStart(2, "0")}:00</b> según la configuración actual. Si el cupo se libera fuera de ese horario, el sistema retoma en el siguiente período permitido.</p>
+              <p>El cupo es <b>compartido con recordatorios</b>. Otros mensajes del mismo negocio, restricciones de Meta o fallos de entrega pueden modificar el resultado. El resumen es una estimación, no un turno exacto ni una garantía.</p>
+              <button type="button" className="wp-campaign-primary" onClick={() => setQuotaInfoOpen(false)}>Entendido</button>
+            </div>
+          </div>
+        ) : null}
 
         {toast.mostrar ? (
           <Toast

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFileExcel, faFileImport, faFilePdf, faLayerGroup, faList, faSpinner, faTimes } from "@fortawesome/free-solid-svg-icons";
+import { faFileExcel, faFileImport, faFilePdf, faFileLines, faLayerGroup, faList, faSpinner, faTimes } from "@fortawesome/free-solid-svg-icons";
 import "../Global_css/Global_Modals.css";
 import useAnimatedModalSize from "./useAnimatedModalSize";
 import "../Global_css/Global_Exportar.css";
@@ -1662,6 +1662,10 @@ const ModalExportarGlobal = ({
   mostrarAlcanceTodos = true,
   defaultFormato = "excel",
   defaultAlcance = ALCANCE_TODOS,
+  // Opcional: solo quienes lo pasan muestran elección de planilla vacía/con datos.
+  opcionesContenido = [],
+  defaultContenido = "",
+  transformarSecciones,
   confirmLabel = "Exportar",
   cancelLabel = "Cancelar",
   loadingLabel = "Exportando...",
@@ -1682,6 +1686,7 @@ const ModalExportarGlobal = ({
   useAnimatedModalSize(modalRef, isOpen);
   const [formato, setFormato] = useState(defaultFormato);
   const [alcance, setAlcance] = useState(defaultAlcance);
+  const [contenido, setContenido] = useState(defaultContenido || opcionesContenido[0]?.value || "");
   const [exportando, setExportando] = useState(false);
 
   const seccionesActualesNormalizadas = useMemo(() => {
@@ -1749,8 +1754,9 @@ const ModalExportarGlobal = ({
   useEffect(() => {
     if (!isOpen) return;
     setFormato(defaultFormato || "excel");
+    setContenido(defaultContenido || opcionesContenido[0]?.value || "");
     setAlcance(puedeExportarTodos ? (defaultAlcance || ALCANCE_TODOS) : ALCANCE_ACTUAL);
-  }, [defaultAlcance, defaultFormato, isOpen, puedeExportarTodos]);
+  }, [defaultAlcance, defaultFormato, defaultContenido, isOpen, puedeExportarTodos]);
 
   useGlobalModalEscape(isOpen, onClose, {
     canClose: !loading && !exportando,
@@ -1795,20 +1801,23 @@ const ModalExportarGlobal = ({
 
     setExportando(true);
     try {
-      const secciones = await resolverSecciones();
+      const seccionesBase = await resolverSecciones();
+      const secciones = typeof transformarSecciones === "function"
+        ? await transformarSecciones(seccionesBase, contenido)
+        : seccionesBase;
       const totalExportado = contarRegistrosSecciones(secciones);
       const subtitulo = alcance === ALCANCE_TODOS ? subtituloArchivoTodos : subtituloArchivoActual;
       const sufijoNombre = alcance === ALCANCE_TODOS ? "todos" : "actual";
 
       if (formato === "pdf" && typeof onExportPdf === "function") {
-        await onExportPdf({ secciones, subtitulo, nombreArchivo: `${nombreArchivo}_${sufijoNombre}` });
+        await onExportPdf({ secciones, subtitulo, contenido, nombreArchivo: `${nombreArchivo}_${sufijoNombre}_${contenido || "datos"}` });
       } else {
         await exportarDesdeModalGlobal({
           formato,
           titulo: tituloArchivo || title,
           subtitulo,
           secciones,
-          nombreArchivo: `${nombreArchivo}_${sufijoNombre}`,
+          nombreArchivo: `${nombreArchivo}_${sufijoNombre}${opcionesContenido.length ? `_${contenido}` : ""}`,
           pdfVariant,
           logoPdfUrl,
         });
@@ -1890,6 +1899,23 @@ const ModalExportarGlobal = ({
               );
             })}
           </div>
+
+          {opcionesContenido.length > 0 && (
+            <>
+              <div className="global-exportHistorial-groupTitle">Contenido de la planilla</div>
+              <div className="global-exportHistorial-options" role="radiogroup" aria-label="Contenido de la planilla">
+                {opcionesContenido.map((opcion) => (
+                  <label key={opcion.value} className={`global-exportHistorial-option ${contenido === opcion.value ? "is-active" : ""}`} data-tone="scope">
+                    <input type="radio" name="contenido_exportar_planilla" value={opcion.value}
+                      checked={contenido === opcion.value} disabled={loading || exportando}
+                      onChange={() => setContenido(opcion.value)} />
+                    <span className="global-exportHistorial-icon is-scope"><FontAwesomeIcon icon={opcion.icon || faFileLines} /></span>
+                    <span><b>{opcion.label}</b><small>{opcion.description}</small></span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="global-exportHistorial-groupTitle">Formato</div>
           <div className="global-exportHistorial-options" role="radiogroup" aria-label="Formato de exportación">

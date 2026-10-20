@@ -381,21 +381,9 @@ final class Ingresantes
                     if ($before['id_alumno_confirmado'] !== null) {
                         api_error('Este ingresante ya fue pasado a Alumnos y no puede editarse.', 'INGRESANTE_YA_MIGRADO', 409);
                     }
-                    if ((int)$before['matricula_pagada'] === 1) {
-                        $sameDni = (string)$before['num_documento'] === $dni;
-                        $sameCycle = (int)$before['ciclo_lectivo'] === $ciclo;
-                        $samePaid = $pagada === 1;
-                        $sameAmount = round((float)($before['monto_matricula'] ?? 0), 2) === round((float)($amount ?? 0), 2);
-                        $sameMedium = ($before['id_medio_pago'] !== null ? (int)$before['id_medio_pago'] : null) === $medio;
-                        $sameDate = (string)($before['fecha_pago_matricula'] ?? '') === (string)($fechaPago ?? '');
-                        if (!$sameDni || !$sameCycle || !$samePaid || !$sameAmount || !$sameMedium || !$sameDate) {
-                            api_error(
-                                'La matrícula ya fue cobrada y forma parte del historial contable. Podés editar los datos personales, pero no DNI, ciclo, estado de pago, monto, fecha ni medio de esa matrícula.',
-                                'MATRICULA_INGRESANTE_INMUTABLE',
-                                409
-                            );
-                        }
-                    }
+                    // Los datos y el cobro son editables mientras siga siendo ingresante.
+                    // La actualización queda auditada; Contable lee los valores vigentes.
+                    // Si ya fue vinculado a un alumno, se conserva la restricción anterior.
                 }
 
                 if ($id === null) {

@@ -1,3 +1,4 @@
+import { isBotPanelLocalPreview, botPanelLocalPreviewRequest } from "./botPanelLocalPreview";
 import { getSession } from "../_shared/auth/session";
 
 /**
@@ -5,6 +6,11 @@ import { getSession } from "../_shared/auth/session";
  * cerrar el login de Cooperadora. Solo la API principal gestiona clearSession().
  */
 export async function botPanelRequest(url, options = {}) {
+  // Solo en npm start/localhost: los modales usan datos ficticios y nunca
+  // envían peticiones de escritura al servidor productivo.
+  if (isBotPanelLocalPreview() && /\/panel_(campanias_recordatorio|reportes)\.php(?:\?|$)/.test(url)) {
+    return botPanelLocalPreviewRequest(url, options);
+  }
   const token = getSession()?.token;
   if (!token) {
     throw new Error("No hay una sesión activa en Cooperadora. Iniciá sesión nuevamente.");

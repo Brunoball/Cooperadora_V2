@@ -100,7 +100,6 @@ export default function Ingresantes() {
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [paymentLocked, setPaymentLocked] = useState(false);
   const [stateModal, setStateModal] = useState(null);
   const [changingState, setChangingState] = useState(false);
   const [form, setForm] = useState(emptyForm());
@@ -142,13 +141,11 @@ export default function Ingresantes() {
     const next = emptyForm(catalogos.monto_matricula_actual || 0);
     next.ciclo_lectivo = cycle || String(suggestedCycle());
     setForm(next);
-    setPaymentLocked(false);
     setModalOpen(true);
   };
 
   const openEdit = (item) => {
     setForm(formFromItem(item));
-    setPaymentLocked(Boolean(item.matricula_pagada));
     setModalOpen(true);
   };
 
@@ -394,7 +391,6 @@ export default function Ingresantes() {
               inputMode="numeric"
               required
               placeholder="Ej. 45123456"
-              disabled={paymentLocked}
               onChange={(e) => setForm((c) => ({ ...c, num_documento: e.target.value.replace(/\D+/g, "") }))}
             />
           </FloatingField>
@@ -417,7 +413,6 @@ export default function Ingresantes() {
               value={form.ciclo_lectivo}
               required
               placeholder="Ej. 2027"
-              disabled={paymentLocked}
               onChange={(e) => setForm((c) => ({ ...c, ciclo_lectivo: e.target.value }))}
             />
           </FloatingField>
@@ -436,7 +431,6 @@ export default function Ingresantes() {
             <input
               type="checkbox"
               checked={Boolean(form.matricula_pagada)}
-              disabled={paymentLocked}
               onChange={(e) => setForm((c) => ({ ...c, matricula_pagada: e.target.checked }))}
             />
             <span>Matrícula pagada</span>
@@ -452,7 +446,6 @@ export default function Ingresantes() {
                   value={form.monto_matricula}
                   required
                   placeholder="Ej. 15000"
-                  disabled={paymentLocked}
                   onChange={(e) => setForm((c) => ({ ...c, monto_matricula: e.target.value }))}
                 />
               </FloatingField>
@@ -460,7 +453,6 @@ export default function Ingresantes() {
               <FloatingField label="Medio de pago" active={Boolean(form.id_medio_pago)} className="ingresantes-field--span-4">
                 <select
                   value={form.id_medio_pago}
-                  disabled={paymentLocked}
                   onChange={(e) => setForm((c) => ({ ...c, id_medio_pago: e.target.value }))}
                 >
                   <option value="">Sin especificar</option>
@@ -474,17 +466,10 @@ export default function Ingresantes() {
                   max={localToday()}
                   value={form.fecha_pago_matricula}
                   required
-                  disabled={paymentLocked}
                   onChange={(e) => setForm((c) => ({ ...c, fecha_pago_matricula: e.target.value }))}
                 />
               </FloatingField>
             </>
-          ) : null}
-
-          {paymentLocked ? (
-            <div className="ingresantes-lockNote ingresantes-field--span-12">
-              La matrícula ya fue cobrada y forma parte de Contable. DNI, ciclo y datos del cobro quedan bloqueados para conservar el historial.
-            </div>
           ) : null}
 
           <FloatingField label="Observaciones" active={Boolean(form.observaciones)} textarea wide className="ingresantes-field--span-12">

@@ -3,7 +3,7 @@ const { test, expect } = require("./helpers/playwright.helper");
 const { token, authenticatePage } = require("./helpers/auth.helper");
 const { ok, apiFetch } = require("./helpers/api.helper");
 const { createIncoming } = require("./helpers/entities.helper");
-const { suffix, currentYear } = require("./helpers/data.helper");
+const { suffix, currentYear, testDni } = require("./helpers/data.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
 
 const env = loadTestEnv();
@@ -107,7 +107,7 @@ test("Ciclo vigente: seleccionar tocando la fila funciona sin checkbox y sin pin
   await expect(pass).toBeDisabled();
 });
 
-test("Editar matrícula PAGADA: se bloquean DNI, ciclo y cobro; nombre y observaciones siguen editables", async ({ page, request }) => {
+test("Editar matrícula PAGADA: permite cambiar todos los campos y guardar los datos de cobro", async ({ page, request }) => {
   test.setTimeout(100_000);
   const incoming = await createIncoming(request, token(), {
     marker: suffix(), cicloLectivo: currentYear() + 1,
@@ -118,35 +118,29 @@ test("Editar matrícula PAGADA: se bloquean DNI, ciclo y cobro; nombre y observa
   const modal = page.getByRole("dialog", { name: /editar ingresante/i });
   await expect(modal).toBeVisible();
   for (const label of ["DNI *", "Ciclo lectivo *", "Matrícula pagada", "Monto matrícula *", "Fecha de pago *"]) {
-    await expect(modal.getByLabel(label, { exact: true }), `Campo del cobro bloqueado: ${label}`).toBeDisabled();
+    await expect(modal.getByLabel(label, { exact: true }), `Campo habilitado: ${label}`).toBeEnabled();
   }
-  // Un <select> dentro de FloatingField puede no coincidir con getByLabel({ exact: true }).
-  // Su rol y nombre accesible sí identifican el control que se usa en la interfaz.
-  await expect(modal.getByRole("combobox", { name: "Medio de pago", exact: true })).toBeDisabled();
-  // FloatingField envuelve el <select> en un <label>; Chromium no siempre
-  // lo resuelve con getByLabel(exact:true). Consultamos por rol accesible.
-  await expect(modal.getByRole("combobox", { name: /ingresa a/i }), "Campo editable: Ingresa a *").toBeEnabled();
+  await expect(modal.getByRole("combobox", { name: "Medio de pago", exact: true })).toBeEnabled();
+  await expect(modal.getByRole("combobox", { name: /ingresa a/i })).toBeEnabled();
   for (const label of ["Apellido *", "Nombre *", "Fecha de inscripción *"]) {
     await expect(modal.getByLabel(label, { exact: true }), `Campo editable: ${label}`).toBeEnabled();
   }
-  // FloatingField no siempre permite resolver los textarea mediante getByLabel(),
-  // aunque el control sí expone su nombre accesible (confirmado en el snapshot ARIA).
-  // Usamos el rol semántico tanto al verificar como al editar el mismo control.
   const observaciones = modal.getByRole("textbox", { name: "Observaciones", exact: true });
-  await expect(observaciones, "Campo editable: Observaciones").toBeEnabled();
-  await expect(modal).toContainText(/La matrícula ya fue cobrada y forma parte de Contable/i);
+  await expect(observaciones).toBeEnabled();
   const nuevaObservacion = `PW E2E OBS ${suffix()}`;
+  const dniCorregido = testDni();
+  await modal.getByLabel("DNI *").fill(dniCorregido);
+  await modal.getByLabel("Monto matrícula *").fill("41500.25");
   await observaciones.fill(nuevaObservacion);
-  await expect(observaciones).toHaveValue(nuevaObservacion);
   await modal.getByRole("button", { name: /guardar cambios/i }).click();
   await expect(modal).toBeHidden();
   const result = await ok(request, "ingresantes_listar", {
-    token: token(), query: { ciclo_lectivo: currentYear() + 1, buscar: incoming.num_documento },
+    token: token(), query: { ciclo_lectivo: currentYear() + 1, buscar: dniCorregido },
   });
   const updated = result.items.find(x => Number(x.id_ingresante) === Number(incoming.id_ingresante));
   expect(updated?.observaciones).toBe(nuevaObservacion);
-  expect(Number(updated?.monto_matricula)).toBeCloseTo(40000, 2);
-  expect(String(updated?.num_documento)).toBe(String(incoming.num_documento));
+  expect(Number(updated?.monto_matricula)).toBeCloseTo(41500.25, 2);
+  expect(String(updated?.num_documento)).toBe(dniCorregido);
 });
 
 test("Editar matrícula NO PAGADA: los datos personales/ciclo y la casilla de matrícula están habilitados", async ({ page, request }) => {

@@ -2154,3 +2154,24 @@
 .wp-campaign-table .global-courseColumn {
   text-align: center !important;
 }
+
+/* Información de límite móvil y reparto de tandas */
+.wp-campaign-demo-label { color:#fff; border:1px solid rgba(255,255,255,.5); border-radius:8px; padding:6px 9px; font-size:11px; font-weight:800; margin-left:auto; }
+.wp-campaign-quota-strip { margin:12px 24px 4px; display:flex; gap:9px; flex-wrap:wrap; align-items:center; padding:10px 13px; background:var(--campaign-card); color:var(--campaign-text); border:1px solid var(--campaign-border); border-radius:10px; font-size:12px; }
+.wp-campaign-quota-strip > svg { color:var(--campaign-green); }
+.wp-campaign-quota-strip > span { flex:1; min-width:200px; }
+.wp-campaign-quota-strip button, .wp-campaign-info-link { border:0; background:transparent; color:var(--campaign-green); cursor:pointer; font:inherit; font-weight:750; padding:3px 4px; }
+.wp-campaign-quota-strip button:hover, .wp-campaign-info-link:hover { text-decoration:underline; }
+.wp-campaign-delivery-summary { display:flex; flex-direction:column; gap:4px; padding:9px 11px; margin:8px 0 2px; border:1px solid var(--campaign-border); border-radius:9px; background:var(--campaign-card); color:var(--campaign-text); font-size:12px; }
+.wp-campaign-delivery-summary.is-expanded { margin:13px 0; }
+.wp-campaign-delivery-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:7px; margin-bottom:4px; }
+.wp-campaign-delivery-head strong { display:flex; align-items:center; gap:6px; }
+.wp-campaign-delivery-summary > span { line-height:1.45; }
+.wp-campaign-delivery-summary > small { color:var(--campaign-muted); line-height:1.45; font-size:11px; }
+.wp-campaign-quota-dialog { max-width:570px; width:calc(100% - 28px); max-height:80vh; overflow:auto; background:var(--campaign-panel); color:var(--campaign-text); border:1px solid var(--campaign-border); border-radius:14px; box-shadow:0 25px 80px rgba(0,0,0,.5); padding:20px; }
+.wp-campaign-quota-dialog-head { display:flex; gap:10px; align-items:center; color:var(--campaign-green); }
+.wp-campaign-quota-dialog-head h3 { flex:1; margin:0; font-size:17px; color:var(--campaign-text); }
+.wp-campaign-quota-dialog-head button { border:0; background:transparent; color:var(--campaign-text); cursor:pointer; padding:7px; }
+.wp-campaign-quota-dialog p { font-size:13px; line-height:1.55; }
+.wp-campaign-quota-dialog > .wp-campaign-primary { margin-top:9px; }
+@media(max-width:640px){.wp-campaign-quota-strip { margin:10px 12px 4px; }.wp-campaign-demo-label { font-size:9px; } }

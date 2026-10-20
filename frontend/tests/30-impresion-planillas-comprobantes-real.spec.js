@@ -16,7 +16,7 @@ async function fakePrinter(context) {
 }
 
 test("Ventas: vista previa + impresión por curso y docente (datos de ventas y totales reales)", async ({ context, page, request }) => {
-  test.setTimeout(140_000);
+  test.setTimeout(220_000);
   const t = token(), marker = suffix(), dni = testDni(), teacherDni = testDni();
   const product = await createSalesProduct(request, t, marker);
   const campaign = await createSalesCampaign(request, t, product, marker);
@@ -78,33 +78,45 @@ test("Ventas: vista previa + impresión por curso y docente (datos de ventas y t
       }
     }
     expect(located, `El registro ${target} existe en la API pero no apareció en ninguna de las ${totalPages} páginas de ${type}`).toBe(true);
-    const [popup] = await Promise.all([
-      page.waitForEvent("popup", { timeout: 20_000 }),
-      page.getByRole("button", { name: /^imprimir$/i }).first().click(),
-    ]);
-    await expect(popup.locator("table.legacy-grid").first()).toBeVisible();
-    await expect(popup.locator("body")).toContainText(target);
-    const cells = popup.locator("tr.legacy-data-row").filter({ hasText: target }).first().locator("td");
-    // El PDF/impreso actual NO contiene celdas para completar a mano: refleja
-    // el estado y montos reales de cada fila (sin exigir ventas al fixture).
-    const campaignHasObjective = Number(campaign.cantidad_minima_persona || 0) > 0;
-    await expect(cells).toHaveCount(type === "docentes" ? (campaignHasObjective ? 8 : 6) : 9);
-    const values = await cells.allTextContents();
-    expect(values.join(" ")).toContain(target);
-    expect(values.join(" ")).toContain("0"); // Fixture sin compras.
-    await expect(popup.locator("body")).toContainText(/TOTAL COBRADO/i);
-    await expect(popup.locator("body")).not.toContainText(/COMPLETAR A MANO/i);
-    await popup.close();
+    for (const modo of ["vacia", "datos"]) {
+      await page.getByRole("button", { name: /^imprimir$/i }).first().click();
+      const modalImpresion = page.getByRole("dialog", { name: /imprimir planilla/i });
+      await expect(modalImpresion).toBeVisible();
+      await modalImpresion.locator(`input[name="contenido_imprimir_planilla"][value="${modo}"]`).check({ force: true });
+      const [popup] = await Promise.all([
+        page.waitForEvent("popup", { timeout: 20_000 }),
+        modalImpresion.getByRole("button", { name: /^imprimir$/i }).click(),
+      ]);
+      await expect(popup.locator("table.legacy-grid").first()).toBeVisible();
+      await expect(popup.locator("body")).toContainText(target);
+      const cells = popup.locator("tr.legacy-data-row").filter({ hasText: target }).first().locator("td");
+      const campaignHasObjective = Number(campaign.cantidad_minima_persona || 0) > 0;
+      await expect(cells).toHaveCount(type === "docentes" ? (campaignHasObjective ? 8 : 6) : 9);
+      const values = await cells.allTextContents();
+      expect(values.join(" ")).toContain(target);
+      if (modo === "vacia") {
+        // Solo identidad y curso/orden: los campos de ventas, pendientes y totales vacíos.
+        const primeraColumnaVentas = type === "docentes" ? 3 : 4;
+        expect(values.slice(primeraColumnaVentas).every((value) => value.trim() === "")).toBe(true);
+        await expect(popup.locator(".legacy-total strong").first()).toHaveText("");
+      } else {
+        expect(values.join(" ")).toContain("0"); // Fixture sin compras, modalidad informada.
+      }
+      await expect(popup.locator("body")).toContainText(/TOTAL COBRADO/i);
+      await popup.close();
+    }
   }
   await printAndVerify("cursos", dni);
   await printAndVerify("docentes", teacherDni);
-  // Además de imprimir, exportar realmente la planilla por docentes en los DOS formatos.
-  for (const formato of ["excel", "pdf"]) {
+  // Exportar realmente: Excel vacío y con datos + PDF vacío.
+  for (const [formato, modo] of [["excel", "vacia"], ["excel", "datos"], ["pdf", "vacia"]]) {
     await page.getByRole("button", { name: /^exportar$/i }).first().click();
     const modal = page.locator('[role="dialog"].global-exportHistorial-overlay');
     await expect(modal).toBeVisible();
+    await modal.locator(`input[name="contenido_exportar_planilla"][value="${modo}"]`).check({ force: true });
     await modal.locator(`input[name="formato_exportar_global"][value="${formato}"]`).check({ force: true });
     const [file] = await Promise.all([page.waitForEvent("download"), modal.locator('button[type="submit"]').click()]);
+    expect(file.suggestedFilename()).toContain(modo);
     const result = await downloadSnapshot(file, { allowImageOnly: formato === "pdf" });
     if (formato === "excel") {
       expect(result.detail.texts.join(" ")).toContain(teacherDni);
