@@ -1,3 +1,4 @@
+import { botPanelRequest } from "../botPanelRequest";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -144,11 +145,7 @@ const ReportesBotModal = ({ open, onClose }) => {
     setError("");
     try {
       const url = `${PANEL_API}/panel_reportes.php?anio=${encodeURIComponent(anio)}&mes=${encodeURIComponent(mes)}&_=${Date.now()}`;
-      const res = await fetch(url, { method: "GET", cache: "no-store", credentials: "include" });
-      const response = await res.json().catch(() => null);
-      if (!res.ok || !response || response.success === false) {
-        throw new Error(response?.error || "No se pudo cargar el reporte");
-      }
+      const response = await botPanelRequest(url, { method: "GET" });
       setData(response);
     } catch (e) {
       setError("No se pudo cargar el resumen. Intentá nuevamente en unos momentos.");

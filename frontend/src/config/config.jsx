@@ -19,7 +19,7 @@ function defaultApiBaseUrl() {
   // CAMBIÁ SOLO ESTA URL para alternar el backend durante npm start:
   // Local:     http://localhost:3001/routes
   // Hostinger: https://cooperadora.ipet50.edu.ar/api/routes
-  if (isLoopback) return "http://localhost:3001/routes";
+  if (isLoopback) return "https://cooperadora.ipet50.edu.ar/api/routes";
 
   // Si el frontend se ejecuta en otro servidor de desarrollo,
   // mantenemos el comportamiento anterior (API en el mismo origen).

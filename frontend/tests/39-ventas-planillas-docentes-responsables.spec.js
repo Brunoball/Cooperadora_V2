@@ -99,6 +99,8 @@ test.describe("Docentes responsables: escritura E2E aislada", () => {
     await page.getByRole("combobox", { name: /venta \(mes y año\)/i }).selectOption(String(campaign.id_campania));
     await page.getByRole("combobox", { name: "Año", exact: true }).selectOption(String(student.id_anio));
     await page.getByRole("combobox", { name: "División", exact: true }).selectOption(String(student.id_division));
+    // El buscador de docentes está dentro del panel desplegable, cerrado por defecto.
+    await page.getByRole("button", { name: "Asignar docentes" }).click();
     const docente = page.getByRole("combobox", { name: /buscar docente responsable para/i });
     await expect(docente).toBeVisible({ timeout: 20000 });
     await docente.fill(dni);
@@ -110,6 +112,8 @@ test.describe("Docentes responsables: escritura E2E aislada", () => {
     await page.getByRole("combobox", { name: /venta \(mes y año\)/i }).selectOption(String(campaign.id_campania));
     await page.getByRole("combobox", { name: "Año", exact: true }).selectOption(String(student.id_anio));
     await page.getByRole("combobox", { name: "División", exact: true }).selectOption(String(student.id_division));
+    // La recarga vuelve a cerrar el panel: abrirlo antes de leer la asignación.
+    await page.getByRole("button", { name: "Asignar docentes" }).click();
     await expect(section).toContainText(teacherName, { timeout: 20000 });
 
     const popupPromise = page.waitForEvent("popup");

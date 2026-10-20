@@ -19,6 +19,7 @@ import {
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import Toast from "../../Global/Toast";
+import { botPanelRequest } from "../botPanelRequest";
 import { useModalEscapeStack } from "./useModalEscapeStack";
 import "./CampaniasRecordatorioModal.css";
 
@@ -217,6 +218,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
   const [view, setView] = useState("list");
   const [activeTab, setActiveTab] = useState("mensaje");
   const [campanias, setCampanias] = useState([]);
+  const [cupo24h, setCupo24h] = useState(null);
   const [opciones, setOpciones] = useState({ anios: [], divisiones: [], categorias: [] });
   const [form, setForm] = useState(emptyForm());
   const [destinatarios, setDestinatarios] = useState(null);
@@ -323,12 +325,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
   });
 
   const fetchJson = useCallback(async (url, options = {}) => {
-    const res = await fetch(url, { cache: "no-store", credentials: "include", ...options });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Error HTTP ${res.status}`);
-    }
-    return data;
+    return botPanelRequest(url, options);
   }, []);
 
   const loadAll = useCallback(async () => {
@@ -340,6 +337,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
         fetchJson(`${ENDPOINT}?accion=opciones&_=${Date.now()}`),
       ]);
       setCampanias(Array.isArray(list.campanias) ? list.campanias : []);
+      setCupo24h(list.cupo_24h && typeof list.cupo_24h === "object" ? list.cupo_24h : null);
       setOpciones(opts.opciones || { anios: [], divisiones: [], categorias: [] });
     } catch (e) {
       setError(e?.message || "No se pudieron cargar las campañas.");
@@ -619,7 +617,7 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
 
   return (
     <div className="wp-campaign-backdrop" role="dialog" aria-modal="true" aria-label="Campañas de mensajes">
-      <div className={`wp-campaign-modal${view === "list" && !loading && campanias.length === 0 ? " is-empty-list" : ""}`}>
+      <div className={`wp-campaign-modal${view === "list" && !loading && !error && campanias.length === 0 ? " is-empty-list" : ""}`}>
         <header className="wp-campaign-head">
           <div className="wp-campaign-title">
             <span className="wp-campaign-head-icon"><FontAwesomeIcon icon={faBullhorn} /></span>
@@ -641,14 +639,36 @@ const CampaniasRecordatorioModal = ({ open, onClose }) => {
                 <strong>Mensajes programados</strong>
                 <small>Creá, editá o eliminá campañas antes de que sean procesadas.</small>
               </div>
-              <button type="button" className="wp-campaign-primary" onClick={openCreate}>
+              <button type="button" className="wp-campaign-primary" onClick={openCreate} disabled={loading || Boolean(error)}>
                 <FontAwesomeIcon icon={faPlus} /> Agregar campaña
               </button>
             </div>
 
+            {cupo24h && !error && (
+              <div role="status" style={{ margin: "12px 24px 0", padding: "11px 14px", border: "1px solid var(--wp-border, #d7dce2)", borderRadius: 10, fontSize: 13 }}>
+                <strong>Cupo WhatsApp · últimas 24 horas: </strong>
+                {Number(cupo24h.usados || 0)} de {Number(cupo24h.limite || 250)} destinatarios únicos.
+                <span style={{ marginLeft: 8 }}>
+                  {Number(cupo24h.disponibles || 0) > 0
+                    ? `${Number(cupo24h.disponibles)} disponibles`
+                    : "Cupo completo: los envíos pendientes se reprograman automáticamente"}
+                </span>
+                <div style={{ opacity: 0.7, fontSize: 12, marginTop: 4 }}>
+                  Compartido con recordatorios. No incluye mensajes iniciados desde otras plataformas del mismo negocio.
+                </div>
+              </div>
+            )}
             <div className="wp-campaign-content">
-              {error ? <div className="wp-campaign-error">{error}</div> : null}
-              {loading ? (
+              {error ? (
+                <div className="wp-campaign-error" role="alert">
+                  {error}
+                  <div style={{ marginTop: 10 }}>
+                    <button type="button" className="wp-campaign-secondary" onClick={loadAll} disabled={loading}>
+                      Reintentar carga
+                    </button>
+                  </div>
+                </div>
+              ) : loading ? (
                 <div className="wp-campaign-empty"><FontAwesomeIcon icon={faSpinner} spin /> Cargando campañas…</div>
               ) : campanias.length === 0 ? (
                 <div className="wp-campaign-empty">
