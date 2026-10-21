@@ -72,13 +72,22 @@
 }
 
 
-/* Modal: conserva la estética global y sólo define distribución/tamaño. */
+/* Modal: pestañas globales para datos de ingreso y matrícula. */
 .ingresantes-modal.entity-modal--wide {
   width: min(880px, 100%);
 }
 
 .ingresantes-modal .entity-modal__body {
-  padding: 18px 20px;
+  padding: 0 20px 18px;
+}
+
+.ingresantes-modal .entity-form-tabs {
+  margin: 0;
+  gap: 24px;
+}
+
+.ingresantes-modal .ingresantes-tab-pane {
+  padding: 19px 0 2px;
 }
 
 .ingresantes-formGrid {
@@ -282,6 +291,20 @@
 }
 
 @media (max-width: 620px) {
+  .ingresantes-modal .entity-modal__body {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .ingresantes-modal .entity-form-tabs {
+    gap: 14px;
+  }
+
+  .ingresantes-modal .entity-form-tab {
+    font-size: 11.5px;
+    gap: 5px;
+  }
+
   .ingresantes-page .module-card__actions > .module-headFilters.ingresantes-headFilters {
     display: flex;
     flex-wrap: wrap;

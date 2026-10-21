@@ -1,14 +1,14 @@
 import TableEmptyIcon from "../../Global/TableEmptyIcon";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBan, faCheck, faPen, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
+import { faBan, faCheck, faCreditCard, faPen, faRotateLeft, faUser } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
 import CrudModal from "../../Global/Modales/CrudModal";
 import ModalEliminarGlobal from "../../Global/Modales/ModalEliminarGlobal";
 import ModuleFeedback from "../../Global/ModuleFeedback";
-import { FloatingField } from "../../Global/Formularios/TabbedForm";
+import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import { canWrite } from "../../_shared/auth/session";
 import { ingresantesApi } from "../api/alumnosApi";
 import "./Ingresantes.css";
@@ -76,6 +76,12 @@ function formFromItem(item) {
 }
 
 const EMPTY_PAGINATION = { pagina: 1, total: 0, total_paginas: 0, desde: 0, hasta: 0 };
+const FORM_TAB_INGRESANTE = "ingresante";
+const FORM_TAB_MATRICULA = "matricula";
+const FORM_TABS = [
+  { value: FORM_TAB_INGRESANTE, label: "Datos del ingresante", icon: faUser },
+  { value: FORM_TAB_MATRICULA, label: "Matrícula y observaciones", icon: faCreditCard },
+];
 
 function isInteractiveRowTarget(target) {
   return target instanceof Element && Boolean(
@@ -105,6 +111,7 @@ export default function Ingresantes() {
   const [stateModal, setStateModal] = useState(null);
   const [changingState, setChangingState] = useState(false);
   const [form, setForm] = useState(emptyForm());
+  const [formTab, setFormTab] = useState(FORM_TAB_INGRESANTE);
 
   const filters = useMemo(() => ({
     buscar: search,
@@ -143,16 +150,42 @@ export default function Ingresantes() {
     const next = emptyForm(catalogos.monto_matricula_actual || 0);
     next.ciclo_lectivo = cycle || String(suggestedCycle());
     setForm(next);
+    setFormTab(FORM_TAB_INGRESANTE);
     setModalOpen(true);
   };
 
   const openEdit = (item) => {
     setForm(formFromItem(item));
+    setFormTab(FORM_TAB_INGRESANTE);
     setModalOpen(true);
   };
 
   const save = async (event) => {
     event.preventDefault();
+
+    // Con pestañas, la validación nativa no alcanza para los campos ocultos.
+    // Revisamos ambas secciones y volvemos a la pestaña que requiere atención.
+    const today = localToday();
+    let invalid = null;
+    if (!form.apellido.trim()) invalid = [FORM_TAB_INGRESANTE, "apellido", "Completá el apellido del ingresante."];
+    else if (!form.nombre.trim()) invalid = [FORM_TAB_INGRESANTE, "nombre", "Completá el nombre del ingresante."];
+    else if (!String(form.num_documento || "").replace(/\D+/g, "")) invalid = [FORM_TAB_INGRESANTE, "num_documento", "Ingresá el DNI del ingresante."];
+    else if (!form.id_anio_destino) invalid = [FORM_TAB_INGRESANTE, "id_anio_destino", "Seleccioná el año al que ingresa."];
+    else if (!form.ciclo_lectivo || Number(form.ciclo_lectivo) < 2020 || Number(form.ciclo_lectivo) > 2100 || !Number.isInteger(Number(form.ciclo_lectivo))) invalid = [FORM_TAB_INGRESANTE, "ciclo_lectivo", "Ingresá un ciclo lectivo válido (2020 a 2100)."];
+    else if (!form.fecha_inscripcion || form.fecha_inscripcion > today) invalid = [FORM_TAB_INGRESANTE, "fecha_inscripcion", "Ingresá una fecha de inscripción válida."];
+    else if (form.matricula_pagada && (!form.monto_matricula || !Number.isFinite(Number(form.monto_matricula)) || Number(form.monto_matricula) < 0.01)) invalid = [FORM_TAB_MATRICULA, "monto_matricula", "Ingresá un monto de matrícula mayor a cero."];
+    else if (form.matricula_pagada && (!form.fecha_pago_matricula || form.fecha_pago_matricula > today)) invalid = [FORM_TAB_MATRICULA, "fecha_pago_matricula", "Ingresá una fecha de pago válida."];
+
+    if (invalid) {
+      const [tab, field, message] = invalid;
+      setFormTab(tab);
+      setFeedback({ type: "error", message });
+      window.requestAnimationFrame(() => {
+        document.querySelector(`.ingresantes-modal [name="${field}"]`)?.focus();
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       await ingresantesApi.guardar({
@@ -364,11 +397,27 @@ export default function Ingresantes() {
         saving={saving}
         submitLabel={form.id_ingresante ? "Guardar cambios" : "Guardar ingresante"}
         wide
+        noValidate
         modalClassName="ingresantes-modal"
       >
-        <div className="ingresantes-formGrid">
+        <EntityTabs
+          tabs={FORM_TABS}
+          value={formTab}
+          onChange={setFormTab}
+          idPrefix="ingresantes-form"
+          ariaLabel="Datos de la inscripción"
+        />
+
+        <EntityTabPane active={formTab === FORM_TAB_INGRESANTE} disableWhenInactive className="ingresantes-tab-pane">
+          <div
+            className="ingresantes-formGrid"
+            id="ingresantes-form-ingresante-panel"
+            role="tabpanel"
+            aria-labelledby="ingresantes-form-ingresante"
+          >
           <FloatingField label="Apellido *" active={Boolean(form.apellido)} className="ingresantes-field--span-6">
             <input
+              name="apellido"
               value={form.apellido}
               maxLength={100}
               required
@@ -379,6 +428,7 @@ export default function Ingresantes() {
 
           <FloatingField label="Nombre *" active={Boolean(form.nombre)} className="ingresantes-field--span-6">
             <input
+              name="nombre"
               value={form.nombre}
               maxLength={100}
               required
@@ -387,36 +437,15 @@ export default function Ingresantes() {
             />
           </FloatingField>
 
-          <FloatingField label="DNI *" active={Boolean(form.num_documento)} className="ingresantes-field--span-4">
+          <FloatingField label="DNI *" active={Boolean(form.num_documento)} className="ingresantes-field--span-6">
             <input
+              name="num_documento"
               value={form.num_documento}
               maxLength={10}
               inputMode="numeric"
               required
               placeholder="Ej. 45123456"
               onChange={(e) => setForm((c) => ({ ...c, num_documento: e.target.value.replace(/\D+/g, "") }))}
-            />
-          </FloatingField>
-
-          <FloatingField label="Ingresa a *" active={Boolean(form.id_anio_destino)} className="ingresantes-field--span-4">
-            <select
-              value={form.id_anio_destino}
-              required
-              onChange={(e) => setForm((c) => ({ ...c, id_anio_destino: e.target.value }))}
-            >
-              {(catalogos.anios || []).map((item) => <option key={item.id_anio} value={item.id_anio}>{item.nombre_anio}</option>)}
-            </select>
-          </FloatingField>
-
-          <FloatingField label="Ciclo lectivo *" active={Boolean(form.ciclo_lectivo)} className="ingresantes-field--span-4">
-            <input
-              type="number"
-              min="2020"
-              max="2100"
-              value={form.ciclo_lectivo}
-              required
-              placeholder="Ej. 2027"
-              onChange={(e) => setForm((c) => ({ ...c, ciclo_lectivo: e.target.value }))}
             />
           </FloatingField>
 
@@ -431,17 +460,51 @@ export default function Ingresantes() {
             />
           </FloatingField>
 
-          <FloatingField label="Fecha de inscripción *" active={Boolean(form.fecha_inscripcion)} className="ingresantes-field--span-6">
+          <FloatingField label="Ingresa a *" active={Boolean(form.id_anio_destino)} className="ingresantes-field--span-4">
+            <select
+              name="id_anio_destino"
+              value={form.id_anio_destino}
+              required
+              onChange={(e) => setForm((c) => ({ ...c, id_anio_destino: e.target.value }))}
+            >
+              {(catalogos.anios || []).map((item) => <option key={item.id_anio} value={item.id_anio}>{item.nombre_anio}</option>)}
+            </select>
+          </FloatingField>
+
+          <FloatingField label="Ciclo lectivo *" active={Boolean(form.ciclo_lectivo)} className="ingresantes-field--span-4">
+            <input
+              type="number"
+              min="2020"
+              max="2100"
+              name="ciclo_lectivo"
+              value={form.ciclo_lectivo}
+              required
+              placeholder="Ej. 2027"
+              onChange={(e) => setForm((c) => ({ ...c, ciclo_lectivo: e.target.value }))}
+            />
+          </FloatingField>
+
+          <FloatingField label="Fecha de inscripción *" active={Boolean(form.fecha_inscripcion)} className="ingresantes-field--span-4">
             <input
               type="date"
               max={localToday()}
+              name="fecha_inscripcion"
               value={form.fecha_inscripcion}
               required
               onChange={(e) => setForm((c) => ({ ...c, fecha_inscripcion: e.target.value }))}
             />
           </FloatingField>
+          </div>
+        </EntityTabPane>
 
-          <label className={`entity-check-option ingresantes-check ingresantes-check--field ingresantes-field--span-6 ${form.matricula_pagada ? "is-selected" : ""}`}>
+        <EntityTabPane active={formTab === FORM_TAB_MATRICULA} disableWhenInactive className="ingresantes-tab-pane">
+          <div
+            className="ingresantes-formGrid"
+            id="ingresantes-form-matricula-panel"
+            role="tabpanel"
+            aria-labelledby="ingresantes-form-matricula"
+          >
+          <label className={`entity-check-option ingresantes-check ingresantes-check--field ingresantes-field--span-12 ${form.matricula_pagada ? "is-selected" : ""}`}>
             <input
               type="checkbox"
               checked={Boolean(form.matricula_pagada)}
@@ -457,6 +520,7 @@ export default function Ingresantes() {
                   type="number"
                   min="0.01"
                   step="0.01"
+                  name="monto_matricula"
                   value={form.monto_matricula}
                   required
                   placeholder="Ej. 15000"
@@ -478,6 +542,7 @@ export default function Ingresantes() {
                 <input
                   type="date"
                   max={localToday()}
+                  name="fecha_pago_matricula"
                   value={form.fecha_pago_matricula}
                   required
                   onChange={(e) => setForm((c) => ({ ...c, fecha_pago_matricula: e.target.value }))}
@@ -495,7 +560,8 @@ export default function Ingresantes() {
               onChange={(e) => setForm((c) => ({ ...c, observaciones: e.target.value.toUpperCase() }))}
             />
           </FloatingField>
-        </div>
+          </div>
+        </EntityTabPane>
       </CrudModal>
 
       <ModalEliminarGlobal
