@@ -2,7 +2,7 @@ const { test, expect } = require("./helpers/playwright.helper");
 const { token } = require("./helpers/auth.helper");
 const { ok, apiFetch } = require("./helpers/api.helper");
 const { createSalesProduct, createSalesCampaign } = require("./helpers/entities.helper");
-const { suffix, testDni } = require("./helpers/data.helper");
+const { suffix, testDni, today } = require("./helpers/data.helper");
 
 const { loadTestEnv } = require("./helpers/env.helper");
 const env = loadTestEnv();
@@ -11,7 +11,7 @@ test.beforeEach(() => {
 });
 
 test.describe("Ventas", () => {
-  test("venta aprobada descuenta stock, retiro reversible y anulación restaura stock", async ({ request }) => {
+  test("venta aprobada descuenta stock, retiro reversible y eliminación definitiva restaura stock", async ({ request }) => {
     const t = token();
     const marker = suffix();
     const product = await createSalesProduct(request, t, marker, { stock: 20 });
@@ -26,7 +26,7 @@ test.describe("Ventas", () => {
         id_campania: campaign.id_campania,
         id_medio_pago: medio.id_medio_pago,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         dni: testDni(),
         nombre_apellido: `PW E2E VTA PERSONA ${marker}`,
         observacion: `PW E2E VTA ORDEN ${marker}`,
@@ -58,6 +58,11 @@ test.describe("Ventas", () => {
       token: t, method: "POST", data: { id_orden: order.id_orden, motivo: "PW E2E" },
     });
 
+    const deleted = await apiFetch(request, "ventas_orden_detalle", {
+      token: t, query: { id_orden: order.id_orden },
+    });
+    expect(deleted.status).toBe(404);
+    expect(deleted.body.codigo).toBe("VENTA_NO_ENCONTRADA");
     const productsAfterCancel = await ok(request, "ventas_productos_listar", {
       token: t, query: { buscar: `PW E2E VTA PROD ${marker}` },
     });
@@ -80,7 +85,7 @@ test.describe("Ventas", () => {
         id_campania: campaign.id_campania,
         id_medio_pago: catalogs.medios_pago[0].id_medio_pago,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         observacion: `PW E2E VTA ORDEN ${marker}`,
         items: [{
           id_producto: product.id_producto,
@@ -111,7 +116,7 @@ test.describe("Ventas", () => {
         id_campania: campaign.id_campania,
         id_medio_pago: catalogs.medios_pago[0].id_medio_pago,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         observacion: `PW E2E VTA ORDEN ${marker}`,
         items: [{
           id_producto: principal.id_producto, producto_nombre: principal.nombre,

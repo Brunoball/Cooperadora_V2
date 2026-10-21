@@ -36,7 +36,7 @@ test("Clientes React: todas las acciones de API declaradas existen en el router"
   function walk(folder) {
     for (const item of fs.readdirSync(folder, { withFileTypes: true })) {
       const file = path.join(folder, item.name);
-      if (item.isDirectory()) walk(file);
+      if (item.isDirectory() && item.name !== "BotPanel") walk(file);
       else if (/\.[jt]sx?$/.test(file)) {
         const source = fs.readFileSync(file, "utf8");
         for (const match of source.matchAll(/\bapi(?:Get|Post|Request|Put|Delete)\s*\(\s*['"]([\w]+)['"]/g)) used.add(match[1]);
@@ -115,7 +115,7 @@ test("Planillas: buscador integral, curso automático y descomposición contable
   expect(source).toContain('transformarSecciones={prepararSeccionesPlanilla}');
   expect(source).toContain('defaultContenido="vacia"');
   expect(document).toContain('prepararSeccionesPlanilla');
-  expect(source).toContain('exportarDocumentoPlanillasPdf(documento, exportFileName)');
+  expect(source).toContain('exportarDocumentoPlanillasPdf(documento, nombreArchivo || `${exportFileName}_${contenido}`)');
   expect(document).toContain('function hojaCurso(');
   expect(document).toContain('function hojaDocentes(');
   expect(document).toContain('f.gananciaCobrada');

@@ -704,6 +704,11 @@ trait VentasOrdenes
 
         $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor,$liquidarGanancia,$incluirGanancia){
             $campaign=self::campaign($db,$campaignId,true);
+            // Un cierre definitivo tiene prioridad sobre cualquier validación
+            // propia del detalle de la venta (incluida ganancia histórica).
+            if (($campaign['estado_cierre'] ?? 'abierta') === 'cerrada') {
+                api_error('La campaña está cerrada. Consultá el historial; no se admiten cambios.', 'VENTA_CAMPANIA_CERRADA', 409);
+            }
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
             $before=$id?self::order($db,$id,true):null;
@@ -726,7 +731,7 @@ trait VentasOrdenes
             }
             $oldItems=$id?self::orderItems($db,$id):[];
             if ($incluirGanancia && ($liquidarGanancia || $id || $state !== 'aprobada')) {
-                api_error('La ganancia opcional solo puede incluirse al crear una venta manual aprobada con productos.', 'VENTA_GANANCIA_NO_DISPONIBLE', 409);
+                api_error('La ganancia solo puede incluirse al crear una venta manual aprobada.', 'VENTA_GANANCIA_NO_DISPONIBLE', 409);
             }
             $fechaFin = (string)($campaign['fecha_fin'] ?? '');
             $finalSettlement = $liquidarGanancia && !$id && $state==='aprobada'
@@ -747,8 +752,8 @@ trait VentasOrdenes
                 self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona=? FOR UPDATE', [$personId]);
             }
 
-            // Modo habitual: solo productos. Modo opcional: productos + ganancia
-            // aún pendiente, descontando cualquier ganancia ya cobrada.
+            // Modo habitual: solo productos. Ganancia opcional: con productos
+            // o sin ellos (cantidad 0), descontando cualquier ganancia ya cobrada.
             // El cálculo ocurre DENTRO de la transacción, con el bloqueo de
             // persona, para impedir cobros dobles en peticiones simultáneas.
             if ($incluirGanancia) {
@@ -760,8 +765,8 @@ trait VentasOrdenes
                         $combos+=(int)($item['cantidad'] ?? 0);
                     }
                 }
-                if (!$personId || $principalId <= 0 || $minimo <= 0 || $combos <= 0 || $items === []) {
-                    api_error('Para incluir ganancias, seleccioná una persona y agregá al menos un combo de la campaña.', 'VENTA_GANANCIA_REQUIERE_COMBOS', 422);
+                if (!$personId || $principalId <= 0 || $minimo <= 0 || ($items !== [] && $combos <= 0)) {
+                    api_error('Para cobrar ganancias, seleccioná una persona. Si registrás productos, incluí al menos un combo de la campaña.', 'VENTA_GANANCIA_REQUIERE_COMBOS', 422);
                 }
             }
             $objectiveGain=($finalSettlement || $incluirGanancia)
@@ -770,8 +775,9 @@ trait VentasOrdenes
             if ($incluirGanancia && $objectiveGain <= 0) {
                 api_error('La persona no tiene ganancias pendientes para incluir. Guardá la venta sin marcar la casilla.', 'VENTA_GANANCIA_SIN_SALDO', 422);
             }
-            if ($items===[] && !($finalSettlement && $personId && $objectiveGain>0)) {
-                api_error('Agregá un producto. La ganancia sin productos solo puede liquidarse al terminar la campaña.', 'VALIDATION_ERROR');
+            $gainOnly = $items === [] && ($finalSettlement || $incluirGanancia) && $personId && $objectiveGain > 0;
+            if ($items === [] && !$gainOnly) {
+                api_error('Agregá un producto o registrá una ganancia pendiente positiva con pago aprobado.', 'VALIDATION_ERROR');
             }
             $finalTotal=round((float)$itemsTotal+$objectiveGain,2);
             /** @disregard P1012 */
@@ -799,8 +805,9 @@ trait VentasOrdenes
                 $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,?,\'manual\',?,?,?,?,?)')
                     ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt]);
                 $orderId=(int)$db->lastInsertId();
-                // Una liquidación de ganancia no tiene productos para retirar.
-                if ($finalSettlement) {
+                // Un cobro solo de ganancia no tiene productos para retirar,
+                // incluso cuando se registra antes del cierre de campaña.
+                if ($gainOnly) {
                     $db->prepare('UPDATE ventas_ordenes SET retirado=1,retirado_en=? WHERE id_orden=?')
                         ->execute([$approvedAt,$orderId]);
                 }
@@ -830,33 +837,58 @@ trait VentasOrdenes
 
     public static function eliminarOrden(): never
     {
-        $db=self::db();$auth=self::auth();$body=request_body();$id=positive_id($body['id_orden'] ?? $body['id'] ?? null,'venta');$reason=optional_text($body['motivo'] ?? null,1000);
-        $balance=transaction($db,function()use($db,$auth,$id,$reason){
-            $reference=self::fetchOne($db,'SELECT id_campania FROM ventas_ordenes WHERE id_orden=?',[$id]);
-            if(!$reference) api_error('No existe la venta.', 'VENTA_NO_ENCONTRADA',404);
-            $campaign=self::campaign($db,(int)$reference['id_campania'],true);
-            if($campaign['estado_cierre']==='cerrada') api_error('El historial está cerrado.', 'VENTA_CAMPANIA_CERRADA',409);
-            $before=self::order($db,$id,true);
-            if($before['estado']==='cancelada') return 0.0;
-            $items=self::orderItems($db,$id);
-            if($before['estado']==='aprobada' && self::isStockManagedOrder($before))self::adjustStock($db,$items,+1);
-            self::deleteLinkedIncome($db,$before);
-            $obs=trim((string)$before['observacion']);$suffix=$reason?'ANULADA: '.$reason:'ANULADA DESDE EL MÓDULO VENTAS';$obs=trim($obs.($obs?' | ':'').$suffix);
-            $db->prepare("UPDATE ventas_ordenes SET estado='cancelada',cancelado_en=NOW(),retirado=0,retirado_en=NULL,observacion=? WHERE id_orden=?")->execute([$obs,$id]);
-            $after=self::order($db,$id);audit_change($db,$auth,'VENTAS','ANULAR_VENTA','ventas_ordenes',$id,'La venta se anuló conservando trazabilidad.',$before,$after);
+        $db = self::db();
+        $body = request_body();
+        $id = positive_id($body['id_orden'] ?? $body['id'] ?? null, 'venta');
 
-            // No agregar cargos a ventas previas al anular una operación:
-            // las diferencias se calculan en la liquidación final.
-            if ($before['estado'] !== 'aprobada' || (float)($before['ganancia_objetivo'] ?? 0) <= 0) return 0.0;
+        $balance = transaction($db, function () use ($db, $id): float {
+            $reference = self::fetchOne($db, 'SELECT id_campania FROM ventas_ordenes WHERE id_orden = ?', [$id]);
+            if (!$reference) api_error('La venta no existe.', 'VENTA_NO_ENCONTRADA', 404);
+
+            // Mantener el mismo orden de bloqueos que al guardar o editar
+            // (campaña -> venta -> persona -> productos).
+            $campaign = self::campaign($db, (int)$reference['id_campania'], true);
+            if ($campaign['estado_cierre'] === 'cerrada') {
+                api_error('El historial está cerrado.', 'VENTA_CAMPANIA_CERRADA', 409);
+            }
+            $before = self::order($db, $id, true);
             $personId = self::nullablePositiveId($before['id_venta_persona'] ?? null);
-            if (!$personId) return 0.0;
-            $campaign = self::campaign($db, (int)$before['id_campania']);
+            if ($personId !== null) {
+                self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona = ? FOR UPDATE', [$personId]);
+            }
+
+            $items = self::orderItems($db, $id);
+            if ($before['estado'] === 'aprobada' && self::isStockManagedOrder($before)) {
+                // Las órdenes V2V- descuentan stock cuando se aprueban.
+                // No alterar stock de ventas históricas/importadas o ya canceladas.
+                self::adjustStock($db, $items, +1);
+            }
+
+            // Quitar exclusivamente el asiento asociado a esta venta; si un
+            // ingreso histórico es compartido con otra orden, conservarlo.
+            self::deleteLinkedIncome($db, $before);
+
+            // Borrado FÍSICO: primero los ítems por sus posibles claves foráneas,
+            // luego la cabecera. No crear una venta 'cancelada' como historial.
+            $db->prepare('DELETE FROM ventas_orden_items WHERE id_orden = ?')->execute([$id]);
+            $db->prepare('DELETE FROM ventas_ordenes WHERE id_orden = ?')->execute([$id]);
+
+            // El usuario pidió expresamente que la venta eliminada no permanezca
+            // como trazabilidad interna en este módulo. Solo quitar la auditoría
+            // de ESTA orden, sin afectar las auditorías de otros registros.
+            $db->prepare("DELETE FROM auditoria WHERE modulo = 'VENTAS' AND tabla = 'ventas_ordenes' AND id_registro = ?")
+                ->execute([$id]);
+
+            // Las ganancias pendientes se recalculan usando únicamente ventas
+            // aprobadas existentes; no se crea un cargo ni una orden al borrar.
+            if ($before['estado'] !== 'aprobada' || $personId === null) return 0.0;
             return self::objectiveChargeForOrder($db, $campaign, $personId, null, [], 'aprobada');
         });
-        $message='Venta anulada. Se conservó el historial y se revirtió Contabilidad/stock.';
-        if ($balance > 0) {
-            $message .= ' Se recalculará la ganancia al cierre, según las ventas aprobadas.';
-        }
-        api_success(['ganancia_pendiente'=>$balance], $message);
+
+        api_success(
+            ['ganancia_pendiente' => $balance],
+            'Venta eliminada definitivamente. Se revirtió su ingreso contable y el stock cuando correspondía.'
+        );
     }
+
 }

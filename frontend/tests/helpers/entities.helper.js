@@ -148,6 +148,7 @@ async function createIncoming(api, token, options = {}) {
       apellido: (options.apellido || `PW E2E INGRESANTE ${marker}`).slice(0, 100),
       nombre: (options.nombre || "PRUEBA").slice(0, 100),
       num_documento: options.dni || testDni(),
+      telefono: options.telefono ?? null,
       id_anio_destino: Number(options.idAnioDestino ?? 1),
       ciclo_lectivo: cycle,
       fecha_inscripcion: options.fechaInscripcion || today(),

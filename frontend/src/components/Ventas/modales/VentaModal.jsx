@@ -171,12 +171,17 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const objectivePerMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
   const objectiveNoSales = Math.max(0, Number(selectedCampaign?.ganancia_total_sin_ventas || 0));
   const objectiveEnabled = objectiveMinimum > 0 && Number(selectedCampaign?.id_producto_principal || 0) > 0;
-  // La liquidación se habilita solo después de fecha_fin y antes de cerrar
-  // definitivamente la campaña. Mientras está abierta no existen multas.
+  const zeroQuantityOnly = form.items.length > 0 && form.items.every((item) => (
+    String(item.cantidad ?? "").trim() !== ""
+    && Number.isInteger(Number(item.cantidad))
+    && Number(item.cantidad) === 0
+  ));
+  // Después de fecha_fin, escribir cantidad 0 también selecciona la
+  // liquidación final sin obligar al usuario a encontrar otra casilla.
   const finalSettlementAvailable = Boolean(!initialId && objectiveEnabled &&
     selectedCampaign?.estado_cierre !== "cerrada" && selectedCampaign?.fecha_fin &&
     selectedCampaign.fecha_fin < today());
-  const isFinalSettlement = finalSettlementAvailable && Boolean(form.liquidar_ganancia);
+  const isFinalSettlement = finalSettlementAvailable && (Boolean(form.liquidar_ganancia) || zeroQuantityOnly);
   const personDni = String(form.dni || "").replace(/\D/g, "");
   const hasPersonReference = Boolean(form.id_venta_persona || personDni.length >= 5);
   const objectiveRequestKey = `${form.id_campania}|${form.id_venta_persona || ""}|${personDni}|${initialId || ""}`;
@@ -263,8 +268,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   };
 
   const itemsSubtotal = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
-  // En una venta común, 0 es simplemente cero artículos. La ganancia no se
-  // cobra automáticamente: se liquida expresamente luego de fecha_fin.
+  // Cantidad 0 = ningún producto vendido. Si todos los conceptos están en
+  // cero, se permite cobrar exclusivamente la ganancia pendiente del objetivo.
   const billableItems = form.items.filter((item) => String(item.cantidad ?? "").trim() === "" || Number(item.cantidad) !== 0);
   const configuredItems = billableItems.filter((item) => String(item.producto_nombre || "").trim());
   const hasConfiguredItems = configuredItems.length > 0 && configuredItems.length === billableItems.length && configuredItems.every((item) => (
@@ -297,11 +302,13 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       : objectiveMissing * objectivePerMissing;
   const objectiveDue = Math.max(0, objectiveRuleDue - (objectiveReady ? Math.max(0, Number(objectiveBase.ganancia_cobrada_previa || 0)) : 0));
   const endedCampaign = Boolean(selectedCampaign?.fecha_fin && selectedCampaign.fecha_fin < today());
-  // Es un cobro opcional, EXCLUSIVO de altas manuales aprobadas con combos.
-  // En las ventas nuevas viene seleccionado, pero se puede desmarcar.
+  // Se puede cobrar la ganancia junto a los combos o, con cantidad 0,
+  // sin vender ningún producto. En ambos casos requiere pago aprobado.
   const canOfferGain = Boolean(!initialId && objectiveEnabled && !endedCampaign &&
-    !isFinalSettlement && hasConfiguredItems && principalQuantity > 0 && form.estado === "aprobada");
+    !isFinalSettlement && form.estado === "aprobada" &&
+    ((hasConfiguredItems && principalQuantity > 0) || zeroQuantityOnly));
   const includeGain = canOfferGain && Boolean(form.incluir_ganancia);
+  const gainOnlyNow = zeroQuantityOnly && includeGain;
   // Antes de identificar a la persona, mostrar una ESTIMACIÓN tomando solo
   // los combos de esta venta. Al encontrar el DNI se recalcula el saldo real
   // descontando las ventas y ganancias que ya registró esa persona.
@@ -311,8 +318,9 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     ? objectiveDue
     : 0;
   const canSettleGainOnly = isFinalSettlement && !hasConfiguredItems && configuredItems.length === 0 && objectiveGainForTotal > 0;
-  const canSave = isFinalSettlement ? (canSettleGainOnly && objectiveReady)
-    : (hasConfiguredItems && (Boolean(initialId) || !endedCampaign) &&
+  const canSave = isFinalSettlement ? (canSettleGainOnly && hasPersonReference && objectiveReady)
+    : ((hasConfiguredItems || (gainOnlyNow && objectiveGainForTotal > 0)) &&
+      (Boolean(initialId) || !endedCampaign) &&
       (!includeGain || (hasPersonReference && objectiveReady)));
   const total = (isFinalSettlement ? 0 : itemsSubtotal) + objectiveGainForTotal;
 
@@ -346,7 +354,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       nombre_apellido: upper(form.nombre_apellido, 160),
       liquidar_ganancia: canSettleGainOnly,
       incluir_ganancia: includeGain && objectiveReady && objectiveGainForTotal > 0,
-      items: canSettleGainOnly ? [] : billableItems
+      items: (canSettleGainOnly || gainOnlyNow) ? [] : billableItems
         .filter((item) => String(item.producto_nombre || "").trim())
         .map((item) => ({ ...item, cantidad: Number(item.cantidad || 0), precio_unitario: Number(item.precio_unitario || 0) })),
     });
@@ -473,13 +481,13 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 onChange={(event) => setForm((current) => ({ ...current, incluir_ganancia: event.target.checked }))}
               />
               <span className="ventas-order-include-gain__copy">
-                <strong>Incluir ganancias en esta venta</strong>
+                <strong>{zeroQuantityOnly ? "Cobrar solamente la ganancia" : "Incluir ganancias en esta venta"}</strong>
                 <small>{!canOfferGain
-                  ? "Disponible para ventas aprobadas con combos de la campaña."
+                  ? "Disponible para ventas aprobadas con combos o con cantidad 0, si hay ganancia pendiente."
                   : !includeGain
-                    ? "Desmarcado: solo se cobran los combos. La ganancia no se agrega automáticamente."
+                    ? zeroQuantityOnly ? "Activá esta opción para cobrar la ganancia sin productos." : "Desmarcado: solo se cobran los combos. La ganancia no se agrega automáticamente."
                     : !objectiveReady
-                      ? `Ganancia estimada: ${money(objectiveGainForTotal)}. Se ajustará según las ventas y pagos anteriores cuando selecciones al comprador.`
+                      ? `Ganancia: ${money(objectiveGainForTotal)}. Se ajustará según las ventas y pagos anteriores cuando selecciones al comprador.`
                       : objectiveGainForTotal > 0
                         ? `Se suman ${money(objectiveGainForTotal)} al total. Si luego vende más combos, no se reintegra automáticamente lo abonado.`
                         : "Esta persona no tiene ganancias pendientes: solo se cobrarán los combos."}</small>
@@ -489,7 +497,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
         ) : null}
         <div className="ventas-inline-concepts__footer">
           <div className="ventas-inline-concepts__meta">
-            {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · {objectiveGainEstimated ? "Ganancia estimada" : "Ganancia incluida"}: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
+            {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · {objectiveGainEstimated ? "Ganancia" : "Ganancia incluida"}: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
             <FloatingField label="Observación" active textarea className="ventas-modal-field">
               <textarea rows="2" placeholder="Ej.: Retira el comprobante en secretaría." value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
             </FloatingField>
@@ -571,7 +579,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       {/* Ambas tarjetas se ubican después de la fila superior para ocupar el ancho completo. */}
       {objectiveEnabled ? (
         <div className="ventas-order-objective__payable" aria-busy={objectiveBase.loading}>
-          <span>{isFinalSettlement ? "Ganancia final a cobrar" : includeGain ? "Ganancia incluida en esta venta" : "Ganancia pendiente (no incluida en el cobro)"}</span>
+          <span>{isFinalSettlement ? "Ganancia final a cobrar" : gainOnlyNow ? "Ganancia a cobrar (0 productos)" : includeGain ? "Ganancia incluida en esta venta" : "Ganancia pendiente (no incluida en el cobro)"}</span>
           <strong className="ventas-money">{money(objectiveDue)}</strong>
           <small>{!objectiveReady ? "Importe estimado hasta consultar las ventas y ganancias anteriores del comprador. No se puede confirmar el cobro sin identificarlo." : objectiveDue === 0 ? "Objetivo cumplido o ganancia ya saldada." : isFinalSettlement ? "Solo se registrará al confirmar esta liquidación." : includeGain ? "Se suma al total de productos al confirmar. El importe ya pagado no se suma otra vez." : "Estimación informativa: no se cobra salvo que actives Incluir ganancias."}</small>
         </div>
@@ -583,7 +591,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
           {objectiveReady && Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
           {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
-          {!finalSettlementAvailable && !initialId ? <span>Podés incluir voluntariamente la ganancia pendiente junto con los combos (casilla en Datos de la venta). Si no la marcás, solo se cobran productos. La liquidación final sin combos sigue disponible después de la fecha de fin.</span> : null}
+          {!finalSettlementAvailable && !initialId ? <span>Podés cobrar la ganancia junto con los combos o poner cantidad 0 para cobrar solamente la ganancia (casilla en Datos de la venta). Se descontará lo ya pagado. Después de la fecha de fin sigue disponible la liquidación final.</span> : null}
           {finalSettlementAvailable && !isFinalSettlement ? <span>El plazo de venta de productos terminó. Para registrar una ganancia ya cobrada, seleccioná la liquidación final.</span> : null}
           {finalSettlementAvailable ? (
             <label className="ventas-note" style={{ display: "flex", alignItems: "center", gap: 8 }}>

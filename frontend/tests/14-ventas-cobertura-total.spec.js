@@ -6,7 +6,7 @@ const {
   createSalesCampaign,
   createStudent,
 } = require("./helpers/entities.helper");
-const { suffix, testDni } = require("./helpers/data.helper");
+const { suffix, testDni, today } = require("./helpers/data.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
 
 const env = loadTestEnv();
@@ -42,7 +42,7 @@ async function createOrder(request, f, overrides = {}) {
       id_campania: f.campaign.id_campania,
       id_medio_pago: f.medio.id_medio_pago,
       estado: overrides.estado || "aprobada",
-      fecha_venta: "2026-10-05",
+      fecha_venta: today(),
       dni: isDoor ? "" : (overrides.dni || testDni()),
       nombre_apellido: isDoor ? "" : `PW E2E VTA PERSONA ${f.marker}`,
       referencia_pago: "PW-E2E-REF",
@@ -99,7 +99,7 @@ test.describe("Ventas - cobertura extendida", () => {
         id_campania: f.campaign.id_campania,
         id_medio_pago: f.medio.id_medio_pago,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         dni: pending.item.dni || testDni(),
         nombre_apellido: `PW E2E VTA PERSONA ${f.marker}`,
         observacion: `PW E2E VTA ORDEN ${f.marker}-EDIT`,
@@ -141,7 +141,7 @@ test.describe("Ventas - cobertura extendida", () => {
         id_campania: f.campaign.id_campania,
         id_medio_pago: f.medio.id_medio_pago,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         observacion: `PW E2E VTA ORDEN ${f.marker}-NOPERSONA`,
         items: [{
           id_producto: f.product.id_producto,
@@ -165,7 +165,7 @@ test.describe("Ventas - cobertura extendida", () => {
         id_campania: f.campaign.id_campania,
         id_medio_pago: f.medio.id_medio_pago,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         dni: testDni(),
         nombre_apellido: `PW E2E VTA PERSONA ${f.marker}`,
         observacion: `PW E2E VTA ORDEN ${f.marker}-STOCK`,
@@ -299,7 +299,7 @@ test.describe("Ventas - cobertura extendida", () => {
     expect(campaignEdited.item.nombre).toContain("EDIT");
   });
 
-  test("venta aprobada mantiene Stock/Contable al editar referencias históricas inactivas y al anular revierte ambos", async ({ request }) => {
+  test("venta aprobada mantiene Stock/Contable al editar referencias históricas inactivas y al eliminar revierte ambos", async ({ request }) => {
     const f = await salesFixture(request, { stock: 5 });
     const sale = await createOrder(request, f, { cantidad: 1 });
     const orderId = Number(sale.item.id_orden);
@@ -311,7 +311,7 @@ test.describe("Ventas - cobertura extendida", () => {
 
     const incomeBefore = await ok(request, "contable_ingresos_listar", {
       token: f.t,
-      query: { anio: 2026, mes: 10, pagina: 1, por_pagina: 250 },
+      query: { anio: Number(today().slice(0, 4)), mes: Number(today().slice(5, 7)), pagina: 1, por_pagina: 250 },
     });
     expect((incomeBefore.items || []).some((item) => Number(item.id_ingreso) === incomeId)).toBeTruthy();
 
@@ -335,7 +335,7 @@ test.describe("Ventas - cobertura extendida", () => {
         id_medio_pago: f.medio.id_medio_pago,
         id_persona: personId,
         estado: "aprobada",
-        fecha_venta: "2026-10-05",
+        fecha_venta: today(),
         observacion: `PW E2E VTA ORDEN ${f.marker}-HISTORICA`,
         items: [{
           id_producto: f.product.id_producto,
@@ -368,10 +368,13 @@ test.describe("Ventas - cobertura extendida", () => {
     });
     const restored = (productsAfter.items || []).find((item) => Number(item.id_producto) === Number(f.product.id_producto));
     expect(Number(restored.stock)).toBe(5);
+    const deleted = await apiFetch(request, "ventas_orden_detalle", { token: f.t, query: { id_orden: orderId } });
+    expect(deleted.status).toBe(404);
+    expect(deleted.body.codigo).toBe("VENTA_NO_ENCONTRADA");
 
     const incomeAfter = await ok(request, "contable_ingresos_listar", {
       token: f.t,
-      query: { anio: 2026, mes: 10, pagina: 1, por_pagina: 250 },
+      query: { anio: Number(today().slice(0, 4)), mes: Number(today().slice(5, 7)), pagina: 1, por_pagina: 250 },
     });
     expect((incomeAfter.items || []).some((item) => Number(item.id_ingreso) === incomeId)).toBe(false);
   });

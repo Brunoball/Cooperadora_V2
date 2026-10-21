@@ -66,13 +66,13 @@ test("mensajes: tres plantillas configurables usan valores de su campaña y hora
   const disponibleSinObjetivo = util.mensajeRenderizado(util.MENSAJE_CANTIDAD_DEFECTO,
     { ...form, cantidad_minima_persona: 0 }, producto);
   expect(disponibleSinObjetivo).not.toContain("Objetivo:");
-  expect(disponibleSinObjetivo).not.toContain("escribí 0");
+  expect(disponibleSinObjetivo).toContain("escribí 0 (sin cargo)");
   expect(disponibleSinObjetivo).not.toContain("{detalle_objetivo}");
   expect(util.mensajeVentaInicial(util.MENSAJE_CANTIDAD_ANTERIOR)).toBe(util.MENSAJE_CANTIDAD_DEFECTO);
   expect(util.mensajeVentaInicial("Mensaje propio del cliente")).toBe("Mensaje propio del cliente");
   expect(util.mensajeRenderizado("", form, producto)).toBe("");
   expect(util.mensajeRenderizado("Cantidad.{opcion_ganancia}", form, producto)).toContain("escribí 0");
-  expect(util.mensajeRenderizado("Cantidad.{opcion_ganancia}", { ...form, cantidad_minima_persona: 0 }, producto)).toBe("Cantidad.");
+  expect(util.mensajeRenderizado("Cantidad.{opcion_ganancia}", { ...form, cantidad_minima_persona: 0 }, producto)).toContain("escribí 0 (sin cargo)");
   // Cambiar de campaña no cambia una cadena fija: todas las variables se recalculan.
   const otra = util.mensajeRenderizado("{venta}: {producto} ({precio_unitario})", { ...form, nombre: "BAILABLE" },
     { nombre: "ENTRADA GENERAL", precio_anticipada: 12000 });
@@ -238,6 +238,7 @@ test("una campaña con ventas deja editar entrega y textos, pero mantiene bloque
   await ok(request, "ventas_orden_guardar", { token: t, method: "POST", data: {
     id_campania: campaña.id_campania, fecha_venta: today(), estado: "aprobada",
     dni: testDni(), nombre_apellido: `PW E2E VTA PERSONA ${marker}`,
+    observacion: `PW E2E VTA ORDEN ${marker}`,
     id_medio_pago: medio,
     items: [{ id_producto: producto.id_producto, producto_nombre: producto.nombre,
       cantidad: 1, tipo_precio: "anticipada", precio_unitario: 100 }],

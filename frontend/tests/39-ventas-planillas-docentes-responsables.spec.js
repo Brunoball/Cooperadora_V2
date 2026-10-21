@@ -116,8 +116,19 @@ test.describe("Docentes responsables: escritura E2E aislada", () => {
     await page.getByRole("button", { name: "Asignar docentes" }).click();
     await expect(section).toContainText(teacherName, { timeout: 20000 });
 
-    const popupPromise = page.waitForEvent("popup");
+    // Imprimir abre primero el modal de contenido; recién la confirmación
+    // abre la ventana de impresión. No esperar popup en el primer clic.
     await page.getByRole("button", { name: /^imprimir$/i }).click();
+    const printDialog = page.getByRole("dialog", { name: /imprimir planilla/i });
+    await expect(printDialog).toBeVisible();
+    // El input radio esta superpuesto por el icono de la tarjeta: intentar
+    // .check() sobre el input dispara un timeout por intercepcion del SVG.
+    // Seleccionar desde el texto visible dentro del label (clic de usuario real).
+    const conDatos = printDialog.getByRole("radio", { name: /planilla con datos/i });
+    await printDialog.getByText("Planilla con datos", { exact: true }).click();
+    await expect(conDatos).toBeChecked();
+    const popupPromise = page.waitForEvent("popup");
+    await printDialog.getByRole("button", { name: /^imprimir$/i }).click();
     const popup = await popupPromise;
     // La vista de impresión puede tener varias hojas por curso; cada hoja
     // repite su encabezado. Validar todas sin violar strict mode de Playwright.

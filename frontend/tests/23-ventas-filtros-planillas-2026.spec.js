@@ -23,12 +23,13 @@ async function fixture(request) {
   return { t, marker, dni, product, campaign, payment };
 }
 
-async function save(request, f, { quantity = 2, state = 'aprobada', name, dni, items } = {}) {
+async function save(request, f, { quantity = 2, state = 'aprobada', name, dni, items, incluirGanancia = false } = {}) {
   return ok(request, 'ventas_orden_guardar', {
     token: f.t, method: 'POST', data: {
       id_campania: f.campaign.id_campania,
       id_medio_pago: f.payment.id_medio_pago,
       fecha_venta: today(), estado: state,
+      incluir_ganancia: incluirGanancia,
       dni: dni || f.dni,
       nombre_apellido: name || `PW E2E VTA PERSONA ${f.marker}`,
       referencia_pago: `PW E2E REF ${f.marker}`,
@@ -45,9 +46,9 @@ async function list(request, f, query = {}) {
   });
 }
 
-test('listado de ventas: mes actual, búsqueda y origen MANUAL; exclusión de canceladas', async ({ request }) => {
+test('listado de ventas: mes actual, búsqueda, origen MANUAL y eliminación física', async ({ request }) => {
   const f = await fixture(request);
-  const approved = (await save(request, f)).item;
+  const approved = (await save(request, f, { incluirGanancia: true })).item;
   const month = today().slice(0, 7);
   const rows = await list(request, f, { mes: month, origen: 'manual', buscar: f.marker, estado: 'vigentes' });
   expect(rows.items.some((r) => Number(r.id_orden) === Number(approved.id_orden))).toBe(true);
@@ -65,8 +66,10 @@ test('listado de ventas: mes actual, búsqueda y origen MANUAL; exclusión de ca
   });
   const valid = await list(request, f, { mes: month, estado: 'vigentes', origen: 'manual' });
   expect(valid.items.some((r) => Number(r.id_orden) === Number(approved.id_orden))).toBe(false);
-  const cancelled = await list(request, f, { mes: month, estado: 'cancelada', origen: 'manual' });
-  expect(cancelled.items.some((r) => Number(r.id_orden) === Number(approved.id_orden))).toBe(true);
+  const all = await list(request, f, { mes: month, estado: 'todos', origen: 'manual' });
+  expect(all.items.some((r) => Number(r.id_orden) === Number(approved.id_orden))).toBe(false);
+  const detail = await apiFetch(request, 'ventas_orden_detalle', { token: f.t, query: { id_orden: approved.id_orden } });
+  expect(detail.status).toBe(404);
 });
 
 test('retiro: se filtran pendientes y retiradas; sólo una venta aprobada se puede retirar', async ({ request }) => {
@@ -100,7 +103,7 @@ test('planilla por cursos: no multiplica el total y suma venta más ganancia', a
   // para que la limpieza posterior no modifique la huella de datos reales.
   const residBefore = await ok(request, 'e2e_residuos', { token: f.t });
   const providerCountBefore = Number(residBefore.datos?.conteos?.contable_proveedor || 0);
-  const sale = (await save(request, f, { items: [splitItem, splitItem] })).item;
+  const sale = (await save(request, f, { items: [splitItem, splitItem], incluirGanancia: true })).item;
   expect(Number(sale.total)).toBe(3200);
   const residAfter = await ok(request, 'e2e_residuos', { token: f.t });
   expect(Number(residAfter.datos?.conteos?.contable_proveedor || 0)).toBeGreaterThan(providerCountBefore);

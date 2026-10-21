@@ -130,6 +130,8 @@ test("Editar matrícula PAGADA: permite cambiar todos los campos y guardar los d
   const nuevaObservacion = `PW E2E OBS ${suffix()}`;
   const dniCorregido = testDni();
   await modal.getByLabel("DNI *").fill(dniCorregido);
+  await expect(modal.getByLabel("Teléfono", { exact: true })).toBeEnabled();
+  await modal.getByLabel("Teléfono", { exact: true }).fill("3492123456");
   await modal.getByLabel("Monto matrícula *").fill("41500.25");
   await observaciones.fill(nuevaObservacion);
   await modal.getByRole("button", { name: /guardar cambios/i }).click();
@@ -139,6 +141,7 @@ test("Editar matrícula PAGADA: permite cambiar todos los campos y guardar los d
   });
   const updated = result.items.find(x => Number(x.id_ingresante) === Number(incoming.id_ingresante));
   expect(updated?.observaciones).toBe(nuevaObservacion);
+  expect(updated?.telefono).toBe("3492123456");
   expect(Number(updated?.monto_matricula)).toBeCloseTo(41500.25, 2);
   expect(String(updated?.num_documento)).toBe(dniCorregido);
 });

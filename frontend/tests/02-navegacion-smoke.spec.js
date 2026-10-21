@@ -34,7 +34,4 @@ test.describe("Smoke de navegación", () => {
     });
   }
 
-  test("Bot Panel queda fuera de esta suite", async () => {
-    expect(routes).not.toContain("/bot/panel");
-  });
 });

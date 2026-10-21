@@ -39,7 +39,7 @@ test("Ventas: vista previa muestra el precio que se cobraría cuando precio_anti
     expect(displayed).toContain(new Intl.NumberFormat("es-AR").format(expected));
   }
   const listing = await fs.promises.readFile(path.join(__dirname, "..", "src", "components", "Ventas", "secciones", "ConfiguracionVentas.jsx"), "utf8");
-  const backend = await fs.promises.readFile(path.join(__dirname, "..", "backend", "modules", "ventas", "ventas_configuracion.php"), "utf8");
+  const backend = await fs.promises.readFile(path.resolve(process.cwd(), env.backendDir, "modules", "ventas", "ventas_configuracion.php"), "utf8");
   expect(listing).toContain("precioUnitarioVenta(row)");
   expect(backend).toContain("p.precio, p.precio_anticipada");
 });
@@ -60,7 +60,7 @@ test("Ventas: editor de WhatsApp preserva datos dinámicos cuando cambian las fr
     { nombre: "TALITAS", precio_anticipada: 12000, precio: 12000 });
   expect(next).toContain("VENTA DE TALITAS");
   expect(next).toContain("12.000");
-  expect(next).not.toContain("escribí 0");
+  expect(next).toContain("escribí 0 (sin cargo)");
   expect(next).not.toContain("PAN DULCE");
 });
 
@@ -89,7 +89,7 @@ test("Ventas: emojis se cuentan como un carácter y los mensajes largos no se re
 });
 
 test("Ventas: fechas históricas, horarios, importes y estados siguen protegidos en backend", async () => {
-  const backend = await fs.promises.readFile(path.join(__dirname, "..", "backend", "modules", "ventas", "ventas_configuracion.php"), "utf8");
+  const backend = await fs.promises.readFile(path.resolve(process.cwd(), env.backendDir, "modules", "ventas", "ventas_configuracion.php"), "utf8");
   expect(backend).toContain("VENTA_CAMPANIA_REGLA_HISTORICA");
   expect(backend).toContain("VENTA_CAMPANIAS_SUPERPUESTAS");
   expect(backend).toContain("VENTA_CAMPANIA_CERRADA");

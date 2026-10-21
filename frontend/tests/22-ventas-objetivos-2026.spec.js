@@ -45,6 +45,7 @@ async function order(request, f, quantity, overrides = {}) {
       id_campania: f.campaign.id_campania,
       id_medio_pago: f.payment.id_medio_pago,
       estado: 'aprobada', fecha_venta: today(),
+      incluir_ganancia: quantity < 3,
       dni: dni || f.dni,
       nombre_apellido: `PW E2E VTA PERSONA ${f.marker}`,
       observacion: `PW E2E VTA ORDEN ${f.marker}`,
@@ -120,6 +121,8 @@ test('interfaz: permite registrar 0 unidades y cobrar solamente la ganancia del 
   await modal.getByRole('textbox', { name: 'Nombre y apellido' }).fill(`PW E2E VTA PERSONA ${f.marker}`);
   await expect(modal.locator('.ventas-order-objective__payable strong')).toContainText('10.000', { timeout: 20_000 });
   const save = modal.getByRole('button', { name: /^guardar$/i });
+  await modal.getByRole('tab', { name: /datos de la venta/i }).click();
+  await modal.getByRole('textbox', { name: 'Observación' }).fill(`PW E2E VTA ORDEN ${f.marker}`);
   await expect(save).toBeEnabled();
   await save.click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
@@ -152,7 +155,7 @@ test('objetivo: segunda compra de la misma persona no cobra otra vez la ganancia
   const f = await fixture(request);
   const first = (await order(request, f, 1)).item;
   expect(Number(first.ganancia_objetivo)).toBe(6000);
-  const second = (await order(request, f, 1)).item;
+  const second = (await order(request, f, 1, { incluir_ganancia: false })).item;
   expect(Number(second.ganancia_objetivo)).toBe(0);
   expect(Number(second.total)).toBe(100);
   const balance = await objective(request, f);
@@ -161,21 +164,23 @@ test('objetivo: segunda compra de la misma persona no cobra otra vez la ganancia
   expect(Number(balance.objetivo.ganancia_pendiente)).toBe(3000);
 });
 
-test('objetivo: pago de ganancia sin productos no descuenta stock y anularlo revierte ingreso', async ({ request }) => {
+test('objetivo: pago de ganancia sin productos no descuenta stock y eliminarlo borra ingreso y venta', async ({ request }) => {
   const f = await fixture(request);
   const sale = (await order(request, f, 0)).item;
   expect(Number(sale.ganancia_objetivo)).toBe(10000);
-  const cancelled = await ok(request, 'ventas_orden_eliminar', {
+  const deleted = await ok(request, 'ventas_orden_eliminar', {
     token: f.t, method: 'POST',
     data: { id_orden: sale.id_orden, motivo: 'PW E2E objetivo sin unidades' },
   });
-  expect(Number(cancelled.ganancia_pendiente)).toBe(10000);
+  expect(Number(deleted.ganancia_pendiente)).toBe(10000);
   expect(Number((await currentProduct(request, f)).stock)).toBe(35);
-  const detail = await ok(request, 'ventas_orden_detalle', {
+  const detail = await apiFetch(request, 'ventas_orden_detalle', {
     token: f.t, query: { id_orden: sale.id_orden },
   });
-  expect(detail.item.estado).toBe('cancelada');
-  expect(detail.item.id_ingreso === null || Number(detail.item.id_ingreso) === 0).toBe(true);
+  expect(detail.status).toBe(404);
+  expect(detail.body.codigo).toBe('VENTA_NO_ENCONTRADA');
+  const orders = await ok(request, 'ventas_ordenes_listar', { token: f.t, query: { id_campania: f.campaign.id_campania, estado: 'todos' } });
+  expect(orders.items.some((o) => Number(o.id_orden) === Number(sale.id_orden))).toBe(false);
   expect(Number((await objective(request, f)).ganancia_cobrada_previa)).toBe(0);
 });
 

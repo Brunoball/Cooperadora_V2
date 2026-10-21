@@ -24,10 +24,11 @@ async function paymentId(request, t) {
   return id;
 }
 
-async function sale(request, { t, campaign, product, medio, dni, marker, qty = 1, price = 100, type = "normal" }) {
+async function sale(request, { t, campaign, product, medio, dni, marker, qty = 1, price = 100, type = "normal", incluirGanancia = false }) {
   return ok(request, "ventas_orden_guardar", { token: t, method: "POST", data: {
     id_campania: campaign.id_campania, id_medio_pago: medio,
     fecha_venta: today(), estado: "aprobada",
+    incluir_ganancia: incluirGanancia,
     dni, nombre_apellido: `PW E2E VTA PERSONA ${marker}`,
     observacion: `PW E2E VTA ORDEN ${marker}`,
     items: [{ id_producto: product.id_producto, producto_nombre: product.nombre,
@@ -94,6 +95,7 @@ test("fechas: campaña programada bloquea ventas adelantadas y cierre prematuro"
   });
   const invalid = await apiFetch(request, "ventas_orden_guardar", { token: t, method: "POST", data: {
     id_campania: future.id_campania, id_medio_pago: medio, fecha_venta: today(), estado: "aprobada",
+    incluir_ganancia: false,
     dni: testDni(), nombre_apellido: `PW E2E VTA PERSONA ${marker}`,
     observacion: `PW E2E VTA ORDEN ${marker}`,
     items: [{ id_producto: product.id_producto, producto_nombre: product.nombre,
@@ -120,7 +122,7 @@ test("cierre manual: congela alumnos/docentes y bloquea venta, edición, retiro 
     ganancia_total_sin_ventas: 8000,
   });
   const student = await createStudent(request, t, { marker, dni });
-  const order = (await sale(request, { t, campaign, product, medio, dni, marker, qty: 2 })).item;
+  const order = (await sale(request, { t, campaign, product, medio, dni, marker, qty: 2, incluirGanancia: true })).item;
   expect(Number(order.total)).toBe(1700);
   expect(Number(order.ganancia_objetivo)).toBe(1500);
   const sheetBefore = await ok(request, "ventas_planillas_datos", { token: t,

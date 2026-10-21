@@ -45,6 +45,7 @@ function emptyForm(defaultAmount = 0) {
     apellido: "",
     nombre: "",
     num_documento: "",
+    telefono: "",
     id_anio_destino: "1",
     ciclo_lectivo: String(suggestedCycle()),
     fecha_inscripcion: localToday(),
@@ -62,6 +63,7 @@ function formFromItem(item) {
     apellido: item.apellido || "",
     nombre: item.nombre || "",
     num_documento: item.num_documento || "",
+    telefono: item.telefono || "",
     id_anio_destino: String(item.id_anio_destino || "1"),
     ciclo_lectivo: String(item.ciclo_lectivo || suggestedCycle()),
     fecha_inscripcion: item.fecha_inscripcion || localToday(),
@@ -156,6 +158,7 @@ export default function Ingresantes() {
       await ingresantesApi.guardar({
         ...form,
         num_documento: String(form.num_documento || "").replace(/\D+/g, ""),
+        telefono: String(form.telefono || "").trim() || null,
         matricula_pagada: Boolean(form.matricula_pagada),
         monto_matricula: form.matricula_pagada ? form.monto_matricula : null,
         id_medio_pago: form.matricula_pagada ? form.id_medio_pago : null,
@@ -251,7 +254,7 @@ export default function Ingresantes() {
         { value: "INGRESADO", label: "Ingresados", count: resumen.ingresados ?? 0 },
       ],
     },
-    { key: "buscar", type: "search", label: "Buscar", value: search, onChange: changeFilter(setSearch), placeholder: "Apellido, nombre o DNI...", className: "ingresantes-searchFilter" },
+    { key: "buscar", type: "search", label: "Buscar", value: search, onChange: changeFilter(setSearch), placeholder: "Apellido, nombre, DNI o teléfono...", className: "ingresantes-searchFilter" },
     { key: "ciclo", type: "select", label: "Ciclo", value: cycle, onChange: changeFilter(setCycle), includeEmptyOption: false, className: "ingresantes-cycleFilter", options: (catalogos.ciclos || [suggestedCycle()]).map((value) => ({ value, label: String(value) })) },
     { key: "anio", type: "select", label: "Ingresa a", value: year, onChange: changeFilter(setYear), placeholder: "TODOS", className: "ingresantes-yearFilter", options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })) },
   ];
@@ -320,7 +323,7 @@ export default function Ingresantes() {
                     </div>
                   </div>
                 </div>
-                <div className="mov-gridCell is-center"><strong>{item.num_documento}</strong></div>
+                <div className="mov-gridCell is-center"><strong>{item.num_documento}</strong>{item.telefono ? <small>{item.telefono}</small> : null}</div>
                 <div className="mov-gridCell is-center"><strong>{item.nombre_anio || `${item.id_anio_destino}°`}</strong></div>
                 <div className="mov-gridCell is-center">
                   <span className={`socios-statusChip ${item.matricula_pagada ? "is-active" : "is-inactive"}`}>
@@ -414,6 +417,17 @@ export default function Ingresantes() {
               required
               placeholder="Ej. 2027"
               onChange={(e) => setForm((c) => ({ ...c, ciclo_lectivo: e.target.value }))}
+            />
+          </FloatingField>
+
+          <FloatingField label="Teléfono" active={Boolean(form.telefono)} className="ingresantes-field--span-6">
+            <input
+              type="tel"
+              value={form.telefono}
+              maxLength={20}
+              autoComplete="tel"
+              placeholder=" "
+              onChange={(e) => setForm((c) => ({ ...c, telefono: e.target.value }))}
             />
           </FloatingField>
 

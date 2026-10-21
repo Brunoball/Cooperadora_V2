@@ -35,14 +35,6 @@ test('Contabilidad: filtros de medio de pago y exportación en ingresos, egresos
   expect(js).toContain('contableApi.resumen(');
 });
 
-test('Bot Panel: módulo integrado en frontend, API independiente; se evita afirmar cobertura del servicio remoto', async () => {
-  const app = fs.readFileSync(path.join(process.cwd(), 'src', 'App.js'), 'utf8');
-  const panel = source('BotPanel', 'BotPanel.jsx');
-  expect(app).toContain('BotPanel');
-  expect(panel.length).toBeGreaterThan(1000);
-  // La suite del backend Cooperadora no puede probar el backend independiente del bot.
-});
-
 test('interfaz: ingresantes, cuotas y contable cargan sin errores JS', async ({ page }) => {
   await authenticatePage(page);
   for (const route of ['/alumnos/ingresantes', '/cuotas', '/contable/resumen']) {

@@ -107,6 +107,15 @@ final class Ingresantes
         $before = $statement->fetch();
         if (!$before) return ['confirmado' => 0, 'matricula_migrada' => 0, 'matricula_existente' => 0];
 
+        // Si el alumno fue creado desde el padrón/importación, conservar el
+        // teléfono del ingresante cuando su ficha de Alumnos todavía no tiene uno.
+        if (!empty($before['telefono'])) {
+            $db->prepare(
+                "UPDATE alumnos SET telefono = ?
+                 WHERE id_alumno = ? AND (telefono IS NULL OR TRIM(telefono) = '')"
+            )->execute([$before['telefono'], $idAlumno]);
+        }
+
         $matriculaMigrada = 0;
         $matriculaExistente = 0;
 
@@ -208,9 +217,9 @@ final class Ingresantes
         $buscar = trim((string)($filters['buscar'] ?? ''));
         if ($buscar !== '') {
             if (mb_strlen($buscar) > 120) api_error('La búsqueda es demasiado larga.', 'VALIDATION_ERROR', 422);
-            $where[] = '(i.apellido LIKE ? OR i.nombre LIKE ? OR i.num_documento LIKE ?)';
+            $where[] = '(i.apellido LIKE ? OR i.nombre LIKE ? OR i.num_documento LIKE ? OR i.telefono LIKE ?)';
             $like = '%' . $buscar . '%';
-            array_push($params, $like, $like, $like);
+            array_push($params, $like, $like, $like, $like);
         }
 
         if (isset($filters['ciclo_lectivo']) && trim((string)$filters['ciclo_lectivo']) !== '') {
@@ -268,9 +277,9 @@ final class Ingresantes
         $summaryWhere = ['1=1'];
         $summaryParams = [];
         if ($buscar !== '') {
-            $summaryWhere[] = '(i.apellido LIKE ? OR i.nombre LIKE ? OR i.num_documento LIKE ?)';
+            $summaryWhere[] = '(i.apellido LIKE ? OR i.nombre LIKE ? OR i.num_documento LIKE ? OR i.telefono LIKE ?)';
             $like = '%' . $buscar . '%';
-            array_push($summaryParams, $like, $like, $like);
+            array_push($summaryParams, $like, $like, $like, $like);
         }
         if (isset($filters['ciclo_lectivo']) && trim((string)$filters['ciclo_lectivo']) !== '') {
             $summaryWhere[] = 'i.ciclo_lectivo = ?';
@@ -349,6 +358,8 @@ final class Ingresantes
         if ($fechaInscripcion > date('Y-m-d')) api_error('La fecha de inscripción no puede ser futura.', 'VALIDATION_ERROR', 422);
         $pagada = !empty($body['matricula_pagada']) ? 1 : 0;
         $observaciones = optional_text($body['observaciones'] ?? null, 5000);
+        $telefono = optional_text($body['telefono'] ?? null, 20, false);
+        $telefonoProvisto = array_key_exists('telefono', $body);
 
         $amount = null;
         $medio = null;
@@ -371,7 +382,7 @@ final class Ingresantes
         }
 
         try {
-            return transaction($db, static function () use ($db, $auth, $id, $apellido, $nombre, $dni, $anio, $ciclo, $fechaInscripcion, $pagada, $amount, $medio, $fechaPago, $observaciones): array {
+            return transaction($db, static function () use ($db, $auth, $id, $apellido, $nombre, $dni, $anio, $ciclo, $fechaInscripcion, $pagada, $amount, $medio, $fechaPago, $observaciones, $telefono, $telefonoProvisto): array {
                 $before = null;
                 if ($id !== null) {
                     $lock = $db->prepare('SELECT * FROM ingresantes WHERE id_ingresante = ? FOR UPDATE');
@@ -389,22 +400,26 @@ final class Ingresantes
                 if ($id === null) {
                     $statement = $db->prepare(
                         "INSERT INTO ingresantes
-                         (apellido, nombre, num_documento, id_anio_destino, ciclo_lectivo, estado,
+                         (apellido, nombre, num_documento, telefono, id_anio_destino, ciclo_lectivo, estado,
                           fecha_inscripcion, matricula_pagada, monto_matricula, id_medio_pago,
                           fecha_pago_matricula, observaciones, creado_en, actualizado_en)
-                         VALUES (?, ?, ?, ?, ?, 'PENDIENTE', ?, ?, ?, ?, ?, ?, NOW(), NOW())"
+                         VALUES (?, ?, ?, ?, ?, ?, 'PENDIENTE', ?, ?, ?, ?, ?, ?, NOW(), NOW())"
                     );
-                    $statement->execute([$apellido, $nombre, $dni, $anio, $ciclo, $fechaInscripcion, $pagada, $amount, $medio, $fechaPago, $observaciones]);
+                    $statement->execute([$apellido, $nombre, $dni, $telefono, $anio, $ciclo, $fechaInscripcion, $pagada, $amount, $medio, $fechaPago, $observaciones]);
                     $id = (int)$db->lastInsertId();
                     $action = 'ALTA_INGRESANTE';
                 } else {
                     $statement = $db->prepare(
-                        'UPDATE ingresantes SET apellido = ?, nombre = ?, num_documento = ?, id_anio_destino = ?,
+                        'UPDATE ingresantes SET apellido = ?, nombre = ?, num_documento = ?, telefono = ?, id_anio_destino = ?,
                          ciclo_lectivo = ?, fecha_inscripcion = ?, matricula_pagada = ?, monto_matricula = ?,
                          id_medio_pago = ?, fecha_pago_matricula = ?, observaciones = ?, actualizado_en = NOW()
                          WHERE id_ingresante = ?'
                     );
-                    $statement->execute([$apellido, $nombre, $dni, $anio, $ciclo, $fechaInscripcion, $pagada, $amount, $medio, $fechaPago, $observaciones, $id]);
+                    // Compatibilidad con integraciones existentes: si no se envía la
+                    // propiedad telefono, se conserva el dato anterior.
+                    // Enviar telefono: null o "" lo borra explícitamente.
+                    $telefonoGuardar = $telefonoProvisto ? $telefono : ($before['telefono'] ?? null);
+                    $statement->execute([$apellido, $nombre, $dni, $telefonoGuardar, $anio, $ciclo, $fechaInscripcion, $pagada, $amount, $medio, $fechaPago, $observaciones, $id]);
                     $action = 'ACTUALIZACION_INGRESANTE';
                 }
 
@@ -506,13 +521,14 @@ final class Ingresantes
                     }
                     $db->prepare(
                         'UPDATE alumnos
-                         SET apellido = ?, nombre = ?, id_anio = ?, activo = 1,
+                         SET apellido = ?, nombre = ?, id_anio = ?, telefono = COALESCE(?, telefono), activo = 1,
                              eliminado = 0, eliminado_en = NULL, motivo = NULL, actualizado_en = NOW()
                          WHERE id_alumno = ?'
                     )->execute([
                         $ingresante['apellido'],
                         $ingresante['nombre'],
                         $ingresante['id_anio_destino'],
+                        $ingresante['telefono'],
                         $idAlumno,
                     ]);
                     if (!(bool)$alumno['activo'] || (int)($alumno['eliminado'] ?? 0) === 1) {
@@ -536,8 +552,8 @@ final class Ingresantes
                     $fechaIngreso = sprintf('%04d-01-01', $ciclo);
                     $insert = $db->prepare(
                         'INSERT INTO alumnos
-                         (apellido, nombre, id_tipo_documento, num_documento, id_anio, activo, motivo, ingreso, creado_en, actualizado_en)
-                         VALUES (?, ?, ?, ?, ?, 1, NULL, ?, NOW(), NOW())'
+                         (apellido, nombre, id_tipo_documento, num_documento, id_anio, telefono, activo, motivo, ingreso, creado_en, actualizado_en)
+                         VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?, NOW(), NOW())'
                     );
                     $insert->execute([
                         $ingresante['apellido'],
@@ -545,6 +561,7 @@ final class Ingresantes
                         $dniType,
                         $dni,
                         $ingresante['id_anio_destino'],
+                        $ingresante['telefono'],
                         $fechaIngreso,
                     ]);
                     $idAlumno = (int)$db->lastInsertId();

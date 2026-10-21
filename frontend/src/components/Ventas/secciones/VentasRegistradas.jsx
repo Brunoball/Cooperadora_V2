@@ -265,7 +265,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                 {writable && row.estado_cierre !== "cerrada" ? (
                   <>
                     <ActionButton icon={faPen} title="Editar" onClick={() => setModal({ open: true, id: row.id_orden })} />
-                    {row.estado !== "cancelada" ? <ActionButton icon={faTrashCan} title="Anular venta" tone="danger" onClick={() => setConfirm(row)} /> : null}
+                    <ActionButton icon={faTrashCan} title="Eliminar venta" tone="danger" onClick={() => setConfirm(row)} />
                   </>
                 ) : null}
               </div>
@@ -382,7 +382,28 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           return { mensaje: result.mensaje };
         }}
       />
-      <ModalEliminarGlobal open={Boolean(confirm)} row={confirm} operacion="advertencia" showLoadingEffect={false} title="Anular venta" message="La venta no se borrará: se conservará el historial, se quitará el ingreso contable asociado y se devolverá el stock si corresponde." warning="Esta acción afecta Contabilidad y stock dentro de la misma transacción." showReason reasonLabel="Motivo de anulación" reasonPlaceholder="Indicá por qué se anula la venta..." details={confirm ? [{ label: "Venta", value: confirm.campania_nombre }, { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) }, { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" }, { label: "Total", value: money(confirm.total) }] : []} onClose={() => setConfirm(null)} onConfirm={async ({ motivo }) => { const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden, motivo }); await load({ silent: true }); return { mensaje: result.mensaje }; }} />
+      <ModalEliminarGlobal
+        open={Boolean(confirm)}
+        row={confirm}
+        operacion="eliminar"
+        showLoadingEffect={false}
+        title="Eliminar venta definitivamente"
+        message="Se borrarán la venta y todos sus conceptos. No quedará como cancelada ni aparecerá en el historial."
+        warning="La eliminación es irreversible. Se revertirán el ingreso contable y el stock, si corresponde. No se reintegran pagos externos automáticamente."
+        details={confirm ? [
+          { label: "Venta", value: confirm.campania_nombre },
+          { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) },
+          { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" },
+          { label: "Total", value: money(confirm.total) },
+        ] : []}
+        onClose={() => setConfirm(null)}
+        onConfirm={async () => {
+          const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden });
+          if (rows.length === 1 && page > 1) setPage((previous) => Math.max(1, previous - 1));
+          else await load({ silent: true });
+          return { mensaje: result.mensaje };
+        }}
+      />
     </ModulePage>
   );
 }

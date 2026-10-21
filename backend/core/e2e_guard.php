@@ -453,7 +453,8 @@ function e2e_assert_sales_campaign_close_safe(PDO $db, string $action, mixed $ra
                      SELECT 1 FROM ventas_orden_items i
                      LEFT JOIN ventas_productos p ON p.id_producto = i.id_producto
                       WHERE i.id_orden = o.id_orden
-                        AND (p.id_producto IS NULL OR UPPER(p.nombre) NOT LIKE 'PW E2E VTA PROD %')
+                        AND ((p.id_producto IS NULL AND UPPER(COALESCE(i.producto_nombre, '')) NOT LIKE 'PW E2E SERVICIO %')
+                             OR (p.id_producto IS NOT NULL AND UPPER(p.nombre) NOT LIKE 'PW E2E VTA PROD %'))
                  ))
           LIMIT 1"
     );
@@ -516,7 +517,13 @@ function e2e_assert_sales_items(PDO $db, string $action, array $body): void
         if (!is_array($item)) continue;
         $rawId = $item['id_producto'] ?? null;
         if ($rawId === null || trim((string)$rawId) === '') {
-            e2e_scope_error($action, 'Los items de una venta E2E deben usar productos E2E persistidos.');
+            // Concepto manual sin stock: habilitado solamente si el nombre es
+            // inequívocamente E2E. Nunca permite referenciar productos reales.
+            $nombreManual = (string)($item['producto_nombre'] ?? $item['nombre'] ?? '');
+            if (!e2e_sales_creation_marker($nombreManual, 'PW E2E SERVICIO ')) {
+                e2e_scope_error($action, 'Un concepto manual E2E debe llevar nombre PW E2E SERVICIO.');
+            }
+            continue;
         }
         e2e_assert_target($db, $action, 'ventas_producto', $rawId);
     }
