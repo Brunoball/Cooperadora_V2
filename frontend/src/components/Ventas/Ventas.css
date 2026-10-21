@@ -4283,49 +4283,78 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   }
 }
 
-/* Nueva venta: incluir ganancias es una decisión explícita, no parte del
-   precio automático del combo. La casilla queda desmarcada por defecto. */
+/* Nueva / editar venta: la opción de ganancia usa el checkbox personalizado
+   de Ventas. Se separa del campo Observación y del resumen monetario para
+   ocupar toda la fila entre el detalle de productos y el total. */
 .ventas-order-modal .ventas-order-include-gain {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  max-width: 560px;
-  padding: 10px 12px;
+  margin: 14px 16px 0;
   border: 1px solid var(--ventas-order-line);
   border-radius: 9px;
   background: var(--ventas-order-soft);
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+.ventas-order-modal .ventas-order-include-gain:has(input:checked) {
+  border-color: color-mix(in srgb, var(--entity-modal-action) 25%, var(--ventas-order-line));
+  background: color-mix(in srgb, var(--entity-modal-action) 4%, var(--ventas-order-card));
+}
+
+.ventas-order-modal .ventas-order-include-gain:has(input:focus-visible) {
+  border-color: var(--entity-modal-action);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--entity-modal-action) 12%, transparent);
+}
+
+.ventas-order-modal .ventas-order-include-gain:has(input:disabled) {
+  opacity: .65;
 }
 
 .ventas-order-modal .ventas-order-include-gain__check {
   display: flex;
+  width: 100%;
+  min-height: 61px;
   align-items: center;
-  gap: 9px;
-  cursor: pointer;
-  color: var(--balto-ink);
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.ventas-order-modal .ventas-order-include-gain__check input {
-  width: 17px;
-  height: 17px;
+  align-self: stretch;
+  gap: 11px;
   margin: 0;
-  flex: 0 0 auto;
-  accent-color: var(--entity-modal-action);
+  padding: 10px 13px;
+  box-sizing: border-box;
+  color: var(--balto-ink);
   cursor: pointer;
 }
 
 .ventas-order-modal .ventas-order-include-gain__check:has(input:disabled) {
-  opacity: .65;
   cursor: not-allowed;
 }
 
-.ventas-order-modal .ventas-order-include-gain__check input:disabled {
-  cursor: not-allowed;
+.ventas-order-modal .ventas-order-include-gain__copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.ventas-order-modal .ventas-order-include-gain small {
+.ventas-order-modal .ventas-order-include-gain__copy strong {
+  color: var(--balto-ink);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ventas-order-modal .ventas-order-include-gain__copy small {
   color: var(--mov-muted);
   font-size: 11px;
-  line-height: 1.5;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .ventas-order-modal .ventas-order-include-gain {
+    margin: 12px 12px 0;
+  }
+
+  .ventas-order-modal .ventas-order-include-gain__check {
+    padding: 10px;
+    gap: 10px;
+  }
 }

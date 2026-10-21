@@ -463,20 +463,17 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
             </tbody>
           </table>
         </div>
-        <div className="ventas-inline-concepts__footer">
-          <div className="ventas-inline-concepts__meta">
-            {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · {objectiveGainEstimated ? "Ganancia estimada" : "Ganancia incluida"}: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
-            {!initialId && objectiveEnabled && !finalSettlementAvailable ? (
-              <div className="ventas-order-include-gain">
-                <label className="ventas-order-include-gain__check">
-                  <input
-                    type="checkbox"
-                    checked={includeGain}
-                    disabled={!canOfferGain}
-                    onChange={(event) => setForm((current) => ({ ...current, incluir_ganancia: event.target.checked }))}
-                  />
-                  <span>Incluir ganancias en esta venta</span>
-                </label>
+        {!initialId && objectiveEnabled && !finalSettlementAvailable ? (
+          <div className="ventas-order-include-gain">
+            <label className="ventas-check ventas-order-include-gain__check">
+              <input
+                type="checkbox"
+                checked={includeGain}
+                disabled={!canOfferGain}
+                onChange={(event) => setForm((current) => ({ ...current, incluir_ganancia: event.target.checked }))}
+              />
+              <span className="ventas-order-include-gain__copy">
+                <strong>Incluir ganancias en esta venta</strong>
                 <small>{!canOfferGain
                   ? "Disponible para ventas aprobadas con combos de la campaña."
                   : !includeGain
@@ -486,8 +483,13 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                       : objectiveGainForTotal > 0
                         ? `Se suman ${money(objectiveGainForTotal)} al total. Si luego vende más combos, no se reintegra automáticamente lo abonado.`
                         : "Esta persona no tiene ganancias pendientes: solo se cobrarán los combos."}</small>
-              </div>
-            ) : null}
+              </span>
+            </label>
+          </div>
+        ) : null}
+        <div className="ventas-inline-concepts__footer">
+          <div className="ventas-inline-concepts__meta">
+            {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · {objectiveGainEstimated ? "Ganancia estimada" : "Ganancia incluida"}: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
             <FloatingField label="Observación" active textarea className="ventas-modal-field">
               <textarea rows="2" placeholder="Ej.: Retira el comprobante en secretaría." value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
             </FloatingField>
