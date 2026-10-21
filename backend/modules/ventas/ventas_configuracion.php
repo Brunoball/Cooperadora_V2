@@ -612,14 +612,20 @@ trait VentasConfiguracion
 
         $sold=0;
         $previousGain=0.0;
+        $previousGainUnits=0;
         if ($personId) {
-            $gainSql="SELECT COALESCE(SUM(ganancia_objetivo),0) AS cobrado
+            $gainSql="SELECT COALESCE(SUM(ganancia_objetivo),0) AS cobrado,
+                             COALESCE(SUM(cantidad_ganancias),0) AS unidades,
+                             COALESCE(SUM(CASE WHEN cantidad_ganancias=0 THEN ganancia_objetivo ELSE 0 END),0) AS importe_legado
                         FROM ventas_ordenes
                        WHERE id_venta_persona=? AND id_campania=? AND estado='aprobada'";
             $gainParams=[$personId,$campaignId];
             if ($excludeOrder) {$gainSql.=' AND id_orden<>?';$gainParams[]=$excludeOrder;}
             $gainRow=self::fetchOne($db,$gainSql,$gainParams);
             $previousGain=(float)($gainRow['cobrado'] ?? 0);
+            $unitPrice=max(0.0,(float)($campaign['ganancia_unidad_faltante'] ?? 0));
+            $legacyUnits=$unitPrice > 0 ? (int)ceil(max(0.0,(float)($gainRow['importe_legado'] ?? 0)) / $unitPrice - 0.0000001) : 0;
+            $previousGainUnits=max(0,(int)($gainRow['unidades'] ?? 0))+$legacyUnits;
         }
         $principalId=(int)($campaign['id_producto_principal'] ?? 0);
         if($personId && $principalId>0){
@@ -634,11 +640,17 @@ trait VentasConfiguracion
         }
 
         $objective=self::objectiveForSold($campaign,$sold);
+        $minimum=max(0,(int)($campaign['cantidad_minima_persona'] ?? 0));
+        $covered=min($minimum,$sold+$previousGainUnits);
         api_success([
             'id_venta_persona'=>$personId,
             'persona_encontrada'=>$personId ? 1 : 0,
             'vendidas_previas'=>$sold,
             'ganancia_cobrada_previa'=>round($previousGain,2),
+            'ganancias_unidades_previas'=>min($minimum,$previousGainUnits),
+            'unidades_cubiertas'=>$covered,
+            'unidades_pendientes_por_cubrir'=>max(0,$minimum-$covered),
+            'participacion_completa'=>$covered >= $minimum ? 1 : 0,
             'objetivo'=>$objective,
         ]);
     }

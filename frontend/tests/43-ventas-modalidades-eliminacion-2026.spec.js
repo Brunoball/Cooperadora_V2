@@ -253,7 +253,7 @@ test("venta con ganancia cobrada es inmutable; puede eliminarse de forma definit
 });
 
 // Además de la API, comprobar los caminos reales que usa el operador del sistema.
-test("interfaz: nueva venta permite desmarcar ganancia y registrar solo los productos", async ({ page, request }) => {
+test("interfaz: nueva venta separa cantidad de productos y ganancias, con ganancia 0 predeterminada", async ({ page, request }) => {
   test.setTimeout(100_000);
   const { authenticatePage } = require("./helpers/auth.helper");
   const f = await fixture(request);
@@ -264,16 +264,12 @@ test("interfaz: nueva venta permite desmarcar ganancia y registrar solo los prod
   await expect(modal).toBeVisible();
   await modal.getByRole("combobox", { name: "Venta / campaña" }).selectOption(String(f.campaign.id_campania));
   await modal.getByRole("combobox", { name: "Medio de pago" }).selectOption(String(f.id_medio_pago));
-  await modal.getByRole("spinbutton", { name: "Cantidad del concepto 1" }).fill("2");
-  const includeGain = modal.locator('.ventas-order-include-gain input[type="checkbox"]');
-  await expect(includeGain).toBeChecked();
-  await includeGain.uncheck();
-  await modal.getByRole("tab", { name: /comprador y objetivo/i }).click();
+  await modal.getByRole("spinbutton", { name: "Cantidad de productos vendidos" }).fill("2");
+  await expect(modal.getByRole("spinbutton", { name: "Cantidad de ganancias" })).toHaveValue("0");
   await modal.getByRole("textbox", { name: "DNI", exact: true }).fill(f.dni);
   await modal.getByRole("textbox", { name: "Nombre y apellido" }).fill(`PW E2E VTA PERSONA ${f.marker}`);
-  await modal.getByRole("tab", { name: /datos de la venta/i }).click();
-  await expect(modal.locator(".ventas-inline-concepts__total strong")).toContainText("200");
-  await modal.getByRole("textbox", { name: "Observación" }).fill(`PW E2E VTA ORDEN ${f.marker}`);
+  await modal.getByRole("textbox", { name: "Observaciones" }).fill(`PW E2E VTA ORDEN ${f.marker}`);
+  await expect(modal.locator(".ventas-simple-bottom > div > strong")).toContainText("200");
   await modal.getByRole("button", { name: /^guardar$/i }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
   const list = await orders(request, f, { estado: "aprobada" });

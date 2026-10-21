@@ -111,7 +111,13 @@ test("Interfaz: alta de ingresante permite completar teléfono y verlo al editar
   const dni = testDni();
   await modal.getByLabel("DNI *").fill(dni);
   await modal.getByLabel("Teléfono", { exact: true }).fill("3492123000");
+  // La casilla está en la segunda pestaña; no forzar clics sobre controles
+  // ocultos ni modificar el comportamiento del formulario para el test.
+  await modal.getByRole("tab", { name: "Matrícula y observaciones" }).click();
+  await expect(modal.getByRole("tab", { name: "Matrícula y observaciones" })).toHaveAttribute("aria-selected", "true");
+  await expect(modal.getByLabel("Matrícula pagada")).toBeEnabled();
   await modal.getByLabel("Matrícula pagada").uncheck();
+  await expect(modal.getByLabel("Matrícula pagada")).not.toBeChecked();
   await modal.getByRole("button", { name: /guardar ingresante/i }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
   const list = await ok(request, "ingresantes_listar", {

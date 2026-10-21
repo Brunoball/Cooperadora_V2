@@ -38,7 +38,7 @@ const exportRecord = (row) => ({
   retiro: row.estado === "aprobada" ? (yes(row.retirado) ? "RETIRADO" : "PENDIENTE") : "—",
   origen: originText(row.origen),
   fecha: dateText(row.fecha_venta || row.aprobado_en || row.creado_en),
-  referencia: upper(row.referencia_pago || "", 180),
+  observacion: upper(row.observacion || "", 3000),
 });
 
 export default function VentasRegistradas({ writable, showFeedback }) {
@@ -106,7 +106,9 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   const save = async (payload) => {
     setSaving(true);
     try {
-      const result = await ventasApi.guardarOrden(payload);
+      const result = payload.solo_observacion
+        ? await ventasApi.guardarObservacionOrden(payload)
+        : await ventasApi.guardarOrden(payload);
       setModal({ open: false, id: null });
       showFeedback("success", result.mensaje);
       const savedCampaign = String(payload?.id_campania || "");
@@ -133,8 +135,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
     .map((item) => ({ value: String(item.id_campania), label: campaniaOpcion(item) })), [catalogs.campanias]);
 
   const filters = [
-    { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI o referencia...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
-    { key: "venta", type: "select", label: "Venta (mes y año)", value: campaign,
+    { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI u observación...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
+    { key: "venta", type: "select", className: "ventas-orders-filter--campaign", label: "Venta (mes y año)", value: campaign,
       includeEmptyOption: false, options: campaignOptions,
       onChange: (value) => { setPage(1); setCampaign(String(value)); } },
     { key: "estado", type: "select", className: "ventas-orders-filter--pago ventas-filter--option-width", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
@@ -157,7 +159,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       { label: "Retiro", key: "retiro" },
       { label: "Origen", key: "origen" },
       { label: "Fecha", key: "fecha" },
-      { label: "Referencia", key: "referencia" },
+      { label: "Observaciones", key: "observacion" },
     ],
     registros: rows.map(exportRecord),
   }], [rows]);
@@ -187,7 +189,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       title="Ventas registradas"
       description="Consultá y administrá las ventas realizadas."
       filters={filters}
-      canCreate={writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()))}
+      canCreate={writable && (catalogs.campanias || []).some((c) => c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (yes(c.activo) || Boolean(c.fecha_fin && c.fecha_fin < today())))}
       primaryActionLabel="Nueva venta"
       primaryActionClassName="global-tableAction--top ventas-headAction ventas-headAction--new"
       onPrimaryAction={() => setModal({ open: true, id: null })}
@@ -241,6 +243,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             <div className="mov-gridCell entity-main-cell">
               <strong>{row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA"}</strong>
               <small>{row.dni ? `DNI ${row.dni}` : "Sin identificación"}</small>
+              {row.observacion ? <small className="ventas-order-observation" title={upper(row.observacion, 3000)}>OBS.: {upper(row.observacion, 3000)}</small> : null}
             </div>
             <div className="mov-gridCell">{upper(row.medio_pago, 120)}</div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>

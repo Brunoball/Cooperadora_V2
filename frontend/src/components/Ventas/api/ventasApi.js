@@ -22,6 +22,7 @@ export const ventasApi = {
   ordenes: (params) => apiGet("ventas_ordenes_listar", params),
   detalleOrden: (params) => apiGet("ventas_orden_detalle", params),
   guardarOrden: (payload) => apiPost("ventas_orden_guardar", payload),
+  guardarObservacionOrden: (payload) => apiPost("ventas_orden_observacion", payload),
   retiroOrden: (payload) => apiPost("ventas_orden_retiro", payload),
   eliminarOrden: (payload) => apiPost("ventas_orden_eliminar", payload),
 

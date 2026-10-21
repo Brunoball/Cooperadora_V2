@@ -1,613 +1,397 @@
-import VentasSectionIcon from "./VentasSectionIcon";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
+import { FloatingField } from "../../Global/Formularios/TabbedForm";
 import ventasApi from "../api/ventasApi";
-import { asId, blankItem, money, stateLabel, today, upper, yes } from "../ventasUtils";
+import { asId, money, today, upper, yes } from "../ventasUtils";
 
 const emptyOrder = {
-  id_orden: "",
-  id_campania: "",
-  id_venta_persona: "",
-  dni: "",
-  nombre_apellido: "",
-  id_medio_pago: "",
-  fecha_venta: today(),
-  estado: "aprobada",
-  referencia_pago: "",
-  observacion: "",
-  ganancia_objetivo: 0,
-  liquidar_ganancia: false,
-  incluir_ganancia: true, // nueva venta: cobro de ganancia activado, se puede desmarcar
-  items: [blankItem()],
+  id_orden: "", id_campania: "", id_venta_persona: "", dni: "", nombre_apellido: "",
+  id_medio_pago: "", fecha_venta: today(), estado: "aprobada", observacion: "",
+  cantidad_ganancias: 0, ganancia_objetivo: 0, total: 0, items: [],
 };
 
-// El ítem principal se propone automáticamente al elegir la campaña.
-// Se usan los mismos tipos de precio que ya acepta el backend de Ventas.
 const itemDeCampania = (campaign, products) => {
   const product = products.find((p) => String(p.id_producto) === String(campaign?.id_producto_principal || ""));
-  if (!product) return blankItem();
+  if (!product) return null;
   const multiple = Number(product.precio_anticipada) !== Number(product.precio_puerta);
   const type = multiple ? "anticipada" : "normal";
   return {
-    id_producto: String(product.id_producto),
-    producto_nombre: upper(product.nombre, 150),
+    id_producto: String(product.id_producto), producto_nombre: upper(product.nombre, 150),
     tipo_precio: type,
     precio_unitario: type === "anticipada" ? product.precio_anticipada : (product.precio ?? product.precio_anticipada),
-    cantidad: 1,
+    cantidad: 0,
   };
 };
 
 export default function VentaModal({ open, initialId, catalogs, saving, onClose, onSave, onFeedback }) {
   const [form, setForm] = useState(emptyOrder);
   const [loading, setLoading] = useState(false);
-  const [personSearch, setPersonSearch] = useState("");
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState("venta");
-  const [objectiveBase, setObjectiveBase] = useState({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
+  const [objectiveBase, setObjectiveBase] = useState({ loading: false, ready: false });
   const searchTimer = useRef(null);
-  const personSearchSeq = useRef(0);
-
-  const products = catalogs?.productos || [];
-  const campaigns = catalogs?.campanias || [];
+  const searchSeq = useRef(0);
+  const selectedPerson = useRef(false);
+  const [activeSearch, setActiveSearch] = useState(null);
+  const products = useMemo(() => catalogs?.productos || [], [catalogs]);
+  const campaigns = useMemo(() => catalogs?.campanias || [], [catalogs]);
   const payments = catalogs?.medios_pago || [];
-  const selectableCampaigns = campaigns.filter(
-    (campaign) => (campaign.estado_cierre !== "cerrada" && (yes(campaign.activo) || (campaign.fecha_fin && campaign.fecha_fin < today())) && (!campaign.fecha_inicio || campaign.fecha_inicio <= today())) || (initialId && String(campaign.id_campania) === String(form.id_campania))
-  );
-
-  const selectedCampaign = useMemo(
-    () => campaigns.find((campaign) => String(campaign.id_campania) === String(form.id_campania)) || null,
-    [campaigns, form.id_campania],
+  const editing = Boolean(initialId);
+  // No recalcular ni reescribir los importes de ganancias históricas: el backend los protege.
+  const historicalGain = editing && Number(form.ganancia_objetivo || 0) > 0;
+  const selectedCampaign = campaigns.find((c) => String(c.id_campania) === String(form.id_campania));
+  const endedCampaign = Boolean(selectedCampaign?.fecha_fin && selectedCampaign.fecha_fin < today());
+  const selectableCampaigns = campaigns.filter((c) =>
+    (c.estado_cierre !== "cerrada" && (yes(c.activo) || Boolean(c.fecha_fin && c.fecha_fin < today())) && (!c.fecha_inicio || c.fecha_inicio <= today()))
+    || (editing && String(c.id_campania) === String(form.id_campania))
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     let alive = true;
-    personSearchSeq.current += 1;
-    setPersonSearch("");
+    searchSeq.current += 1;
+    selectedPerson.current = false;
+    clearTimeout(searchTimer.current);
+    setActiveSearch(null);
     setPeople([]);
-    setActiveTab("venta");
-    setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
+    setPeopleLoading(false);
+    setObjectiveBase({ loading: false, ready: false });
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
+      setLoading(false);
       return undefined;
     }
+    setForm({ ...emptyOrder, fecha_venta: today() });
     setLoading(true);
-    ventasApi.detalleOrden({ id_orden: initialId })
-      .then((data) => {
-        if (!alive) return;
-        const row = data.item || {};
-        setForm({
-          ...emptyOrder,
-          ...row,
-          id_orden: row.id_orden || "",
-          id_campania: asId(row.id_campania),
-          id_venta_persona: asId(row.id_venta_persona),
-          id_medio_pago: asId(row.id_medio_pago),
-          fecha_venta: row.fecha_venta || String(row.aprobado_en || row.creado_en || "").slice(0, 10) || today(),
-          nombre_apellido: upper(row.nombre_apellido || "", 160),
-          referencia_pago: upper(row.referencia_pago || "", 180),
-          observacion: upper(row.observacion || "", 3000),
-          liquidar_ganancia: false, // operaciones históricas: su importe ya fue cobrado
-          incluir_ganancia: false, // no se permite agregar cargos retroactivos
-          items: (row.items || []).length ? row.items.map((item) => ({ ...item, producto_nombre: upper(item.producto_nombre || "", 150), id_producto: asId(item.id_producto), tipo_precio: item.tipo_precio || "personalizado" })) : [blankItem()],
-        });
-        setPersonSearch(row.nombre_apellido || row.dni || "");
-      })
-      .catch((err) => onFeedback("error", err.message))
-      .finally(() => alive && setLoading(false));
+    ventasApi.detalleOrden({ id_orden: initialId }).then((data) => {
+      if (!alive) return;
+      const row = data.item || {};
+      setForm({
+        ...emptyOrder, ...row,
+        id_orden: asId(row.id_orden), id_campania: asId(row.id_campania),
+        id_venta_persona: asId(row.id_venta_persona), id_medio_pago: asId(row.id_medio_pago),
+        nombre_apellido: upper(row.nombre_apellido || "", 160),
+        fecha_venta: row.fecha_venta || String(row.aprobado_en || row.creado_en || "").slice(0, 10) || today(),
+        observacion: upper(row.observacion || "", 3000),
+        items: (row.items || []).map((item) => ({
+          ...item, id_producto: asId(item.id_producto), producto_nombre: upper(item.producto_nombre || "", 150),
+        })),
+      });
+    }).catch((err) => onFeedback("error", err.message)).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [open, initialId, onFeedback]);
 
   useEffect(() => {
-    if (!open || initialId || form.id_campania) return;
-    const activeCampaign = campaigns.find((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()));
-    if (!activeCampaign) return;
-    setForm((current) => current.id_campania ? current : { ...current, id_campania: String(activeCampaign.id_campania), items: [itemDeCampania(activeCampaign, products)] });
-  }, [open, initialId, campaigns, products, form.id_campania]);
-
-  const chooseCampaign = (value) => {
-    if (initialId) return; // El backend no permite mover una orden a otra campaña.
-    const campaign = campaigns.find((c) => String(c.id_campania) === String(value));
-    setForm((current) => ({
-      ...current,
-      id_campania: value,
-      liquidar_ganancia: false,
-      incluir_ganancia: true,
-      items: campaign ? [itemDeCampania(campaign, products)] : [blankItem()],
-    }));
-  };
-
-  const editItem = (index, patch) => {
-    setForm((current) => ({
-      ...current,
-      // Conservar la elección del usuario al cambiar cantidades/productos.
-      // Si no hay combos válidos, canOfferGain deshabilita la casilla.
-      items: current.items.map((item, i) => i === index ? { ...item, ...patch } : item),
-    }));
-  };
-
-  const chooseItemProduct = (index, id) => {
-    if (!id) {
-      editItem(index, { id_producto: "", producto_nombre: "", tipo_precio: "personalizado", precio_unitario: "" });
-      return;
-    }
-    const product = products.find((p) => String(p.id_producto) === String(id));
-    if (!product) return;
-    const multiple = Number(product.precio_anticipada) !== Number(product.precio_puerta);
-    editItem(index, {
-      id_producto: String(id),
-      producto_nombre: upper(product.nombre, 150),
-      tipo_precio: multiple ? "anticipada" : "normal",
-      precio_unitario: multiple ? product.precio_anticipada : (product.precio ?? product.precio_anticipada),
+    if (!open || editing || form.id_campania) return;
+    const campaign = campaigns.find((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()));
+    if (!campaign) return;
+    setForm((current) => current.id_campania ? current : {
+      ...current, id_campania: String(campaign.id_campania),
+      items: [itemDeCampania(campaign, products)].filter(Boolean),
     });
-  };
-
-  const choosePriceType = (index, type) => {
-    const item = form.items[index];
-    const product = products.find((p) => String(p.id_producto) === String(item?.id_producto));
-    const price = !product || type === "personalizado" ? item.precio_unitario
-      : type === "puerta" ? product.precio_puerta
-      : type === "anticipada" ? product.precio_anticipada
-      : (product.precio ?? product.precio_anticipada);
-    editItem(index, { tipo_precio: type, precio_unitario: price });
-  };
-
-  const addConcept = () => setForm((current) => ({
-    ...current,
-    liquidar_ganancia: false,
-    items: [...current.items, { ...blankItem(), tipo_precio: "personalizado" }],
-  }));
-
-  const removeConcept = (index) => setForm((current) => ({
-    ...current,
-    items: current.items.filter((_, i) => i !== index),
-  }));
-
-  const objectiveMinimum = Math.max(0, Number(selectedCampaign?.cantidad_minima_persona || 0));
-  const objectivePerMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
-  const objectiveNoSales = Math.max(0, Number(selectedCampaign?.ganancia_total_sin_ventas || 0));
-  const objectiveEnabled = objectiveMinimum > 0 && Number(selectedCampaign?.id_producto_principal || 0) > 0;
-  const zeroQuantityOnly = form.items.length > 0 && form.items.every((item) => (
-    String(item.cantidad ?? "").trim() !== ""
-    && Number.isInteger(Number(item.cantidad))
-    && Number(item.cantidad) === 0
-  ));
-  // Después de fecha_fin, escribir cantidad 0 también selecciona la
-  // liquidación final sin obligar al usuario a encontrar otra casilla.
-  const finalSettlementAvailable = Boolean(!initialId && objectiveEnabled &&
-    selectedCampaign?.estado_cierre !== "cerrada" && selectedCampaign?.fecha_fin &&
-    selectedCampaign.fecha_fin < today());
-  const isFinalSettlement = finalSettlementAvailable && (Boolean(form.liquidar_ganancia) || zeroQuantityOnly);
-  const personDni = String(form.dni || "").replace(/\D/g, "");
-  const hasPersonReference = Boolean(form.id_venta_persona || personDni.length >= 5);
-  const objectiveRequestKey = `${form.id_campania}|${form.id_venta_persona || ""}|${personDni}|${initialId || ""}`;
-
-  useEffect(() => {
-    if (!open || !form.id_campania || !objectiveEnabled || !hasPersonReference) {
-      setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
-      return undefined;
-    }
-
-    let alive = true;
-    const timer = setTimeout(async () => {
-      setObjectiveBase((current) => ({ ...current, loading: true, ready: false }));
-      try {
-        const data = await ventasApi.objetivoPersona({
-          id_campania: form.id_campania,
-          id_venta_persona: form.id_venta_persona || "",
-          dni: personDni,
-          id_orden_excluir: initialId || "",
-        });
-        if (!alive) return;
-        setObjectiveBase({
-          loading: false,
-          ready: true,
-          vendidas_previas: Number(data?.vendidas_previas || 0),
-          ganancia_cobrada_previa: Number(data?.ganancia_cobrada_previa || 0),
-          persona_encontrada: Number(data?.persona_encontrada || 0),
-          requestKey: objectiveRequestKey,
-        });
-      } catch (err) {
-        if (!alive) return;
-        setObjectiveBase({ loading: false, ready: false, vendidas_previas: 0, ganancia_cobrada_previa: 0, persona_encontrada: 0 });
-        onFeedback("error", err.message);
-      }
-    }, 180);
-
-    return () => { alive = false; clearTimeout(timer); };
-  }, [form.id_campania, form.id_venta_persona, hasPersonReference, initialId, objectiveEnabled, objectiveRequestKey, onFeedback, open, personDni]);
-
-  // Al cambiar de pestaña no conservar el desplazamiento de la anterior:
-  // el contenido de la nueva sección siempre comienza debajo de las tabs.
-  useEffect(() => {
-    if (!open) return;
-    const scrollBody = document.querySelector(".ventas-order-modal .entity-modal__body");
-    if (scrollBody) scrollBody.scrollTop = 0;
-  }, [activeTab, open]);
+  }, [open, editing, form.id_campania, campaigns, products]);
 
   useEffect(() => () => clearTimeout(searchTimer.current), []);
 
-  const searchPeople = (value) => {
-    setPersonSearch(value);
-    // Una búsqueda nueva invalida TAMBIÉN el DNI y el nombre del comprador
-    // anterior. De lo contrario, si no elige otro resultado, se guardaría
-    // accidentalmente la venta a nombre de la persona ya seleccionada.
-    setForm((v) => ({ ...v, id_venta_persona: "", dni: "", nombre_apellido: "" }));
+  const chooseCampaign = (value) => {
+    if (editing) return;
+    const campaign = campaigns.find((c) => String(c.id_campania) === String(value));
+    setForm((current) => ({ ...current, id_campania: value, cantidad_ganancias: 0,
+      items: [itemDeCampania(campaign, products)].filter(Boolean) }));
+  };
+
+  // Nombre y DNI son dos buscadores de la misma lista de personas. Las
+  // búsquedas comparten debounce y secuencia para no mezclar resultados viejos.
+  const queuePersonSearch = (query, field) => {
     clearTimeout(searchTimer.current);
-    const requestSeq = ++personSearchSeq.current;
-    if (value.trim().length < 1) { setPeople([]); setPeopleLoading(false); return; }
+    const seq = ++searchSeq.current;
+    setActiveSearch(field);
+    setPeople([]);
+    setPeopleLoading(false);
+    if (!query.trim()) return;
     searchTimer.current = setTimeout(async () => {
       setPeopleLoading(true);
       try {
-        const result = await ventasApi.buscarPersonas({ buscar: value.trim() });
-        if (requestSeq === personSearchSeq.current) setPeople(result.items || []);
+        const result = await ventasApi.buscarPersonas({ buscar: query.trim() });
+        if (searchSeq.current === seq) setPeople(result.items || []);
       } catch (err) {
-        if (requestSeq === personSearchSeq.current) onFeedback("error", err.message);
+        if (searchSeq.current === seq) onFeedback("error", err.message);
       } finally {
-        if (requestSeq === personSearchSeq.current) setPeopleLoading(false);
+        if (searchSeq.current === seq) setPeopleLoading(false);
       }
     }, 260);
   };
 
-  const selectPerson = (person) => {
-    personSearchSeq.current += 1;
-    clearTimeout(searchTimer.current);
-    setPeopleLoading(false);
-    setForm((v) => ({
-      ...v,
-      id_venta_persona: person.id_persona || "",
-      dni: person.dni || "",
-      nombre_apellido: person.nombre_apellido || "",
+  const searchPeople = (value) => {
+    const name = upper(value, 160);
+    const wasSelected = selectedPerson.current;
+    selectedPerson.current = false;
+    setForm((current) => ({
+      ...current, nombre_apellido: name, id_venta_persona: "",
+      // Evitar conservar el DNI de otra persona al cambiar un nombre elegido.
+      dni: wasSelected || current.id_venta_persona ? "" : current.dni,
     }));
-    setPersonSearch(person.nombre_apellido || person.dni || "");
-    setPeople([]);
+    queuePersonSearch(name, "nombre");
   };
 
-  const itemsSubtotal = useMemo(() => form.items.reduce((sum, item) => sum + (Number(item.cantidad || 0) * Number(item.precio_unitario || 0)), 0), [form.items]);
-  // Cantidad 0 = ningún producto vendido. Si todos los conceptos están en
-  // cero, se permite cobrar exclusivamente la ganancia pendiente del objetivo.
-  const billableItems = form.items.filter((item) => String(item.cantidad ?? "").trim() === "" || Number(item.cantidad) !== 0);
-  const configuredItems = billableItems.filter((item) => String(item.producto_nombre || "").trim());
-  const hasConfiguredItems = configuredItems.length > 0 && configuredItems.length === billableItems.length && configuredItems.every((item) => (
-    item.precio_unitario !== ""
-    && item.precio_unitario != null
-    && Number(item.precio_unitario) >= 0
-    && Number.isInteger(Number(item.cantidad))
-    && Number(item.cantidad) >= 1
-  ));
-  const allDoor = hasConfiguredItems && configuredItems.every((item) => item.tipo_precio === "puerta");
+  const searchDni = (value) => {
+    const numericDni = String(value).replace(/\D/g, "").slice(0, 12);
+    const wasSelected = selectedPerson.current;
+    selectedPerson.current = false;
+    setForm((current) => ({
+      ...current, dni: numericDni, id_venta_persona: "",
+      // Si el DNI autocompletado cambia, el nombre anterior ya no corresponde.
+      nombre_apellido: wasSelected || current.id_venta_persona ? "" : current.nombre_apellido,
+    }));
+    queuePersonSearch(numericDni, "dni");
+  };
 
-  const principalQuantity = useMemo(() => {
-    const principalId = String(selectedCampaign?.id_producto_principal || "");
-    if (!principalId) return 0;
-    return form.items.reduce((sum, item) => (
-      String(item.id_producto || "") === principalId ? sum + Math.max(0, Number(item.cantidad || 0)) : sum
-    ), 0);
-  }, [form.items, selectedCampaign?.id_producto_principal]);
-  // No usar el saldo de un DNI/campaña anterior durante la búsqueda asíncrona.
-  const objectiveReady = objectiveBase.ready && !objectiveBase.loading && objectiveBase.requestKey === objectiveRequestKey;
-  const previousQuantity = objectiveReady ? Math.max(0, Number(objectiveBase.vendidas_previas || 0)) : 0;
-  const currentCountedQuantity = form.estado === "aprobada" ? principalQuantity : 0;
-  const objectiveSold = previousQuantity + currentCountedQuantity;
-  const objectiveMissing = Math.max(0, objectiveMinimum - objectiveSold);
-  const objectiveProgress = objectiveMinimum > 0 ? Math.min(100, (objectiveSold / objectiveMinimum) * 100) : 0;
-  const objectiveRuleDue = objectiveMissing <= 0
-    ? 0
-    : objectiveSold === 0
-      ? objectiveNoSales
-      : objectiveMissing * objectivePerMissing;
-  const objectiveDue = Math.max(0, objectiveRuleDue - (objectiveReady ? Math.max(0, Number(objectiveBase.ganancia_cobrada_previa || 0)) : 0));
-  const endedCampaign = Boolean(selectedCampaign?.fecha_fin && selectedCampaign.fecha_fin < today());
-  // Se puede cobrar la ganancia junto a los combos o, con cantidad 0,
-  // sin vender ningún producto. En ambos casos requiere pago aprobado.
-  const canOfferGain = Boolean(!initialId && objectiveEnabled && !endedCampaign &&
-    !isFinalSettlement && form.estado === "aprobada" &&
-    ((hasConfiguredItems && principalQuantity > 0) || zeroQuantityOnly));
-  const includeGain = canOfferGain && Boolean(form.incluir_ganancia);
-  const gainOnlyNow = zeroQuantityOnly && includeGain;
-  // Antes de identificar a la persona, mostrar una ESTIMACIÓN tomando solo
-  // los combos de esta venta. Al encontrar el DNI se recalcula el saldo real
-  // descontando las ventas y ganancias que ya registró esa persona.
-  // La estimación nunca se envía al backend como importe a cobrar.
-  const objectiveGainEstimated = Boolean((isFinalSettlement || includeGain) && !objectiveReady);
-  const objectiveGainForTotal = (isFinalSettlement || includeGain) && form.estado === "aprobada"
-    ? objectiveDue
-    : 0;
-  const canSettleGainOnly = isFinalSettlement && !hasConfiguredItems && configuredItems.length === 0 && objectiveGainForTotal > 0;
-  const canSave = isFinalSettlement ? (canSettleGainOnly && hasPersonReference && objectiveReady)
-    : ((hasConfiguredItems || (gainOnlyNow && objectiveGainForTotal > 0)) &&
-      (Boolean(initialId) || !endedCampaign) &&
-      (!includeGain || (hasPersonReference && objectiveReady)));
-  const total = (isFinalSettlement ? 0 : itemsSubtotal) + objectiveGainForTotal;
+  const selectPerson = (person) => {
+    searchSeq.current += 1;
+    clearTimeout(searchTimer.current);
+    selectedPerson.current = true;
+    setActiveSearch(null);
+    setPeople([]);
+    setPeopleLoading(false);
+    setForm((current) => ({ ...current,
+      id_venta_persona: person.id_persona || "", dni: person.dni || "",
+      nombre_apellido: upper(person.nombre_apellido || "", 160),
+    }));
+  };
+
+  const personOptions = (field) => activeSearch === field && !peopleLoading && people.length > 0 ? (
+    <div className="ventas-search-results" role="listbox" aria-label="Coincidencias de personas">
+      {people.map((person, index) => (
+        <button type="button" role="option" aria-selected="false" key={`${person.id_persona || "alumno"}-${person.id_alumno || index}`}
+          onClick={() => selectPerson(person)}>
+          <strong>{field === "dni" ? `DNI ${person.dni}` : upper(person.nombre_apellido || "", 160)}</strong>
+          <small>{field === "dni" ? upper(person.nombre_apellido || "", 160) : `DNI ${person.dni}`}{person.nombre_anio ? ` · ${person.nombre_anio} ${person.nombre_division || ""}` : ""}</small>
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  const editItem = (index, patch) => setForm((current) => ({
+    ...current, items: current.items.map((item, i) => i === index ? { ...item, ...patch } : item),
+  }));
+  const choosePriceType = (index, type) => {
+    const item = form.items[index];
+    const product = products.find((p) => String(p.id_producto) === String(item?.id_producto));
+    const price = type === "puerta" ? product?.precio_puerta
+      : type === "anticipada" ? product?.precio_anticipada
+      : product?.precio ?? product?.precio_anticipada;
+    editItem(index, { tipo_precio: type, precio_unitario: price ?? item.precio_unitario });
+  };
+
+  const minimum = Math.max(0, Number(selectedCampaign?.cantidad_minima_persona || 0));
+  const perMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
+  const noSales = Math.max(0, Number(selectedCampaign?.ganancia_total_sin_ventas || 0));
+  const objectiveEnabled = minimum > 0 && Number(selectedCampaign?.id_producto_principal || 0) > 0;
+  const dni = String(form.dni || "").replace(/\D/g, "");
+  const hasPersonReference = Boolean(form.id_venta_persona || dni.length >= 6);
+  const validPerson = Boolean(form.id_venta_persona || (dni.length >= 6 && /[A-ZÁÉÍÓÚÑ]/i.test(form.nombre_apellido || "")));
+  const objectiveKey = `${form.id_campania}|${form.id_venta_persona || ""}|${dni}|${initialId || ""}`;
+
+  useEffect(() => {
+    if (!open || editing || !form.id_campania || !objectiveEnabled || !hasPersonReference) {
+      setObjectiveBase({ loading: false, ready: false });
+      return undefined;
+    }
+    let alive = true;
+    const timer = setTimeout(async () => {
+      setObjectiveBase({ loading: true, ready: false });
+      try {
+        const data = await ventasApi.objetivoPersona({
+          id_campania: form.id_campania, id_venta_persona: form.id_venta_persona || "",
+          dni, id_orden_excluir: initialId || "",
+        });
+        if (!alive) return;
+        setObjectiveBase({ ...data, loading: false, ready: true, requestKey: objectiveKey });
+      } catch (err) {
+        if (!alive) return;
+        setObjectiveBase({ loading: false, ready: false });
+        onFeedback("error", err.message);
+      }
+    }, 180);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [open, editing, form.id_campania, form.id_venta_persona, objectiveEnabled, hasPersonReference, dni, initialId, objectiveKey, onFeedback]);
+
+  const objectiveReady = objectiveBase.ready && !objectiveBase.loading && objectiveBase.requestKey === objectiveKey;
+  const soldBefore = objectiveReady ? Math.max(0, Number(objectiveBase.vendidas_previas || 0)) : 0;
+  const gainsBefore = objectiveReady ? Math.max(0, Number(objectiveBase.ganancias_unidades_previas || 0)) : 0;
+  const paidBefore = objectiveReady ? Math.max(0, Number(objectiveBase.ganancia_cobrada_previa || 0)) : 0;
+  const mainItem = form.items[0];
+  const mainQuantity = Number(mainItem?.cantidad ?? 0);
+  const gainQuantity = Number(form.cantidad_ganancias ?? 0);
+  const quantitiesValid = [mainQuantity, gainQuantity].every((q) => Number.isInteger(q) && q >= 0 && q <= 100000);
+  const soldHere = form.items.reduce((total, item) => total + (String(item.id_producto || "") === String(selectedCampaign?.id_producto_principal || "") ? Number(item.cantidad || 0) : 0), 0);
+  const availableGains = Math.max(0, minimum - soldBefore - soldHere - gainsBefore);
+  const gainLimit = soldBefore + soldHere === 0 ? noSales : Math.max(0, minimum - soldBefore - soldHere) * perMissing;
+  const gainPreview = gainQuantity > 0 && objectiveReady && !editing ? Math.round(Math.max(0, Math.min(
+    soldBefore + soldHere === 0 && gainQuantity === availableGains ? gainLimit - paidBefore : gainQuantity * perMissing,
+    gainLimit - paidBefore
+  )) * 100) / 100 : 0;
+  const itemsValid = form.items.every((item) => Number.isInteger(Number(item.cantidad)) && Number(item.cantidad) >= 0 && Number(item.cantidad) <= 100000
+    && (!Number(item.cantidad) || (Boolean(item.producto_nombre) && Number.isFinite(Number(item.precio_unitario)) && Number(item.precio_unitario) >= 0)));
+  const billableItems = form.items.filter((item) => Number(item.cantidad) > 0);
+  const productTotal = billableItems.reduce((sum, item) => sum + Number(item.cantidad) * Number(item.precio_unitario || 0), 0);
+  const allDoor = billableItems.length > 0 && billableItems.every((item) => item.tipo_precio === "puerta");
+  const finalSettlement = !editing && endedCampaign && billableItems.length === 0 && gainQuantity > 0;
+  const gainsValid = editing ? true : gainQuantity === 0 || (objectiveEnabled && objectiveReady && form.estado === "aprobada" && gainQuantity <= availableGains && gainPreview > 0);
+  const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(form.fecha_venta || "");
+  const canSave = Boolean(form.id_campania && form.id_medio_pago && dateValid && !loading &&
+    (historicalGain || (quantitiesValid && itemsValid && gainsValid &&
+      (productTotal > 0 || (!editing && gainQuantity > 0)) &&
+      (editing || !endedCampaign || finalSettlement) &&
+      (validPerson || (billableItems.length > 0 && allDoor)) &&
+      (editing || gainQuantity === 0 || gainPreview > 0))));
+  const total = historicalGain ? Number(form.total || 0) : productTotal + gainPreview;
 
   const submit = (event) => {
     event.preventDefault();
-    if (!form.id_campania || !form.id_medio_pago || !/^\d{4}-\d{2}-\d{2}$/.test(form.fecha_venta || "")) {
-      setActiveTab("venta");
-      onFeedback("error", "Completá la campaña, el medio de pago y la fecha de venta para continuar.");
-      return;
-    }
     if (!canSave) {
-      if (includeGain) {
-        onFeedback("error", !hasPersonReference
-          ? "Para incluir ganancias, seleccioná al comprador e ingresá su DNI."
-          : !objectiveReady ? "Esperá a que se calcule la ganancia pendiente."
-          : "No fue posible determinar la ganancia pendiente. Probá nuevamente o desmarcá la casilla para cobrar solo los combos.");
-        setActiveTab("comprador");
-      } else if (!objectiveReady && objectiveEnabled && hasPersonReference) {
-        onFeedback("error", "Esperá a que termine el cálculo del objetivo antes de registrar la liquidación final.");
-      } else {
-        onFeedback("error", isFinalSettlement ? "No hay ganancia para liquidar, o falta seleccionar la persona." : "Agregá al menos un concepto válido.");
-        if (!canSettleGainOnly) setActiveTab("venta");
-      }
+      onFeedback("error", "Revisá el comprador, las cantidades, la fecha y el medio de pago antes de guardar.");
       return;
     }
+    if (historicalGain) {
+      // Operación acotada para cambiar la observación sin tocar productos,
+      // stock, ganancias ya cobradas ni asiento contable.
+      onSave({ id_orden: form.id_orden, observacion: upper(form.observacion, 3000), solo_observacion: true });
+      return;
+    }
+    // Payload explícito: no reenviar referencias internas ni otros campos
+    // de solo lectura recibidos del detalle de una venta histórica.
     onSave({
-      ...form,
       id_orden: form.id_orden || null,
+      id_campania: form.id_campania,
+      id_medio_pago: form.id_medio_pago,
+      fecha_venta: form.fecha_venta,
+      observacion: upper(form.observacion, 3000),
       id_venta_persona: form.id_venta_persona || null,
-      dni: form.dni.replace(/\D/g, ""),
-      nombre_apellido: upper(form.nombre_apellido, 160),
-      liquidar_ganancia: canSettleGainOnly,
-      incluir_ganancia: includeGain && objectiveReady && objectiveGainForTotal > 0,
-      items: (canSettleGainOnly || gainOnlyNow) ? [] : billableItems
-        .filter((item) => String(item.producto_nombre || "").trim())
-        .map((item) => ({ ...item, cantidad: Number(item.cantidad || 0), precio_unitario: Number(item.precio_unitario || 0) })),
+      dni, nombre_apellido: upper(form.nombre_apellido, 160),
+      estado: editing ? form.estado : "aprobada",
+      cantidad_ganancias: editing ? 0 : gainQuantity,
+      incluir_ganancia: !editing && gainQuantity > 0 && !finalSettlement,
+      liquidar_ganancia: !editing && finalSettlement,
+      items: billableItems.map((item) => ({ ...item,
+        cantidad: Number(item.cantidad), precio_unitario: Number(item.precio_unitario || 0),
+      })),
     });
   };
 
+  const singleItem = form.items.length <= 1;
+  const priceProduct = products.find((p) => String(p.id_producto) === String(mainItem?.id_producto));
+  const multiplePrices = priceProduct && Number(priceProduct.precio_anticipada) !== Number(priceProduct.precio_puerta);
+
   return (
-    <CrudModal open={open} title={form.id_orden ? "Editar venta" : "Nueva venta"} subtitle="Completá los datos de la venta y asociá los conceptos y el comprador." onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false} submitDisabled={!canSave} wide modalClassName="ventas-modal ventas-order-modal">
-      <EntityTabs
-        tabs={[{ value: "venta", label: <><VentasSectionIcon kind="sale" />Datos de la venta</> }, { value: "comprador", label: <><VentasSectionIcon kind="person" />Comprador y objetivo</> }]}
-        value={activeTab}
-        onChange={setActiveTab}
-        idPrefix="ventas-order-modal-tab"
-        className="ventas-modal-tabs"
-      />
-      <EntityTabPane active={activeTab === "venta"} disableWhenInactive>
-      <div className="ventas-order-layout">
-      <section className="ventas-order-basics" aria-label="Datos generales de la venta">
-        <header className="ventas-order-basics__head">
-          <span className="ventas-order-basics__icon"><VentasSectionIcon kind="sale" /></span>
-          <div>
-            <strong>Datos generales</strong>
-            <small>Configuración y condiciones del cobro</small>
-          </div>
-        </header>
-        <div className="ventas-order-basics__fields">
-          <div className="ventas-order-basics__row ventas-order-basics__row--primary">
-            <FloatingField label="Venta / campaña" className="ventas-modal-field ventas-order-field--campaign">
-              <select required value={form.id_campania} disabled={Boolean(initialId)} onChange={(e) => chooseCampaign(e.target.value)}><option value="" disabled>SELECCIONAR VENTA O CAMPAÑA</option>{selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}{yes(c.activo) ? "" : " (INACTIVA · HISTÓRICA)"}</option>)}</select>
-            </FloatingField>
-            <FloatingField label="Medio de pago" className="ventas-modal-field ventas-order-field--payment">
-              <select required value={form.id_medio_pago} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}><option value="" disabled>SELECCIONAR MEDIO DE PAGO</option>{payments.map((m) => <option key={m.id_medio_pago} value={m.id_medio_pago}>{upper(m.medio_pago, 120)}</option>)}</select>
-            </FloatingField>
-          </div>
-          <div className="ventas-order-basics__row ventas-order-basics__row--secondary">
-            <FloatingField label="Fecha de venta" className="ventas-modal-field ventas-order-field--date">
-              <input required type="date" value={form.fecha_venta} onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
-            </FloatingField>
-            <FloatingField label="Estado de pago" className="ventas-modal-field ventas-order-field--status">
-              <select value={form.estado} disabled={form.origen === "bot_whatsapp"} title={form.origen === "bot_whatsapp" ? "Las ventas de WhatsApp ya están pagadas." : undefined} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>{["aprobada", "pendiente"].map((state) => <option key={state} value={state}>{stateLabel(state)}</option>)}</select>
-            </FloatingField>
-            <FloatingField label="Referencia de pago" active className="ventas-modal-field ventas-order-field--reference">
-              <input placeholder="Ej.: transferencia 45821, recibo 1024 o comprobante" value={form.referencia_pago || ""} onChange={(e) => setForm((v) => ({ ...v, referencia_pago: upper(e.target.value, 180) }))} />
-            </FloatingField>
-          </div>
+    <CrudModal open={open} title={editing ? "Editar venta" : "Nueva venta"} subtitle={editing ? "Revisá los datos registrados de la venta." : "Cargá las ventas y las ganancias por separado."}
+      onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false}
+      submitDisabled={!canSave} modalClassName="ventas-modal ventas-order-modal ventas-order-simple" wide>
+      <div className="ventas-simple-form">
+        <div className="ventas-simple-top">
+          <FloatingField label="Venta / campaña" className="ventas-modal-field">
+            <select value={form.id_campania} required disabled={editing || historicalGain} onChange={(e) => chooseCampaign(e.target.value)}>
+              <option value="">SELECCIONAR CAMPAÑA</option>
+              {selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}</option>)}
+            </select>
+          </FloatingField>
+          <FloatingField label="Medio de pago" className="ventas-modal-field">
+            <select value={form.id_medio_pago} required disabled={historicalGain} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}>
+              <option value="">SELECCIONAR MEDIO</option>
+              {payments.map((p) => <option key={p.id_medio_pago} value={p.id_medio_pago}>{upper(p.medio_pago, 120)}</option>)}
+            </select>
+          </FloatingField>
         </div>
-      </section>
-
-      <section className="ventas-modal-section ventas-inline-concepts" aria-label="Productos y conceptos de la venta">
-        <header className="ventas-inline-concepts__head">
-          <div>
-            <strong><VentasSectionIcon kind="product" />Productos y conceptos</strong>
-            <small>Revisá el producto y las cantidades. Podés sumar otros conceptos.</small>
-          </div>
-          <button type="button" className="mov-btn mov-btn--ghost" onClick={addConcept}>
-            <FontAwesomeIcon icon={faPlus} aria-hidden="true" />
-            Agregar concepto
-          </button>
-        </header>
-        <div className="ventas-inline-concepts__scroll">
-          <table className="ventas-inline-concepts__table">
-            <thead><tr><th>Producto / concepto</th><th>Precio</th><th>Valor unitario</th><th>Cantidad</th><th>Subtotal</th><th aria-label="Acciones" /></tr></thead>
-            <tbody>
-              {form.items.map((item, index) => {
-                const product = products.find((p) => String(p.id_producto) === String(item.id_producto));
-                const campaignProductId = String(selectedCampaign?.id_producto_principal || "");
-                const multiple = product && Number(product.precio_anticipada) !== Number(product.precio_puerta);
-                const isManual = !item.id_producto;
-                const isCustom = isManual || item.tipo_precio === "personalizado";
-                return (
-                  <tr key={`item-${index}`}>
-                    <td data-label="Producto / concepto">
-                      <FloatingField label="Producto / concepto" className="ventas-concept-field">
-                        <select aria-label={`Producto del concepto ${index + 1}`} value={item.id_producto || ""} onChange={(event) => chooseItemProduct(index, event.target.value)}>
-                          <option value="">CONCEPTO MANUAL</option>
-                          {products.filter((p) => String(p.id_producto) === campaignProductId || (initialId && String(p.id_producto) === String(item.id_producto))).map((p) => (
-                            <option key={p.id_producto} value={p.id_producto}>{upper(p.nombre, 150)}</option>
-                          ))}
-                          {item.id_producto && !product ? <option value={item.id_producto}>{item.producto_nombre || "PRODUCTO HISTÓRICO"}</option> : null}
-                        </select>
-                      </FloatingField>
-                      {isManual ? (
-                        <FloatingField label="Nombre del concepto" className="ventas-concept-field">
-                          <input aria-label={`Nombre del concepto manual ${index + 1}`} maxLength={150} placeholder="NOMBRE DEL CONCEPTO" value={item.producto_nombre || ""} onChange={(event) => editItem(index, { producto_nombre: upper(event.target.value, 150) })} />
-                        </FloatingField>
-                      ) : null}
-                    </td>
-                    <td data-label="Tipo de precio">
-                      <FloatingField label="Tipo de precio" className="ventas-concept-field">
-                        <select aria-label={`Tipo de precio del concepto ${index + 1}`} value={item.tipo_precio || "personalizado"} onChange={(event) => choosePriceType(index, event.target.value)}>
-                          {multiple ? <><option value="anticipada">PRINCIPAL</option><option value="puerta">ALTERNATIVO</option></> : null}
-                          {!multiple && product ? <option value="normal">ÚNICO</option> : null}
-                          {product && !multiple && ["anticipada", "puerta"].includes(item.tipo_precio) ? <option value={item.tipo_precio}>HISTÓRICO</option> : null}
-                          {product && multiple && item.tipo_precio === "normal" ? <option value="normal">NORMAL (HISTÓRICO)</option> : null}
-                          <option value="personalizado">MANUAL</option>
-                        </select>
-                      </FloatingField>
-                    </td>
-                    <td data-label="Valor unitario">
-                      <FloatingField label="Valor unitario" className="ventas-concept-field">
-                        <input aria-label={`Precio unitario del concepto ${index + 1}`} type="number" min="0" step="0.01" placeholder=" " value={item.precio_unitario ?? ""} readOnly={!isCustom} title={!isCustom ? "Precio configurado en el producto" : "Ingresá el precio del concepto"} onChange={(event) => editItem(index, { precio_unitario: event.target.value })} />
-                      </FloatingField>
-                    </td>
-                    <td data-label="Cantidad">
-                      <FloatingField label="Cantidad" className="ventas-concept-field">
-                        <input aria-label={`Cantidad del concepto ${index + 1}`} type="number" min="0" max="100000" step="1" placeholder=" " value={item.cantidad ?? 1} onChange={(event) => editItem(index, { cantidad: event.target.value })} />
-                      </FloatingField>
-                    </td>
-                    <td data-label="Subtotal" className="ventas-inline-concepts__subtotal">{money(Number(item.cantidad || 0) * Number(item.precio_unitario || 0))}</td>
-                    <td data-label="Quitar"><button type="button" className="ventas-inline-concepts__remove" title="Quitar concepto" aria-label={`Quitar concepto ${index + 1}`} onClick={() => removeConcept(index)}><FontAwesomeIcon icon={faTrashCan} aria-hidden="true" /></button></td>
-                  </tr>
-                );
-              })}
-              {form.items.length === 0 ? <tr><td colSpan={6} className="ventas-inline-concepts__empty">{isFinalSettlement ? "Liquidación final de ganancia: sin productos ni movimiento de stock." : "Sin conceptos. Agregá un producto para registrar la venta."}</td></tr> : null}
-            </tbody>
-          </table>
-        </div>
-        {!initialId && objectiveEnabled && !finalSettlementAvailable ? (
-          <div className="ventas-order-include-gain">
-            <label className="ventas-check ventas-order-include-gain__check">
-              <input
-                type="checkbox"
-                checked={includeGain}
-                disabled={!canOfferGain}
-                onChange={(event) => setForm((current) => ({ ...current, incluir_ganancia: event.target.checked }))}
-              />
-              <span className="ventas-order-include-gain__copy">
-                <strong>{zeroQuantityOnly ? "Cobrar solamente la ganancia" : "Incluir ganancias en esta venta"}</strong>
-                <small>{!canOfferGain
-                  ? "Disponible para ventas aprobadas con combos o con cantidad 0, si hay ganancia pendiente."
-                  : !includeGain
-                    ? zeroQuantityOnly ? "Activá esta opción para cobrar la ganancia sin productos." : "Desmarcado: solo se cobran los combos. La ganancia no se agrega automáticamente."
-                    : !objectiveReady
-                      ? `Ganancia: ${money(objectiveGainForTotal)}. Se ajustará según las ventas y pagos anteriores cuando selecciones al comprador.`
-                      : objectiveGainForTotal > 0
-                        ? `Se suman ${money(objectiveGainForTotal)} al total. Si luego vende más combos, no se reintegra automáticamente lo abonado.`
-                        : "Esta persona no tiene ganancias pendientes: solo se cobrarán los combos."}</small>
-              </span>
-            </label>
-          </div>
-        ) : null}
-        <div className="ventas-inline-concepts__footer">
-          <div className="ventas-inline-concepts__meta">
-            {objectiveGainForTotal > 0 ? <span>Productos: {money(itemsSubtotal)} · {objectiveGainEstimated ? "Ganancia" : "Ganancia incluida"}: {money(objectiveGainForTotal)}</span> : <span>{form.items.length} {form.items.length === 1 ? "concepto" : "conceptos"}</span>}
-            <FloatingField label="Observación" active textarea className="ventas-modal-field">
-              <textarea rows="2" placeholder="Ej.: Retira el comprobante en secretaría." value={form.observacion || ""} onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
-            </FloatingField>
-          </div>
-          <div className="ventas-inline-concepts__total"><span>{objectiveGainEstimated ? "Total estimado de la venta" : "Total de la venta"}</span><strong>{money(total)}</strong></div>
-        </div>
-      </section>
-      </div>
-
-      </EntityTabPane>
-      <EntityTabPane active={activeTab === "comprador"} disableWhenInactive>
-      <div className={`ventas-order-buyer-layout${objectiveEnabled ? "" : " ventas-order-buyer-layout--single"}`}>
-      <div className="ventas-order-buyer-layout__top">
-      <section className="ventas-modal-section ventas-person-section">
-        <header><div><strong><VentasSectionIcon kind="person" />Comprador o alumno</strong><small>{allDoor ? "Opcional para ventas con precio alternativo (en puerta)." : "Seleccioná una persona para asociar la venta y calcular su objetivo."}</small></div></header>
-        <div className="ventas-buyer-identity">
-          <div className="ventas-person-search">
-            <FloatingField label="Buscar por DNI o nombre" className="ventas-modal-field">
-              <input value={personSearch} placeholder="Ej.: 40123456 o Juan Pérez" onChange={(e) => searchPeople(e.target.value)} />
-            </FloatingField>
-            {peopleLoading ? null : people.length ? (
-              <div className="ventas-search-results">{people.map((person, index) => <button type="button" key={`${person.id_persona || "a"}-${person.id_alumno || index}`} onClick={() => selectPerson(person)}><strong>{person.nombre_apellido}</strong><small>DNI {person.dni}{person.nombre_anio ? ` · ${person.nombre_anio} ${person.nombre_division || ""}` : ""}</small></button>)}</div>
-            ) : null}
-          </div>
-          <div className="ventas-buyer-identity__fields">
-            <FloatingField label="DNI" className="ventas-modal-field">
-              <input inputMode="numeric" placeholder="Ej.: 40123456" value={form.dni || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", dni: e.target.value.replace(/\D/g, "").slice(0, 12) }))} />
-            </FloatingField>
-            <FloatingField label="Nombre y apellido" className="ventas-modal-field">
-              <input placeholder="Ej.: Juan Pérez" value={form.nombre_apellido || ""} onChange={(e) => setForm((v) => ({ ...v, id_venta_persona: "", nombre_apellido: upper(e.target.value, 160) }))} />
-            </FloatingField>
-          </div>
-        </div>
-      </section>
-
-      {objectiveEnabled ? (
-        <section className="ventas-objective-card ventas-order-objective" aria-label="Objetivo de venta de la persona" aria-busy={objectiveBase.loading}>
-          <div className="ventas-objective-card__head">
-            <div>
-              <strong><VentasSectionIcon kind="objective" />Objetivo de venta</strong>
-              <span>Las unidades se acumulan entre compras. Las ganancias solo se cobran si elegís incluirlas o al hacer la liquidación final.</span>
+        <section className="ventas-simple-person" aria-label="Persona de la venta">
+          <div className="ventas-simple-person__fields">
+            <div className="ventas-person-search">
+              <FloatingField label="Nombre y apellido" className="ventas-modal-field">
+                <input value={form.nombre_apellido || ""} placeholder="Escribí apellido y nombre para buscar o cargar" disabled={historicalGain} autoComplete="off"
+                  onChange={(e) => searchPeople(e.target.value)} />
+              </FloatingField>
+              {personOptions("nombre")}
             </div>
-            <span className={`ventas-pill ${hasPersonReference && objectiveMissing === 0 ? "success" : "warning"}`}>
-              {!hasPersonReference ? "SELECCIONAR PERSONA" : objectiveMissing === 0 ? "OBJETIVO CUMPLIDO" : "OBJETIVO PENDIENTE"}
-            </span>
-          </div>
-
-          <div className="ventas-order-objective__summary">
-            <div className="ventas-order-objective__overview">
-              <div className="ventas-order-objective__progress">
-                <div className="ventas-order-objective__progress-labels">
-                  <span>Avance del objetivo</span>
-                  <strong>{objectiveBase.loading || !hasPersonReference ? "—" : `${Math.min(objectiveSold, objectiveMinimum)} de ${objectiveMinimum} unidades`}</strong>
-                </div>
-                <div
-                  className="ventas-order-objective__progress-track"
-                  role="progressbar"
-                  aria-label="Avance del objetivo de ventas"
-                  aria-valuemin={0}
-                  aria-valuemax={objectiveMinimum}
-                  aria-valuenow={objectiveBase.loading || !hasPersonReference ? 0 : Math.min(objectiveSold, objectiveMinimum)}
-                >
-                  <span style={{ width: `${objectiveBase.loading || !hasPersonReference ? 0 : objectiveProgress}%` }} />
-                </div>
-              </div>
-              <div className="ventas-objective-grid ventas-order-objective__grid">
-                <div className="ventas-objective-cell"><small>Mínimo</small><strong>{objectiveMinimum} <span>un.</span></strong></div>
-                <div className="ventas-objective-cell"><small>Vendidas antes</small><strong>{objectiveBase.loading ? "..." : previousQuantity}</strong></div>
-                <div className="ventas-objective-cell"><small>Esta venta</small><strong>{principalQuantity}</strong></div>
-                <div className="ventas-objective-cell"><small>Computables</small><strong>{objectiveBase.loading ? "..." : objectiveSold}</strong></div>
-                <div className="ventas-objective-cell ventas-objective-cell--missing"><small>Faltantes</small><strong>{objectiveBase.loading ? "..." : objectiveMissing}</strong></div>
-              </div>
+            <div className="ventas-person-search">
+              <FloatingField label="DNI" className="ventas-modal-field">
+                <input inputMode="numeric" value={form.dni || ""} placeholder="Escribí el DNI para buscar o cargar" disabled={historicalGain} autoComplete="off"
+                  onChange={(e) => searchDni(e.target.value)} />
+              </FloatingField>
+              {personOptions("dni")}
             </div>
           </div>
         </section>
-      ) : null}
-      </div>
-
-      {/* Ambas tarjetas se ubican después de la fila superior para ocupar el ancho completo. */}
-      {objectiveEnabled ? (
-        <div className="ventas-order-objective__payable" aria-busy={objectiveBase.loading}>
-          <span>{isFinalSettlement ? "Ganancia final a cobrar" : gainOnlyNow ? "Ganancia a cobrar (0 productos)" : includeGain ? "Ganancia incluida en esta venta" : "Ganancia pendiente (no incluida en el cobro)"}</span>
-          <strong className="ventas-money">{money(objectiveDue)}</strong>
-          <small>{!objectiveReady ? "Importe estimado hasta consultar las ventas y ganancias anteriores del comprador. No se puede confirmar el cobro sin identificarlo." : objectiveDue === 0 ? "Objetivo cumplido o ganancia ya saldada." : isFinalSettlement ? "Solo se registrará al confirmar esta liquidación." : includeGain ? "Se suma al total de productos al confirmar. El importe ya pagado no se suma otra vez." : "Estimación informativa: no se cobra salvo que actives Incluir ganancias."}</small>
+        <div className="ventas-simple-quantities">
+          <section className="ventas-simple-quantity" aria-label="Productos vendidos">
+            <strong>Productos vendidos</strong>
+            <p>¿Cuántos combos vendió?</p>
+            {singleItem ? (
+              <>
+                <input aria-label="Cantidad de productos vendidos" type="number" min="0" max="100000" step="1"
+                  value={mainItem?.cantidad ?? 0} disabled={(!mainItem?.id_producto && !editing) || historicalGain || (!editing && endedCampaign)}
+                  onChange={(e) => editItem(0, { cantidad: e.target.value })} />
+                <small>{mainItem?.producto_nombre || "Seleccioná una campaña"} · {money(mainItem?.precio_unitario)}</small>
+                {multiplePrices && !historicalGain && (editing || !endedCampaign) ? (
+                  <select aria-label="Precio del combo" value={mainItem.tipo_precio} onChange={(e) => choosePriceType(0, e.target.value)}>
+                    <option value="anticipada">PRECIO PRINCIPAL</option><option value="puerta">PRECIO ALTERNATIVO</option>
+                    {!['anticipada', 'puerta'].includes(mainItem.tipo_precio) ? <option value={mainItem.tipo_precio}>PRECIO ORIGINAL</option> : null}
+                  </select>
+                ) : null}
+              </>
+            ) : (
+              <div className="ventas-simple-items">
+                {form.items.map((item, index) => (
+                  <label key={item.id_item || index} className="ventas-simple-item">
+                    <span>{item.producto_nombre} · {money(item.precio_unitario)} c/u</span>
+                    <input aria-label={`Cantidad de ${item.producto_nombre}`} type="number" min="0" step="1" max="100000"
+                      value={item.cantidad} disabled={historicalGain} onChange={(e) => editItem(index, { cantidad: e.target.value })} />
+                  </label>
+                ))}
+              </div>
+            )}
+            <span className="ventas-simple-quantity__subtotal">Subtotal: <strong>{money(productTotal)}</strong></span>
+          </section>
+          <section className="ventas-simple-quantity" aria-label="Ganancias a cobrar">
+            <strong>Ganancias a cobrar</strong>
+            <p>¿Cuántas unidades paga como ganancia?</p>
+            <input aria-label="Cantidad de ganancias" type="number" min="0" max={objectiveReady ? availableGains : minimum} step="1"
+              value={form.cantidad_ganancias ?? 0} disabled={editing || !objectiveEnabled}
+              onChange={(e) => setForm((v) => ({ ...v, cantidad_ganancias: e.target.value }))} />
+            <small>{historicalGain ? "Ganancias ya cobradas: no se pueden volver a calcular al editar."
+              : editing ? "No se pueden agregar ganancias a una venta ya registrada."
+              : minimum > 0 ? `${money(perMissing)} por unidad faltante${noSales > 0 ? ` · ${money(noSales)} si no vendió ninguna y paga todo` : ""}`
+              : "Esta campaña no tiene ganancias configuradas"}</small>
+            <span className="ventas-simple-quantity__subtotal">Subtotal: <strong>{historicalGain ? money(form.ganancia_objetivo) : gainQuantity > 0 && !objectiveReady && !editing ? "Seleccioná un DNI" : money(gainPreview)}</strong></span>
+          </section>
         </div>
-      ) : null}
-
-      {objectiveEnabled ? (
-        <div className="ventas-objective-card__rule">
-          <strong><VentasSectionIcon kind="calculation" />Regla de la campaña</strong>
-          <span>Por cada unidad faltante: {money(objectivePerMissing)} · Si no vende ninguna: {money(objectiveNoSales)}.</span>
-          {objectiveReady && Number(objectiveBase.ganancia_cobrada_previa || 0) > 0 ? <span>Ganancia ya cobrada en otras ventas: {money(objectiveBase.ganancia_cobrada_previa)}. No se cobra otra vez.</span> : null}
-          {form.estado !== "aprobada" ? <span>Esta venta está {stateLabel(form.estado)} y sus unidades no se computarán hasta quedar PAGADA.</span> : null}
-          {!finalSettlementAvailable && !initialId ? <span>Podés cobrar la ganancia junto con los combos o poner cantidad 0 para cobrar solamente la ganancia (casilla en Datos de la venta). Se descontará lo ya pagado. Después de la fecha de fin sigue disponible la liquidación final.</span> : null}
-          {finalSettlementAvailable && !isFinalSettlement ? <span>El plazo de venta de productos terminó. Para registrar una ganancia ya cobrada, seleccioná la liquidación final.</span> : null}
-          {finalSettlementAvailable ? (
-            <label className="ventas-note" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="checkbox" checked={isFinalSettlement} onChange={(event) => setForm((v) => ({
-                ...v, liquidar_ganancia: event.target.checked,
-                estado: event.target.checked ? "aprobada" : v.estado,
-                items: event.target.checked ? [] : [itemDeCampania(selectedCampaign, products)],
-              }))} />
-              Registrar solamente la ganancia final ya cobrada (sin productos)
-            </label>
-          ) : null}
-          {!hasPersonReference ? <span>Seleccioná un alumno/persona o ingresá su DNI para calcular lo vendido anteriormente y la ganancia real pendiente.</span> : null}
+        {!editing && objectiveEnabled && hasPersonReference ? (
+          <div className="ventas-simple-status" aria-live="polite">
+            {objectiveBase.loading || !objectiveReady ? "Consultando registros anteriores…" : `Ya tiene ${soldBefore} productos vendidos y ${gainsBefore} unidades de ganancia registradas. Podés agregar hasta ${availableGains} ganancias en esta carga.`}
+          </div>
+        ) : null}
+        {!editing && quantitiesValid && gainQuantity > availableGains && objectiveReady ? <div className="ventas-simple-error" role="alert">Hay más ganancias que unidades pendientes. Corregí la cantidad.</div> : null}
+        {historicalGain ? <div className="ventas-simple-status">Esta venta incluye ganancias cobradas. Para proteger el importe, solo se puede modificar su observación.</div> : null}
+        {editing && form.estado !== "aprobada" && !historicalGain ? (
+          <FloatingField label="Estado de pago" className="ventas-modal-field">
+            <select value={form.estado} disabled={form.origen === "bot_whatsapp"} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>
+              <option value="aprobada">PAGADA</option><option value="pendiente">PENDIENTE</option>
+            </select>
+          </FloatingField>
+        ) : null}
+        <div className="ventas-simple-extras">
+          <FloatingField label="Fecha de pago" className="ventas-modal-field">
+            <input type="date" value={form.fecha_venta || ""} required disabled={historicalGain}
+              onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
+          </FloatingField>
+          <FloatingField label="Observaciones" textarea className="ventas-modal-field">
+            <textarea rows="2" maxLength="3000" value={form.observacion || ""} placeholder="Observaciones de esta venta (opcional)"
+              onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
+          </FloatingField>
         </div>
-      ) : null}
+        <div className="ventas-simple-bottom">
+          <div><span>Total a cobrar</span><strong>{!editing && gainQuantity > 0 && !objectiveReady ? "Elegí a la persona" : money(total)}</strong></div>
+        </div>
+        {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. La carga se registra como pagada.</small> : null}
       </div>
-      </EntityTabPane>
-      </CrudModal>
+    </CrudModal>
   );
 }

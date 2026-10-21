@@ -4358,3 +4358,79 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
     gap: 10px;
   }
 }
+
+/* Nueva venta: captura directa de unidades vendidas y ganancias. */
+.ventas-order-simple .entity-modal__body { overflow-x: hidden; }
+.ventas-simple-form { display: grid; gap: 16px; padding: 4px 2px 12px; }
+.ventas-simple-top, .ventas-simple-person__fields, .ventas-simple-quantities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ventas-simple-person { display: grid; gap: 10px; }
+.ventas-simple-person h3 { font-size: 16px; margin: 0; font-weight: 750; }
+.ventas-simple-person .ventas-person-search { position: relative; }
+.ventas-simple-person .ventas-search-results { z-index: 8; }
+.ventas-simple-quantity { display: flex; flex-direction: column; gap: 8px; padding: 18px; border: 1px solid var(--border, #d9dee8); border-radius: 14px; background: var(--card-bg, #f8fafc); min-width: 0; }
+.ventas-simple-quantity > strong { font-size: 17px; }
+.ventas-simple-quantity > p { margin: 0; font-size: 13px; }
+.ventas-simple-quantity > input { width: 100%; max-width: 180px; height: 55px; padding: 8px 15px; border: 1px solid #aab8c9; border-radius: 10px; background: var(--background, white); color: inherit; font-size: 26px; font-weight: 700; }
+.ventas-simple-quantity > input:focus-visible { outline: 2px solid #367ec4; outline-offset: 1px; }
+.ventas-simple-quantity > input:disabled { opacity: .6; }
+.ventas-simple-quantity > small { font-size: 12px; line-height: 1.5; opacity: .85; }
+.ventas-simple-quantity > select { width: 100%; max-width: 260px; min-height: 35px; border: 1px solid #acb7c7; border-radius: 8px; background: var(--background, white); color: inherit; }
+.ventas-simple-quantity__subtotal { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid #cbd5e1; font-size: 13px; }
+.ventas-simple-quantity__subtotal strong { font-size: 15px; }
+.ventas-simple-status { padding: 11px 14px; border: 1px solid #d7dfed; border-radius: 9px; font-size: 13px; line-height: 1.5; }
+.ventas-simple-error { font-size: 13px; color: #b42318; font-weight: 700; }
+.ventas-simple-bottom { padding: 15px 18px; border: 1px solid #ced8e6; border-radius: 12px; }
+.ventas-simple-bottom > div { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; }
+.ventas-simple-bottom > div > strong { font-size: 25px; font-variant-numeric: tabular-nums; }
+.ventas-simple-bottom details { margin-top: 10px; }
+.ventas-simple-bottom summary { font-size: 12px; cursor: pointer; opacity: .85; }
+.ventas-simple-extras { display: grid; gap: 10px; margin-top: 10px; }
+.ventas-simple-tip { display: block; font-size: 12px; line-height: 1.5; }
+@media (max-width: 670px) {
+  .ventas-simple-top, .ventas-simple-person__fields, .ventas-simple-quantities, .ventas-simple-extras { grid-template-columns: minmax(0, 1fr); }
+  .ventas-simple-quantity { padding: 14px; }
+  .ventas-simple-bottom > div > strong { font-size: 21px; }
+}
+
+/* El nombre de la campaña no puede quedar reducido a «OCTUBRE 2026 · VENTA D…».
+   Reservar espacio real y pasar los filtros a otra línea antes de truncar. */
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--campaign {
+  flex: 1 1 300px !important;
+  width: auto !important;
+  min-width: min(270px, 100%) !important;
+  max-width: 410px !important;
+}
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--campaign .module-filterControl {
+  width: 100%;
+  min-width: 0;
+}
+@container (max-width: 1250px) {
+  .ventas-page--orders .module-headFilters { flex-wrap: wrap; justify-content: flex-start; }
+  .ventas-page--orders .module-headFilters > .ventas-orders-filter--campaign { flex: 1 1 270px !important; max-width: 100% !important; }
+}
+
+/* Ventas registradas: mostrar las observaciones debajo del alumno, sin agregar columnas. */
+.ventas-grid--orders .ventas-order-observation {
+  display: block; margin-top: 5px; color: var(--balto-ink-muted, #64748b);
+  font-size: 11px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere;
+  white-space: normal; max-width: 100%;
+}
+/* Alta y edición comparten formulario; no hay buscador ni caja de opcionales duplicados. */
+.ventas-order-simple .ventas-simple-extras {
+  display: grid; grid-template-columns: minmax(175px, .75fr) minmax(0, 1.6fr);
+  gap: 14px; align-items: start; margin: 0;
+}
+.ventas-order-simple .ventas-simple-extras textarea { min-height: 68px; resize: vertical; }
+.ventas-order-simple .ventas-simple-person .ventas-person-search { min-width: 0; }
+.ventas-order-simple .ventas-simple-person .ventas-search-results { top: calc(100% + 4px); }
+.ventas-order-simple .ventas-simple-items { display: grid; gap: 10px; width: 100%; }
+.ventas-order-simple .ventas-simple-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.ventas-order-simple .ventas-simple-item input { width: 84px; min-width: 75px; border: 1px solid #aab8c9; border-radius: 8px; padding: 9px; color: inherit; background: var(--background, #fff); }
+@media (max-width: 670px) {
+  .ventas-order-simple .ventas-simple-extras { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* El nombre ya ES el buscador: evitar un recuadro adicional alrededor del mismo campo. */
+.ventas-order-simple .ventas-simple-person .ventas-person-search {
+  padding: 0; border: 0; border-radius: 0; background: transparent;
+}

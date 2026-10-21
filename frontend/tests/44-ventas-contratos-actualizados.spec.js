@@ -18,7 +18,8 @@ test("Ventas API: modalidades explícitas y preservación de ingresos, stock y g
     "if ($gainOnly)", "retirado=1", "ganancia ya cobrada",
   ]) expect(php).toContain(piece);
   expect(php).toContain("($body['incluir_ganancia'] ?? false)");
-  expect(php).toContain("$objectiveGain=($finalSettlement || $incluirGanancia)");
+  expect(php).toContain('objectiveChargeForQuantities');
+  expect(php).toContain('$finalSettlement || $incluirGanancia');
   expect(php).toContain("$gainOnly = $items === []");
 });
 
@@ -35,16 +36,23 @@ test("Ventas API: Eliminar es DELETE físico, no CANCELAR, restituye stock e ing
   expect(routes).toContain("ventas_orden_eliminar");
 });
 
-test("Ventas UI: casilla de incluir ganancia y cobro de solo productos o solo ganancia", () => {
+test("Ventas UI: nueva venta presenta campos independientes para productos y ganancias", () => {
   const modal = front("modales", "VentaModal.jsx");
   for (const piece of [
-    "incluir_ganancia: true", "incluir_ganancia: false", "checked={includeGain}",
-    "Cobrar solamente la ganancia", "Incluir ganancias en esta venta",
-    "zeroQuantityOnly", "gainOnlyNow", "objectiveReady", "objectiveGainForTotal",
-    "incluir_ganancia: includeGain && objectiveReady", "canSettleGainOnly",
-    "itemsSubtotal", "selectedCampaign", "id_producto_principal", "Tipo de precio",
+    'Cantidad de productos vendidos', 'Cantidad de ganancias',
+    'cantidad_ganancias: editing ? 0 : gainQuantity', 'availableGains',
+    'gainPreview', 'finalSettlement', 'canSave',
+    'incluir_ganancia: !editing && gainQuantity > 0 && !finalSettlement',
+    'liquidar_ganancia: !editing && finalSettlement',
+    'DNI', 'Nombre y apellido', 'Total a cobrar',
   ]) expect(modal).toContain(piece);
-  expect(modal).toContain("(isFinalSettlement ? 0 : itemsSubtotal) + objectiveGainForTotal");
+  const php = back("ventas_ordenes.php");
+  expect(php).toContain('objectiveChargeForQuantities');
+  expect(php).toContain('VENTA_GANANCIAS_EXCEDEN_PENDIENTES');
+  expect(php).toContain('cantidad_ganancias');
+  // La referencia histórica del bot se conserva al editar, pero ya no se envía desde el modal.
+  expect(php).toContain("!array_key_exists('referencia_pago', $body)");
+  expect(modal).not.toContain('referencia_pago:');
 });
 
 test("Ventas UI: eliminar se solicita por ID sin convertir la orden en cancelada", () => {

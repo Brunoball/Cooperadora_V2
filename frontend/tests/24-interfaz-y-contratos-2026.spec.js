@@ -48,14 +48,15 @@ test("Clientes React: todas las acciones de API declaradas existen en el router"
   expect([...used].filter((name) => !registered.has(name))).toEqual([]);
 });
 
-test("Ventas: el formulario usa una tabla de ítems, precarga el producto y solicita el objetivo al servidor", () => {
+test("Ventas: el formulario simple conserva stock, precios, objetivo y búsqueda por nombre/DNI", () => {
   const modal = readSource("components", "Ventas", "modales", "VentaModal.jsx");
-  expect(modal).toContain("itemDeCampania(activeCampaign, products)");
+  expect(modal).toContain("itemDeCampania(campaign, products)");
   expect(modal).toContain("ventasApi.objetivoPersona(");
-  expect(modal).toContain("objectiveGainForTotal");
-  expect(modal).toContain("itemsSubtotal");
-  expect(modal).toContain("addConcept");
+  expect(modal).toContain("gainPreview");
+  expect(modal).toContain("productTotal");
+  expect(modal).toContain("billableItems");
   expect(modal).toContain("choosePriceType");
+  expect(modal).toContain('queuePersonSearch(numericDni, "dni")');
   // El modal delega los errores al feedback compartido de Ventas.
   // El toast global se publica desde el hook, no directamente desde el modal.
   const ventas = readSource("components", "Ventas", "Ventas.jsx");
@@ -149,8 +150,8 @@ test("Interfaz: ventas registradas muestra el selector vigente y permite abrir N
   await page.getByRole("button", { name: /nueva venta/i }).first().click();
   const dialog = page.getByRole("dialog", { name: /nueva venta/i });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("tab", { name: /comprador y objetivo/i })).toBeVisible();
-  await expect(dialog.getByText("Productos y conceptos")).toBeVisible();
+  await expect(dialog.getByRole("spinbutton", { name: "Cantidad de productos vendidos" })).toBeVisible();
+  await expect(dialog.getByRole("spinbutton", { name: "Cantidad de ganancias" })).toBeVisible();
   await dialog.getByRole("button", { name: /cancelar/i }).click();
   expect(errors).toEqual([]);
 });

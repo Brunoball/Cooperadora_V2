@@ -117,21 +117,26 @@ test("Editar matrícula PAGADA: permite cambiar todos los campos y guardar los d
   await row.getByRole("button", { name: /editar/i }).click();
   const modal = page.getByRole("dialog", { name: /editar ingresante/i });
   await expect(modal).toBeVisible();
-  for (const label of ["DNI *", "Ciclo lectivo *", "Matrícula pagada", "Monto matrícula *", "Fecha de pago *"]) {
-    await expect(modal.getByLabel(label, { exact: true }), `Campo habilitado: ${label}`).toBeEnabled();
-  }
-  await expect(modal.getByRole("combobox", { name: "Medio de pago", exact: true })).toBeEnabled();
-  await expect(modal.getByRole("combobox", { name: /ingresa a/i })).toBeEnabled();
-  for (const label of ["Apellido *", "Nombre *", "Fecha de inscripción *"]) {
+  // El modal tiene dos pestañas. Los campos de la inactiva se deshabilitan
+  // correctamente por fieldset; cambiar de pestaña antes de interactuar.
+  for (const label of ["DNI *", "Ciclo lectivo *", "Apellido *", "Nombre *", "Fecha de inscripción *"]) {
     await expect(modal.getByLabel(label, { exact: true }), `Campo editable: ${label}`).toBeEnabled();
   }
-  const observaciones = modal.getByRole("textbox", { name: "Observaciones", exact: true });
-  await expect(observaciones).toBeEnabled();
-  const nuevaObservacion = `PW E2E OBS ${suffix()}`;
+  await expect(modal.getByRole("combobox", { name: /ingresa a/i })).toBeEnabled();
   const dniCorregido = testDni();
   await modal.getByLabel("DNI *").fill(dniCorregido);
   await expect(modal.getByLabel("Teléfono", { exact: true })).toBeEnabled();
   await modal.getByLabel("Teléfono", { exact: true }).fill("3492123456");
+
+  await modal.getByRole("tab", { name: "Matrícula y observaciones" }).click();
+  await expect(modal.getByRole("tab", { name: "Matrícula y observaciones" })).toHaveAttribute("aria-selected", "true");
+  for (const label of ["Matrícula pagada", "Monto matrícula *", "Fecha de pago *"]) {
+    await expect(modal.getByLabel(label, { exact: true }), `Campo habilitado: ${label}`).toBeEnabled();
+  }
+  await expect(modal.getByRole("combobox", { name: "Medio de pago", exact: true })).toBeEnabled();
+  const observaciones = modal.getByRole("textbox", { name: "Observaciones", exact: true });
+  await expect(observaciones).toBeEnabled();
+  const nuevaObservacion = `PW E2E OBS ${suffix()}`;
   await modal.getByLabel("Monto matrícula *").fill("41500.25");
   await observaciones.fill(nuevaObservacion);
   await modal.getByRole("button", { name: /guardar cambios/i }).click();
@@ -156,6 +161,8 @@ test("Editar matrícula NO PAGADA: los datos personales/ciclo y la casilla de ma
   const modal = page.getByRole("dialog", { name: /editar ingresante/i });
   await expect(modal.getByLabel("DNI *")).toBeEnabled();
   await expect(modal.getByLabel("Ciclo lectivo *")).toBeEnabled();
+  await modal.getByRole("tab", { name: "Matrícula y observaciones" }).click();
+  await expect(modal.getByRole("tab", { name: "Matrícula y observaciones" })).toHaveAttribute("aria-selected", "true");
   await expect(modal.getByLabel("Matrícula pagada")).toBeEnabled();
   await expect(modal.getByLabel("Matrícula pagada")).not.toBeChecked();
   await modal.getByLabel("Matrícula pagada").check();

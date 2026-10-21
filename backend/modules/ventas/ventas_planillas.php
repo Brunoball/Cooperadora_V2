@@ -266,7 +266,7 @@ trait VentasPlanillas
         // Una fila por orden: no sumar o.total sobre un JOIN directo de ítems.
         // El historial de precios se obtiene sólo de los ítems aprobados.
         $sql = 'SELECT o.id_orden,o.codigo_orden,o.origen,o.id_venta_persona,
-                       o.total,o.ganancia_objetivo,o.observacion,
+                       o.total,o.ganancia_objetivo,o.cantidad_ganancias,o.observacion,
                        vp.id_alumno AS persona_id_alumno,vp.dni AS persona_dni,
                        vp.nombre_apellido AS persona_nombre,
                        COALESCE(oi.cantidad_principal,0) AS cantidad_principal,
@@ -357,12 +357,13 @@ trait VentasPlanillas
             else $bucket = &$byTeacher;
             if (!isset($bucket[$ownerId])) {
                 $bucket[$ownerId] = [
-                    'cantidad_vendida' => 0, 'importe_productos' => 0.0,
+                    'cantidad_vendida' => 0, 'cantidad_ganancias' => 0, 'importe_productos' => 0.0,
                     'ganancia_cobrada' => 0.0, 'importe_cobrado' => 0.0,
                     'ordenes_aprobadas' => 0, 'observaciones' => [],
                 ];
             }
             $bucket[$ownerId]['cantidad_vendida'] += $units;
+            $bucket[$ownerId]['cantidad_ganancias'] += (int)($order['cantidad_ganancias'] ?? 0);
             $bucket[$ownerId]['importe_productos'] += $products;
             $bucket[$ownerId]['ganancia_cobrada'] += $gain;
             $bucket[$ownerId]['importe_cobrado'] += $amount;
@@ -388,11 +389,18 @@ trait VentasPlanillas
             $summary = $stats[$id] ?? [];
             $sold = (int)($summary['cantidad_vendida'] ?? 0);
             $objective = self::objectiveForSold($campaign, $sold);
+            $paidUnits = (int)($summary['cantidad_ganancias'] ?? 0);
+            $remainingUnits = max(0, (int)$objective['cantidad_faltante'] - $paidUnits);
+            $objective['cantidad_faltante'] = $remainingUnits;
+            if ($remainingUnits === 0) {
+                $objective['objetivo_cumplido'] = 1;
+                $objective['estado_objetivo'] = 'CUMPLIDO';
+            }
             $determined = (float)$objective['ganancia_pendiente'];
             $collected = (float)($summary['ganancia_cobrada'] ?? 0);
             $row = array_merge($row, $objective, [
                 // Compatibilidad con consumers previos.
-                'cantidad_ven' => $sold, 'cantidad_gan' => 0,
+                'cantidad_ven' => $sold, 'cantidad_gan' => $paidUnits,
                 'cantidad_vendida' => $sold,
                 'ganancia_determinada' => round($determined, 2),
                 'ganancia_cobrada' => round($collected, 2),

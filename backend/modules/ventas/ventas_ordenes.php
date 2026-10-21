@@ -101,6 +101,60 @@ trait VentasOrdenes
         return round(max(0.0, $due - (float)($previousGain['cobrado'] ?? 0)), 2);
     }
 
+    /**
+     * Carga manual por unidades: permite ventas, ganancias o ambas combinadas.
+     * No reusa el cargo automático legado: sólo factura las unidades indicadas.
+     * La fila de ventas_personas ya está bloqueada por guardarOrden.
+     */
+    private static function objectiveChargeForQuantities(
+        PDO $db, array $campaign, int $personId, array $items, int $requested
+    ): float {
+        $minimum = max(0, (int)($campaign['cantidad_minima_persona'] ?? 0));
+        $principalId = (int)($campaign['id_producto_principal'] ?? 0);
+        if ($requested <= 0 || $minimum <= 0 || $principalId <= 0) {
+            api_error('No hay ganancias configuradas para esta campaña.', 'VENTA_GANANCIA_SIN_SALDO', 422);
+        }
+        $soldRow = self::fetchOne($db,
+            "SELECT COALESCE(SUM(oi.cantidad),0) AS vendidas
+               FROM ventas_ordenes o JOIN ventas_orden_items oi ON oi.id_orden=o.id_orden
+              WHERE o.id_venta_persona=? AND o.id_campania=? AND o.estado='aprobada' AND oi.id_producto=?",
+            [$personId, (int)$campaign['id_campania'], $principalId]
+        );
+        $sold = max(0, (int)($soldRow['vendidas'] ?? 0));
+        foreach ($items as $item) {
+            if ((int)($item['id_producto'] ?? 0) === $principalId) $sold += (int)$item['cantidad'];
+        }
+        $paid = self::fetchOne($db,
+            "SELECT COALESCE(SUM(cantidad_ganancias),0) AS unidades,
+                    COALESCE(SUM(ganancia_objetivo),0) AS importe,
+                    COALESCE(SUM(CASE WHEN cantidad_ganancias=0 THEN ganancia_objetivo ELSE 0 END),0) AS importe_legado
+               FROM ventas_ordenes
+              WHERE id_venta_persona=? AND id_campania=? AND estado='aprobada'",
+            [$personId, (int)$campaign['id_campania']]
+        );
+        $unitPrice = max(0.0, (float)($campaign['ganancia_unidad_faltante'] ?? 0));
+        $legacyUnits = $unitPrice > 0 ? (int)ceil(max(0.0, (float)($paid['importe_legado'] ?? 0)) / $unitPrice - 0.0000001) : 0;
+        $paidUnits = (int)($paid['unidades'] ?? 0) + $legacyUnits;
+        $remaining = max(0, $minimum - $sold - $paidUnits);
+        if ($requested > $remaining) {
+            api_error('La cantidad de ganancias supera lo pendiente para esta persona.', 'VENTA_GANANCIAS_EXCEDEN_PENDIENTES', 422);
+        }
+        $paidAmount = (float)($paid['importe'] ?? 0);
+        $maximumAmount = $sold === 0
+            ? max(0.0, (float)($campaign['ganancia_total_sin_ventas'] ?? 0))
+            : max(0, $minimum - $sold) * $unitPrice;
+        // Cuando no se vendió ningún producto y se cubren todas las unidades,
+        // el cargo especial de "sin ventas" se aplica una única vez; los
+        // pagos parciales anteriores se descuentan del total configurado.
+        $requestedAmount = $sold === 0 && $requested === $remaining
+            ? $maximumAmount - $paidAmount : $requested * $unitPrice;
+        $amount = round(min(max(0.0, $requestedAmount), max(0.0, $maximumAmount - $paidAmount)), 2);
+        if ($amount <= 0) {
+            api_error('No queda importe de ganancia para cobrar.', 'VENTA_GANANCIA_SIN_SALDO', 422);
+        }
+        return $amount;
+    }
+
     // Funciones auxiliares de órdenes y stock
     private static function order(PDO $db, int $id, bool $forUpdate = false): array
     {
@@ -701,8 +755,11 @@ trait VentasOrdenes
         // expresamente; la liquidación final sin productos mantiene su modo propio.
         $liquidarGanancia = self::boolValue($body['liquidar_ganancia'] ?? false) === 1;
         $incluirGanancia = self::boolValue($body['incluir_ganancia'] ?? false) === 1;
+        // null mantiene el contrato antiguo (importe pendiente completo).
+        $cantidadGanancias = array_key_exists('cantidad_ganancias', $body)
+            ? self::integer($body['cantidad_ganancias'], 'cantidad de ganancias', 0, 100000) : null;
 
-        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor,$liquidarGanancia,$incluirGanancia){
+        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor,$liquidarGanancia,$incluirGanancia,$cantidadGanancias){
             $campaign=self::campaign($db,$campaignId,true);
             // Un cierre definitivo tiene prioridad sobre cualquier validación
             // propia del detalle de la venta (incluida ganancia histórica).
@@ -712,6 +769,11 @@ trait VentasOrdenes
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
             $before=$id?self::order($db,$id,true):null;
+            // La referencia del cobro (bot/transferencia) es interna. El formulario
+            // manual ya no la edita; conservarla al corregir una venta histórica.
+            if ($before && !array_key_exists('referencia_pago', $body)) {
+                $reference = $before['referencia_pago'];
+            }
             if ($before && (int)$before['id_campania'] !== $campaignId) api_error('No se puede mover una venta a otra campaña.', 'VENTA_CAMPANIA_INMUTABLE', 409);
             // El bot registra ventas únicamente después de confirmar el pago.
             // Una edición manual no puede volver pendiente ese cobro confirmado.
@@ -730,6 +792,12 @@ trait VentasOrdenes
                 api_error('La fecha de venta tiene que estar dentro de la vigencia de la campaña.', 'VENTA_FECHA_FUERA_DE_RANGO', 409);
             }
             $oldItems=$id?self::orderItems($db,$id):[];
+            if ($cantidadGanancias !== null && (($cantidadGanancias > 0) !== ($incluirGanancia || $liquidarGanancia))) {
+                api_error('Las cantidades de ganancia y la modalidad seleccionada no coinciden.', 'VENTA_GANANCIAS_INVALIDAS', 422);
+            }
+            if ($cantidadGanancias !== null && $cantidadGanancias > 0 && ($id || $state !== 'aprobada')) {
+                api_error('Las ganancias sólo se registran en nuevas ventas pagadas.', 'VENTA_GANANCIA_NO_DISPONIBLE', 409);
+            }
             if ($incluirGanancia && ($liquidarGanancia || $id || $state !== 'aprobada')) {
                 api_error('La ganancia solo puede incluirse al crear una venta manual aprobada.', 'VENTA_GANANCIA_NO_DISPONIBLE', 409);
             }
@@ -769,9 +837,13 @@ trait VentasOrdenes
                     api_error('Para cobrar ganancias, seleccioná una persona. Si registrás productos, incluí al menos un combo de la campaña.', 'VENTA_GANANCIA_REQUIERE_COMBOS', 422);
                 }
             }
-            $objectiveGain=($finalSettlement || $incluirGanancia)
-                ? self::objectiveChargeForOrder($db,$campaign,$personId,null,$incluirGanancia ? $items : [],'aprobada')
-                : (($before && $state==='aprobada') ? max(0.0,(float)$before['ganancia_objetivo']) : 0.0);
+            $objectiveGain = (($finalSettlement || $incluirGanancia) && $cantidadGanancias !== null && $cantidadGanancias > 0)
+                ? self::objectiveChargeForQuantities($db, $campaign, (int)$personId, $items, $cantidadGanancias)
+                : (($finalSettlement || $incluirGanancia)
+                    ? self::objectiveChargeForOrder($db,$campaign,$personId,null,$incluirGanancia ? $items : [],'aprobada')
+                    : (($before && $state==='aprobada') ? max(0.0,(float)$before['ganancia_objetivo']) : 0.0));
+            // Las órdenes antiguas siguen conservando su importe original.
+            $quantityToStore = $cantidadGanancias ?? 0;
             if ($incluirGanancia && $objectiveGain <= 0) {
                 api_error('La persona no tiene ganancias pendientes para incluir. Guardá la venta sin marcar la casilla.', 'VENTA_GANANCIA_SIN_SALDO', 422);
             }
@@ -796,14 +868,14 @@ trait VentasOrdenes
                 $keepRetreat=$nowApproved && $before && $before['estado']==='aprobada';
                 $retired=$keepRetreat ? (int)$before['retirado'] : 0;
                 $retiredAt=$keepRetreat && $retired ? $before['retirado_en'] : null;
-                $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,ganancia_objetivo=?,id_medio_pago=?,referencia_pago=?,observacion=?,fecha_venta=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=? WHERE id_orden=?')
-                    ->execute([$campaignId,$personId,$state,$total,$objectiveGainDb,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$retired,$retiredAt,$id]);
+                $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,ganancia_objetivo=?,cantidad_ganancias=?,id_medio_pago=?,referencia_pago=?,observacion=?,fecha_venta=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=? WHERE id_orden=?')
+                    ->execute([$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$retired,$retiredAt,$id]);
                 $db->prepare('DELETE FROM ventas_orden_items WHERE id_orden=?')->execute([$id]);
                 $orderId=$id;
             }else{
                 $code=self::generateOrderCode($db);
-                $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,?,\'manual\',?,?,?,?,?)')
-                    ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt]);
+                $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,cantidad_ganancias,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,?,?,\'manual\',?,?,?,?,?)')
+                    ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt]);
                 $orderId=(int)$db->lastInsertId();
                 // Un cobro solo de ganancia no tiene productos para retirar,
                 // incluso cuando se registra antes del cierre de campaña.
@@ -820,6 +892,42 @@ trait VentasOrdenes
             return $after;
         });
         api_success(['item'=>$saved],$id?'Venta actualizada.':'Venta registrada.');
+    }
+
+    /**
+     * Corrección de observaciones en ventas que ya cobraron ganancias.
+     * No pasa por guardarOrden, porque ese flujo recalcula stock e importes
+     * y protege expresamente las ganancias históricas.
+     * Esta ruta NO permite cambiar persona, fecha, estado, monto ni conceptos.
+     */
+    public static function guardarObservacionOrden(): never
+    {
+        $db = self::db();
+        $auth = self::auth();
+        $body = request_body();
+        $id = positive_id($body['id_orden'] ?? null, 'venta');
+        $observation = optional_text($body['observacion'] ?? null, 3000);
+        $saved = transaction($db, function () use ($db, $auth, $id, $observation): array {
+            $reference = self::fetchOne($db, 'SELECT id_campania FROM ventas_ordenes WHERE id_orden=?', [$id]);
+            if (!$reference) api_error('La venta no existe.', 'VENTA_NO_ENCONTRADA', 404);
+            $campaign = self::campaign($db, (int)$reference['id_campania'], true);
+            if ($campaign['estado_cierre'] === 'cerrada') {
+                api_error('El historial está cerrado.', 'VENTA_CAMPANIA_CERRADA', 409);
+            }
+            $before = self::order($db, $id, true);
+            // No se deben usar esta ruta ni sus parámetros para modificar
+            // ventas sin ganancia o para alterar datos económicos del cobro.
+            if ((float)$before['ganancia_objetivo'] <= 0) {
+                api_error('La observación de esta venta se edita desde la venta habitual.', 'VENTA_EDICION_INVALIDA', 409);
+            }
+            $db->prepare('UPDATE ventas_ordenes SET observacion=? WHERE id_orden=?')
+                ->execute([$observation, $id]);
+            $after = self::order($db, $id);
+            audit_change($db, $auth, 'VENTAS', 'EDITAR_OBSERVACION', 'ventas_ordenes', $id,
+                'Se editó únicamente la observación, sin modificar el cobro.', $before, $after);
+            return $after;
+        });
+        api_success(['item' => $saved], 'Observación actualizada.');
     }
 
     public static function retiroOrden(): never

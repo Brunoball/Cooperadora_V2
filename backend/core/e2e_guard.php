@@ -534,6 +534,10 @@ function e2e_assert_sales_order_payload(PDO $db, string $action, array $body): v
     $rawOrder = $body['id_orden'] ?? $body['id'] ?? null;
     if ($rawOrder !== null && trim((string)$rawOrder) !== '') {
         e2e_assert_target($db, $action, 'ventas_orden', $rawOrder);
+        // No perder la marca usada por el limpiador E2E al editar una orden.
+        if (!e2e_sales_creation_marker(trim((string)($body['observacion'] ?? '')), 'PW E2E VTA ORDEN ')) {
+            e2e_scope_error($action, 'La observación E2E debe conservar el prefijo PW E2E VTA ORDEN.');
+        }
     } else {
         $observation = trim((string)($body['observacion'] ?? ''));
         if ($observation !== '' && !e2e_sales_creation_marker($observation, 'PW E2E VTA ORDEN ')) {
@@ -862,6 +866,14 @@ function e2e_scope_guard(string $action, array $auth): void
 
         case 'ventas_orden_guardar':
             e2e_assert_sales_order_payload($db, $action, $body);
+            return;
+
+        case 'ventas_orden_observacion':
+            // Solo órdenes de la suite, preservando su marca para el teardown.
+            e2e_assert_target($db, $action, 'ventas_orden', $body['id_orden'] ?? $body['id'] ?? null);
+            if (!e2e_sales_creation_marker(trim((string)($body['observacion'] ?? '')), 'PW E2E VTA ORDEN ')) {
+                e2e_scope_error($action, 'La observación E2E debe conservar el prefijo PW E2E VTA ORDEN.');
+            }
             return;
 
         case 'ventas_orden_retiro':

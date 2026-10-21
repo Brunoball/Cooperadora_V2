@@ -22,6 +22,7 @@ function register_ventas_routes(Router $router): void
     $router->register('ventas_ordenes_listar', 'GET', [Ventas::class, 'ordenes'], true);
     $router->register('ventas_orden_detalle', 'GET', [Ventas::class, 'detalleOrden'], true);
     $router->register('ventas_orden_guardar', 'POST', [Ventas::class, 'guardarOrden'], true);
+    $router->register('ventas_orden_observacion', 'POST', [Ventas::class, 'guardarObservacionOrden'], true);
     $router->register('ventas_orden_retiro', 'POST', [Ventas::class, 'retiroOrden'], true);
     $router->register('ventas_orden_eliminar', 'POST', [Ventas::class, 'eliminarOrden'], true);
     $router->register('ventas_planillas_opciones', 'GET', [Ventas::class, 'opcionesPlanillas'], true);
