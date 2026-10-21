@@ -42,10 +42,16 @@ export const mensajeCompraInicial = (valor) => {
 // personalizados que los responsables ya hayan escrito.
 export const mensajeVentaInicial = (valor) => {
   if (valor == null || valor === MENSAJE_CANTIDAD_ANTERIOR) return MENSAJE_CANTIDAD_DEFECTO;
-  // Reemplazo puntual del aviso anterior; no modifica el resto del texto que
-  // haya redactado el usuario. Se mantiene la variable para futuras campañas.
-  return String(valor).replace(/Para pagar solo la ganancia,?\s*escrib[ií]\s*\*?0\*?\.?/giu,
-    "Si todavía no vendiste, escribí *0* (sin cargo).");
+  // La campaña puede tener guardada una línea de horarios en el mensaje de
+  // WhatsApp. Sacarla del editor, pero conservar explícitamente la opción 0.
+  // El mensaje del PDF se edita y renderiza por separado.
+  return String(valor)
+    .replace(/Para pagar solo la ganancia,?\s*escrib[ií]\s*\*?0\*?\.?/giu,
+      "Si todavía no vendiste, escribí *0* (sin cargo).")
+    .replace(/(?:^|\n)[ \t]*(?:🕒[ \t]*)?\*?Horarios?[ \t]+de[ \t]+(?:entrega|retiro)[ \t]*:?\*?[^\n]*/giu, "")
+    .replace(/[ \t]*\{horarios_entrega\}/gu, "")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
 };
 
 // Admitidas por el sistema/API para sustituir datos al integrar el bot.
@@ -262,14 +268,11 @@ export const reponerDatoEntrega = (plantilla, campo, tipo = "venta") => {
     return texto.trimEnd() ? `${texto.trimEnd()}\n${nuevaFrase}` : nuevaFrase;
   }
 
-  // En el mensaje general (venta disponible), usar una frase sencilla y no
-  // «Horarios de retiro» ni «Fecha de entrega» como etiquetas separadas.
-  if (texto.includes(fecha) && !texto.includes(horario)) {
-    return texto.replace(fecha, `${fecha} ${horario}`);
-  }
-  if (texto.includes(horario) && !texto.includes(fecha)) {
-    return texto.replace(horario, `el ${fecha} ${horario}`);
-  }
-  const linea = `Entrega el ${fecha} ${horario}.`;
+  // WhatsApp: nunca agregar ni recuperar rangos horarios desde el selector.
+  // El comprobante PDF sí los recupera en la rama "compra" de arriba.
+  if (variable === "horarios_entrega") return texto;
+  // Si lo que cambió fue la fecha, recuperar solamente la fecha, sin horario.
+  if (texto.includes(fecha)) return texto;
+  const linea = `Entrega el ${fecha}.`;
   return texto.trimEnd() ? `${texto.trimEnd()}\n${linea}` : linea;
 };

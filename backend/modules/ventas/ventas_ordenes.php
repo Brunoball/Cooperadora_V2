@@ -697,10 +697,12 @@ trait VentasOrdenes
         $reference=optional_text($body['referencia_pago'] ?? null,180);
         [$items,$itemsTotal]=self::normalizeItems($db,$body['items'] ?? []);
         $allDoor=self::allDoorPrice($items);
-        // Nunca liquidar faltantes de manera automática en las ventas comunes.
-        $liquidarGanancia = !empty($body['liquidar_ganancia']);
+        // Ninguna venta suma ganancia a menos que el administrador la incluya
+        // expresamente; la liquidación final sin productos mantiene su modo propio.
+        $liquidarGanancia = self::boolValue($body['liquidar_ganancia'] ?? false) === 1;
+        $incluirGanancia = self::boolValue($body['incluir_ganancia'] ?? false) === 1;
 
-        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor,$liquidarGanancia){
+        $saved=transaction($db,function()use($db,$auth,$body,$id,$campaignId,$paymentId,$state,$saleDate,$observation,$reference,$items,$itemsTotal,$allDoor,$liquidarGanancia,$incluirGanancia){
             $campaign=self::campaign($db,$campaignId,true);
             $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
@@ -723,6 +725,9 @@ trait VentasOrdenes
                 api_error('La fecha de venta tiene que estar dentro de la vigencia de la campaña.', 'VENTA_FECHA_FUERA_DE_RANGO', 409);
             }
             $oldItems=$id?self::orderItems($db,$id):[];
+            if ($incluirGanancia && ($liquidarGanancia || $id || $state !== 'aprobada')) {
+                api_error('La ganancia opcional solo puede incluirse al crear una venta manual aprobada con productos.', 'VENTA_GANANCIA_NO_DISPONIBLE', 409);
+            }
             $fechaFin = (string)($campaign['fecha_fin'] ?? '');
             $finalSettlement = $liquidarGanancia && !$id && $state==='aprobada'
                 && $items===[] && $fechaFin!=='' && $fechaFin<date('Y-m-d');
@@ -742,14 +747,31 @@ trait VentasOrdenes
                 self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona=? FOR UPDATE', [$personId]);
             }
 
-            // La venta parcial factura únicamente artículos. La deuda del
-            // objetivo se calcula por persona al finalizar y solo se registra
-            // mediante el modo explícito de liquidación final.
-            $objectiveGain=$finalSettlement
-                ? self::objectiveChargeForOrder($db,$campaign,$personId,null,[],'aprobada')
+            // Modo habitual: solo productos. Modo opcional: productos + ganancia
+            // aún pendiente, descontando cualquier ganancia ya cobrada.
+            // El cálculo ocurre DENTRO de la transacción, con el bloqueo de
+            // persona, para impedir cobros dobles en peticiones simultáneas.
+            if ($incluirGanancia) {
+                $principalId=(int)($campaign['id_producto_principal'] ?? 0);
+                $minimo=(int)($campaign['cantidad_minima_persona'] ?? 0);
+                $combos=0;
+                foreach ($items as $item) {
+                    if ((int)($item['id_producto'] ?? 0) === $principalId) {
+                        $combos+=(int)($item['cantidad'] ?? 0);
+                    }
+                }
+                if (!$personId || $principalId <= 0 || $minimo <= 0 || $combos <= 0 || $items === []) {
+                    api_error('Para incluir ganancias, seleccioná una persona y agregá al menos un combo de la campaña.', 'VENTA_GANANCIA_REQUIERE_COMBOS', 422);
+                }
+            }
+            $objectiveGain=($finalSettlement || $incluirGanancia)
+                ? self::objectiveChargeForOrder($db,$campaign,$personId,null,$incluirGanancia ? $items : [],'aprobada')
                 : (($before && $state==='aprobada') ? max(0.0,(float)$before['ganancia_objetivo']) : 0.0);
+            if ($incluirGanancia && $objectiveGain <= 0) {
+                api_error('La persona no tiene ganancias pendientes para incluir. Guardá la venta sin marcar la casilla.', 'VENTA_GANANCIA_SIN_SALDO', 422);
+            }
             if ($items===[] && !($finalSettlement && $personId && $objectiveGain>0)) {
-                api_error('Agregá un producto. La ganancia por objetivo solo puede liquidarse al terminar la campaña.', 'VALIDATION_ERROR');
+                api_error('Agregá un producto. La ganancia sin productos solo puede liquidarse al terminar la campaña.', 'VALIDATION_ERROR');
             }
             $finalTotal=round((float)$itemsTotal+$objectiveGain,2);
             /** @disregard P1012 */
