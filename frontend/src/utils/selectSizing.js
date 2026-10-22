@@ -10,6 +10,31 @@ const WIDTH_VAR = '--global-select-option-width';
 const CURRENT_VAR = '--global-select-current-width';
 const PROBE_ATTR = 'data-global-select-probe';
 
+// Los selects de ventanas emergentes conservan su diseño local; únicamente
+// los controles de las pantallas participan de la medición automática.
+function isInsideModal(element) {
+  if (!element) return false;
+  if (element.closest('[role="dialog"], [aria-modal="true"], .entity-modal-overlay, .global-exportHistorial-overlay')) return true;
+  // Algunos modales propios no utilizan role="dialog" en su capa exterior.
+  for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+    const classNames = typeof parent.className === 'string' ? parent.className : '';
+    if (classNames.split(/\s+/).some(name => /(?:^|[-_])(?:modal|dialog|backdrop)(?:$|[-_])/i.test(name))) return true;
+  }
+  return false;
+}
+
+function clearGlobalSizing(select) {
+  select.removeAttribute(SIZE_ATTR);
+  select.style.removeProperty(WIDTH_VAR);
+  select.style.removeProperty(CURRENT_VAR);
+  const wrapper = select.closest('.module-filter--select, .mov-filter, .entity-floating-field');
+  if (wrapper?.getAttribute(SIZE_ATTR) && wrapper.querySelectorAll('select').length === 1) {
+    wrapper.removeAttribute(SIZE_ATTR);
+    wrapper.style.removeProperty(WIDTH_VAR);
+    wrapper.style.removeProperty(CURRENT_VAR);
+  }
+}
+
 function normalized(text = '') {
   return String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
@@ -106,7 +131,11 @@ export function enableGlobalSelectSizing() {
   const pending = new Set();
 
   function update(select) {
-    if (!select.isConnected || select.hasAttribute(PROBE_ATTR) || select.multiple || select.size > 1) return;
+    if (!select.isConnected || select.hasAttribute(PROBE_ATTR)) return;
+    if (isInsideModal(select) || select.multiple || select.size > 1) {
+      clearGlobalSizing(select);
+      return;
+    }
     const wrapper = select.closest('.module-filter--select, .mov-filter, .entity-floating-field');
     const { kind, width, currentWidth } = measure(select, wrapper, probe, context);
     if (select.getAttribute(SIZE_ATTR) !== kind) select.setAttribute(SIZE_ATTR, kind);

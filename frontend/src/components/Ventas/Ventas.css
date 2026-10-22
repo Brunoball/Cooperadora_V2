@@ -4406,11 +4406,31 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   .ventas-page--orders .module-headFilters > .ventas-orders-filter--campaign { flex: 1 1 270px !important; max-width: 100% !important; }
 }
 
-/* Ventas registradas: mostrar las observaciones debajo del alumno, sin agregar columnas. */
-.ventas-grid--orders .ventas-order-observation {
-  display: block; margin-top: 5px; color: var(--balto-ink-muted, #64748b);
-  font-size: 11px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere;
-  white-space: normal; max-width: 100%;
+/* La observación se consulta desde Acciones, igual que el resto de iconos de la tabla. */
+.ventas-grid--orders .mov-iconBtn.ventas-order-observationAction {
+  color: var(--balto-action, var(--entity-modal-action, #2456a4));
+}
+.ventas-grid--orders .mov-iconBtn.ventas-order-observationAction:hover {
+  background: color-mix(in srgb, var(--balto-action, #2456a4) 9%, transparent);
+}
+
+.ventas-orders-observationModal.entity-modal { width: min(560px, 100%); }
+.ventas-orders-observationContent {
+  max-height: min(50vh, 440px);
+  min-height: 72px;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid var(--mov-border, #dbe5ef);
+  border-radius: 8px;
+  background: var(--surface-color, #fff);
+}
+.ventas-orders-observationContent p {
+  margin: 0;
+  color: var(--balto-ink, #0f172a);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 /* Alta y edición comparten formulario; no hay buscador ni caja de opcionales duplicados. */
 .ventas-order-simple .ventas-simple-extras {
@@ -4647,4 +4667,33 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 @media (prefers-reduced-motion: reduce) {
   .ventas-order-simple .ventas-modal-tabs .entity-form-tab { transition: none; }
+}
+
+/* Los selects dentro de modales de Ventas utilizan el ancho de su formulario,
+   no el ancho calculado para los filtros de las secciones.
+   Se mantiene esta protección incluso si el bundle global viejo les dejó
+   data-global-select-sizing al montarlos. */
+.entity-modal-overlay .ventas-modal select[data-global-select-sizing] {
+  box-sizing: border-box;
+  field-sizing: fixed !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 12px !important;
+  padding-right: 34px !important;
+  text-overflow: ellipsis !important;
+}
+.entity-modal-overlay .ventas-modal .entity-floating-field > select {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 1 1 auto !important;
+  field-sizing: fixed !important;
+  padding-left: 12px !important;
+  padding-right: 34px !important;
+}
+.entity-modal-overlay .ventas-modal select.ventas-detail-card__price[data-global-select-sizing] {
+  width: 100% !important;
+  max-width: 260px !important;
+  flex: none !important;
 }

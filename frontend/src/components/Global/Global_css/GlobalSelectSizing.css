@@ -1,7 +1,7 @@
 /* Ancho exacto, medido por las opciones de CADA select.
    La flecha nativa queda incluida en la medición: sin reservas arbitrarias.
    No se agregan márgenes laterales ni padding derecho. */
-body select:not([multiple]) {
+body select[data-global-select-sizing] {
   padding-right: 0 !important;
 }
 body select[data-global-select-sizing] {
@@ -93,13 +93,4 @@ body .mov-page.module-page .module-headFilters:has(> .module-filter--select[data
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-end;
-}
-
-/* Selects temporales de formularios: solo afecta al campo en sí y a su
-   contenedor temporal; las otras columnas de los modales no cambian. */
-body .entity-floating-field.entity-field--year-select[data-global-select-sizing],
-body .entity-floating-field.entity-field--month-select[data-global-select-sizing] {
-  width: min(100%, var(--global-select-option-width)) !important;
-  min-width: min(100%, var(--global-select-option-width)) !important;
-  max-width: 100% !important;
 }

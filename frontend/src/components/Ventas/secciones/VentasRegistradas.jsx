@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faCheckCircle, faCircleInfo, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -8,6 +8,7 @@ import SummaryCards from "../../Global/SummaryCards";
 import BotonExportarGlobal from "../../Global/Botones/BotonExportarGlobal";
 import ModalExportarGlobal from "../../Global/Modales/ModalExportarGlobal";
 import ModalEliminarGlobal from "../../Global/Modales/ModalEliminarGlobal";
+import CrudModal from "../../Global/Modales/CrudModal";
 import logoIpetPdf from "../../../imagenes/logo_ipet50.png";
 import ventasApi from "../api/ventasApi";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
@@ -59,6 +60,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   const [modal, setModal] = useState({ open: false, id: null });
   const [confirm, setConfirm] = useState(null);
   const [retreatConfirm, setRetreatConfirm] = useState(null);
+  const [observacionActiva, setObservacionActiva] = useState(null);
 
   const loadCatalogs = useCallback(async () => {
     try {
@@ -243,7 +245,6 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             <div className="mov-gridCell entity-main-cell">
               <strong>{row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA"}</strong>
               <small>{row.dni ? `DNI ${row.dni}` : "Sin identificación"}</small>
-              {row.observacion ? <small className="ventas-order-observation" title={upper(row.observacion, 3000)}>OBS.: {upper(row.observacion, 3000)}</small> : null}
             </div>
             <div className="mov-gridCell">{upper(row.medio_pago, 120)}</div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
@@ -261,6 +262,15 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             <div className="mov-gridCell is-center">{row.fecha_venta || String(row.aprobado_en || row.creado_en || "").slice(0, 10)}</div>
             <div className="mov-gridCell mov-gridCell--actions">
               <div className="mov-actionsInline">
+                {String(row.observacion || "").trim() ? (
+                  <ActionButton
+                    icon={faCircleInfo}
+                    title="Ver observación"
+                    aria-label={`Ver observación de ${row.nombre_apellido || "venta en puerta"}`}
+                    className="mov-iconBtn ventas-order-observationAction"
+                    onClick={() => setObservacionActiva(row)}
+                  />
+                ) : null}
                 {row.comprobante_url ? <ActionButton icon={faEye} title="Ver comprobante" onClick={() => openPdf(row)} /> : null}
                 {writable && row.estado === "aprobada" && row.estado_cierre !== "cerrada" ? (
                   <ActionButton icon={yes(row.retirado) ? faRotateLeft : faCheckCircle} title={yes(row.retirado) ? "Quitar retiro" : "Marcar como retirado"} onClick={() => setRetreatConfirm(row)} />
@@ -340,6 +350,20 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       />
 
       <VentaModal open={modal.open} initialId={modal.id} catalogs={catalogs} saving={saving} onClose={() => setModal({ open: false, id: null })} onSave={save} onFeedback={showFeedback} />
+
+      <CrudModal
+        open={Boolean(observacionActiva)}
+        title="Observación de la venta"
+        subtitle={observacionActiva ? `${observacionActiva.nombre_apellido || "Venta en puerta"}${observacionActiva.dni ? ` · DNI ${observacionActiva.dni}` : ""}` : ""}
+        onClose={() => setObservacionActiva(null)}
+        hideSubmit
+        cancelLabel="Cerrar"
+        modalClassName="ventas-orders-observationModal"
+      >
+        <div className="ventas-orders-observationContent">
+          <p>{observacionActiva?.observacion}</p>
+        </div>
+      </CrudModal>
 
       <ModalExportarGlobal
         open={exportOpen}
