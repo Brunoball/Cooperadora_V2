@@ -812,7 +812,7 @@ export default function Alumnos() {
     {
       key: "anio",
       type: "select",
-      label: "Último año",
+      label: "Año",
       value: anio,
       onChange: changeFilter(setAnio),
       placeholder: "TODOS",

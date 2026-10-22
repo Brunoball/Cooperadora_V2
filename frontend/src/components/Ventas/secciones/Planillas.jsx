@@ -419,7 +419,7 @@ export default function Planillas({ writable, showFeedback }) {
             setBuscarAbierto(true);
             if (!value.trim()) setFilaLocalizada(null);
           }, className: "ventas-planillas-personaFilter" },
-        { key: "venta", type: "select", label: "Venta (mes y año)", value: campaign,
+        { key: "venta", type: "select", className: "ventas-filter--campaign-period", label: "Venta (mes y año)", value: campaign,
           onChange: cambiarConsulta(setCampaign), includeEmptyOption: false,
           options: campaignOptions },
         ...(type === "cursos" ? [

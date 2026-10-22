@@ -106,7 +106,7 @@ export default function IngresosAlumnosView({
           { label: "Alumno", key: "alumno" },
           { label: "Documento", key: "documento" },
           { label: "Fecha de cobro", key: "fecha" },
-          { label: "Mes / concepto pagado", key: "periodo" },
+          { label: "Mes / concepto", key: "periodo" },
           { label: "Categoría", key: "categoria" },
           { label: "Medio", key: "medio" },
           { label: "Monto", key: "monto" },
@@ -161,7 +161,7 @@ export default function IngresosAlumnosView({
         columns={[
           "Alumno",
           { label: "Fecha de cobro", align: "center" },
-          { label: "Mes / concepto pagado", align: "center" },
+          { label: "Mes / concepto", align: "center" },
           { label: "Categoría", align: "center" },
           { label: "Medio", align: "center" },
           { label: "Monto", align: "right" },

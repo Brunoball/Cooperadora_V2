@@ -136,7 +136,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
 
   const filters = [
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI u observación...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
-    { key: "venta", type: "select", className: "ventas-orders-filter--campaign", label: "Venta (mes y año)", value: campaign,
+    { key: "venta", type: "select", className: "ventas-orders-filter--campaign ventas-filter--campaign-period", label: "Venta (mes y año)", value: campaign,
       includeEmptyOption: false, options: campaignOptions,
       onChange: (value) => { setPage(1); setCampaign(String(value)); } },
     { key: "estado", type: "select", className: "ventas-orders-filter--pago ventas-filter--option-width", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },

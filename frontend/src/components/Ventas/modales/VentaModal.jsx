@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faArrowLeft, faBagShopping, faClipboardList, faCoins, faReceipt } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
-import { FloatingField } from "../../Global/Formularios/TabbedForm";
+import { EntityTabs, EntityTabPane, FloatingField } from "../../Global/Formularios/TabbedForm";
 import ventasApi from "../api/ventasApi";
 import { asId, money, today, upper, yes } from "../ventasUtils";
 
@@ -25,6 +27,7 @@ const itemDeCampania = (campaign, products) => {
 
 export default function VentaModal({ open, initialId, catalogs, saving, onClose, onSave, onFeedback }) {
   const [form, setForm] = useState(emptyOrder);
+  const [activeTab, setActiveTab] = useState("datos");
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
@@ -48,6 +51,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
 
   useEffect(() => {
     if (!open) return undefined;
+    setActiveTab("datos");
     let alive = true;
     searchSeq.current += 1;
     selectedPerson.current = false;
@@ -92,6 +96,15 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   }, [open, editing, form.id_campania, campaigns, products]);
 
   useEffect(() => () => clearTimeout(searchTimer.current), []);
+
+  // Al pasar de una pestaña a otra, mostrar siempre el comienzo de su contenido.
+  // No se desmontan los campos ni se reinician los datos cargados.
+  useEffect(() => {
+    if (!open) return;
+    const body = document.querySelector(".ventas-order-simple .entity-modal__body");
+    if (body) body.scrollTop = 0;
+  }, [open, activeTab]);
+
 
   const chooseCampaign = (value) => {
     if (editing) return;
@@ -287,111 +300,153 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     <CrudModal open={open} title={editing ? "Editar venta" : "Nueva venta"} subtitle={editing ? "Revisá los datos registrados de la venta." : "Cargá las ventas y las ganancias por separado."}
       onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false}
       submitDisabled={!canSave} modalClassName="ventas-modal ventas-order-modal ventas-order-simple" wide>
-      <div className="ventas-simple-form">
-        <div className="ventas-simple-top">
-          <FloatingField label="Venta / campaña" className="ventas-modal-field">
-            <select value={form.id_campania} required disabled={editing || historicalGain} onChange={(e) => chooseCampaign(e.target.value)}>
-              <option value="">SELECCIONAR CAMPAÑA</option>
-              {selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}</option>)}
-            </select>
-          </FloatingField>
-          <FloatingField label="Medio de pago" className="ventas-modal-field">
-            <select value={form.id_medio_pago} required disabled={historicalGain} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}>
-              <option value="">SELECCIONAR MEDIO</option>
-              {payments.map((p) => <option key={p.id_medio_pago} value={p.id_medio_pago}>{upper(p.medio_pago, 120)}</option>)}
-            </select>
-          </FloatingField>
-        </div>
-        <section className="ventas-simple-person" aria-label="Persona de la venta">
-          <div className="ventas-simple-person__fields">
-            <div className="ventas-person-search">
-              <FloatingField label="Nombre y apellido" className="ventas-modal-field">
-                <input value={form.nombre_apellido || ""} placeholder="Escribí apellido y nombre para buscar o cargar" disabled={historicalGain} autoComplete="off"
-                  onChange={(e) => searchPeople(e.target.value)} />
-              </FloatingField>
-              {personOptions("nombre")}
-            </div>
-            <div className="ventas-person-search">
-              <FloatingField label="DNI" className="ventas-modal-field">
-                <input inputMode="numeric" value={form.dni || ""} placeholder="Escribí el DNI para buscar o cargar" disabled={historicalGain} autoComplete="off"
-                  onChange={(e) => searchDni(e.target.value)} />
-              </FloatingField>
-              {personOptions("dni")}
-            </div>
+      <EntityTabs
+        tabs={[{ value: "datos", label: "Datos de la venta", icon: faClipboardList }, { value: "productos", label: "Productos y ganancias", icon: faBagShopping }]}
+        value={activeTab}
+        onChange={setActiveTab}
+        className="ventas-modal-tabs"
+        idPrefix="ventas-order-tab"
+        ariaLabel={editing ? "Pestañas de editar venta" : "Pestañas de nueva venta"}
+      />
+      <EntityTabPane active={activeTab === "datos"} disableWhenInactive className="ventas-simple-pane">
+        <div className="ventas-simple-form ventas-simple-form--datos">
+          <div className="ventas-simple-top">
+            <FloatingField label="Venta / campaña" className="ventas-modal-field">
+              <select value={form.id_campania} required disabled={editing || historicalGain} onChange={(e) => chooseCampaign(e.target.value)}>
+                <option value="">SELECCIONAR CAMPAÑA</option>
+                {selectableCampaigns.map((c) => <option key={c.id_campania} value={c.id_campania}>{upper(c.nombre, 150)}</option>)}
+              </select>
+            </FloatingField>
+            <FloatingField label="Medio de pago" className="ventas-modal-field">
+              <select value={form.id_medio_pago} required disabled={historicalGain} onChange={(e) => setForm((v) => ({ ...v, id_medio_pago: e.target.value }))}>
+                <option value="">SELECCIONAR MEDIO</option>
+                {payments.map((p) => <option key={p.id_medio_pago} value={p.id_medio_pago}>{upper(p.medio_pago, 120)}</option>)}
+              </select>
+            </FloatingField>
           </div>
-        </section>
-        <div className="ventas-simple-quantities">
-          <section className="ventas-simple-quantity" aria-label="Productos vendidos">
-            <strong>Productos vendidos</strong>
-            <p>¿Cuántos combos vendió?</p>
-            {singleItem ? (
-              <>
-                <input aria-label="Cantidad de productos vendidos" type="number" min="0" max="100000" step="1"
-                  value={mainItem?.cantidad ?? 0} disabled={(!mainItem?.id_producto && !editing) || historicalGain || (!editing && endedCampaign)}
-                  onChange={(e) => editItem(0, { cantidad: e.target.value })} />
-                <small>{mainItem?.producto_nombre || "Seleccioná una campaña"} · {money(mainItem?.precio_unitario)}</small>
-                {multiplePrices && !historicalGain && (editing || !endedCampaign) ? (
-                  <select aria-label="Precio del combo" value={mainItem.tipo_precio} onChange={(e) => choosePriceType(0, e.target.value)}>
-                    <option value="anticipada">PRECIO PRINCIPAL</option><option value="puerta">PRECIO ALTERNATIVO</option>
-                    {!['anticipada', 'puerta'].includes(mainItem.tipo_precio) ? <option value={mainItem.tipo_precio}>PRECIO ORIGINAL</option> : null}
-                  </select>
-                ) : null}
-              </>
-            ) : (
-              <div className="ventas-simple-items">
-                {form.items.map((item, index) => (
-                  <label key={item.id_item || index} className="ventas-simple-item">
-                    <span>{item.producto_nombre} · {money(item.precio_unitario)} c/u</span>
-                    <input aria-label={`Cantidad de ${item.producto_nombre}`} type="number" min="0" step="1" max="100000"
-                      value={item.cantidad} disabled={historicalGain} onChange={(e) => editItem(index, { cantidad: e.target.value })} />
-                  </label>
-                ))}
+          <section className="ventas-simple-person" aria-label="Persona de la venta">
+            <div className="ventas-simple-person__fields ventas-simple-person__fields--fecha">
+              <div className="ventas-person-search">
+                <FloatingField label="Nombre y apellido" className="ventas-modal-field">
+                  <input value={form.nombre_apellido || ""} placeholder="Escribí apellido y nombre para buscar o cargar" disabled={historicalGain} autoComplete="off"
+                    onChange={(e) => searchPeople(e.target.value)} />
+                </FloatingField>
+                {personOptions("nombre")}
               </div>
-            )}
-            <span className="ventas-simple-quantity__subtotal">Subtotal: <strong>{money(productTotal)}</strong></span>
+              <div className="ventas-person-search">
+                <FloatingField label="DNI" className="ventas-modal-field">
+                  <input inputMode="numeric" value={form.dni || ""} placeholder="Escribí el DNI para buscar o cargar" disabled={historicalGain} autoComplete="off"
+                    onChange={(e) => searchDni(e.target.value)} />
+                </FloatingField>
+                {personOptions("dni")}
+              </div>
+              <FloatingField label="Fecha de pago" className="ventas-modal-field">
+                <input type="date" value={form.fecha_venta || ""} required disabled={historicalGain}
+                  onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
+              </FloatingField>
+            </div>
           </section>
-          <section className="ventas-simple-quantity" aria-label="Ganancias a cobrar">
-            <strong>Ganancias a cobrar</strong>
-            <p>¿Cuántas unidades paga como ganancia?</p>
-            <input aria-label="Cantidad de ganancias" type="number" min="0" max={objectiveReady ? availableGains : minimum} step="1"
-              value={form.cantidad_ganancias ?? 0} disabled={editing || !objectiveEnabled}
-              onChange={(e) => setForm((v) => ({ ...v, cantidad_ganancias: e.target.value }))} />
-            <small>{historicalGain ? "Ganancias ya cobradas: no se pueden volver a calcular al editar."
-              : editing ? "No se pueden agregar ganancias a una venta ya registrada."
-              : minimum > 0 ? `${money(perMissing)} por unidad faltante${noSales > 0 ? ` · ${money(noSales)} si no vendió ninguna y paga todo` : ""}`
-              : "Esta campaña no tiene ganancias configuradas"}</small>
-            <span className="ventas-simple-quantity__subtotal">Subtotal: <strong>{historicalGain ? money(form.ganancia_objetivo) : gainQuantity > 0 && !objectiveReady && !editing ? "Seleccioná un DNI" : money(gainPreview)}</strong></span>
-          </section>
-        </div>
-        {!editing && objectiveEnabled && hasPersonReference ? (
-          <div className="ventas-simple-status" aria-live="polite">
-            {objectiveBase.loading || !objectiveReady ? "Consultando registros anteriores…" : `Ya tiene ${soldBefore} productos vendidos y ${gainsBefore} unidades de ganancia registradas. Podés agregar hasta ${availableGains} ganancias en esta carga.`}
+          {editing && form.estado !== "aprobada" && !historicalGain ? (
+            <FloatingField label="Estado de pago" className="ventas-modal-field">
+              <select value={form.estado} disabled={form.origen === "bot_whatsapp"} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>
+                <option value="aprobada">PAGADA</option><option value="pendiente">PENDIENTE</option>
+              </select>
+            </FloatingField>
+          ) : null}
+          <div className="ventas-simple-extras">
+            <FloatingField label="Observaciones" textarea className="ventas-modal-field">
+              <textarea rows="2" maxLength="3000" value={form.observacion || ""} placeholder="Observaciones de esta venta (opcional)"
+                onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
+            </FloatingField>
           </div>
-        ) : null}
-        {!editing && quantitiesValid && gainQuantity > availableGains && objectiveReady ? <div className="ventas-simple-error" role="alert">Hay más ganancias que unidades pendientes. Corregí la cantidad.</div> : null}
-        {historicalGain ? <div className="ventas-simple-status">Esta venta incluye ganancias cobradas. Para proteger el importe, solo se puede modificar su observación.</div> : null}
-        {editing && form.estado !== "aprobada" && !historicalGain ? (
-          <FloatingField label="Estado de pago" className="ventas-modal-field">
-            <select value={form.estado} disabled={form.origen === "bot_whatsapp"} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>
-              <option value="aprobada">PAGADA</option><option value="pendiente">PENDIENTE</option>
-            </select>
-          </FloatingField>
-        ) : null}
-        <div className="ventas-simple-extras">
-          <FloatingField label="Fecha de pago" className="ventas-modal-field">
-            <input type="date" value={form.fecha_venta || ""} required disabled={historicalGain}
-              onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
-          </FloatingField>
-          <FloatingField label="Observaciones" textarea className="ventas-modal-field">
-            <textarea rows="2" maxLength="3000" value={form.observacion || ""} placeholder="Observaciones de esta venta (opcional)"
-              onChange={(e) => setForm((v) => ({ ...v, observacion: upper(e.target.value, 3000) }))} />
-          </FloatingField>
         </div>
-        <div className="ventas-simple-bottom">
-          <div><span>Total a cobrar</span><strong>{!editing && gainQuantity > 0 && !objectiveReady ? "Elegí a la persona" : money(total)}</strong></div>
+      </EntityTabPane>
+      <EntityTabPane active={activeTab === "productos"} disableWhenInactive className="ventas-simple-pane">
+        <div className="ventas-simple-form ventas-simple-form--productos">
+          <div className="ventas-simple-intro">
+            <strong>Detalle de la venta</strong>
+            <small>Ingresá las cantidades y revisá el importe antes de guardar.</small>
+          </div>
+          <div className="ventas-simple-quantities">
+            <section className="ventas-simple-quantity ventas-detail-card ventas-detail-card--products" aria-label="Productos vendidos">
+              <div className="ventas-detail-card__head">
+                <span className="ventas-detail-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faBagShopping} /></span>
+                <div className="ventas-detail-card__heading"><strong>Productos vendidos</strong><small>Cantidad de productos entregados o vendidos</small></div>
+              </div>
+              <div className="ventas-detail-card__body">
+                {singleItem ? (
+                  <>
+                    <div className="ventas-detail-card__count">
+                      <label htmlFor="ventas-quantity-products">Unidades vendidas</label>
+                      <input id="ventas-quantity-products" aria-label="Cantidad de productos vendidos" type="number" min="0" max="100000" step="1"
+                        value={mainItem?.cantidad ?? 0} disabled={(!mainItem?.id_producto && !editing) || historicalGain || (!editing && endedCampaign)}
+                        onChange={(e) => editItem(0, { cantidad: e.target.value })} />
+                    </div>
+                    <div className="ventas-detail-card__description">
+                      <span>Producto seleccionado</span>
+                      <strong>{mainItem?.producto_nombre || "Seleccioná una campaña"}</strong>
+                      <small>{money(mainItem?.precio_unitario)} por unidad</small>
+                    </div>
+                    {multiplePrices && !historicalGain && (editing || !endedCampaign) ? (
+                      <select className="ventas-detail-card__price" aria-label="Precio del combo" value={mainItem.tipo_precio} onChange={(e) => choosePriceType(0, e.target.value)}>
+                        <option value="anticipada">PRECIO PRINCIPAL</option><option value="puerta">PRECIO ALTERNATIVO</option>
+                        {!['anticipada', 'puerta'].includes(mainItem.tipo_precio) ? <option value={mainItem.tipo_precio}>PRECIO ORIGINAL</option> : null}
+                      </select>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="ventas-simple-items">
+                    {form.items.map((item, index) => (
+                      <label key={item.id_item || index} className="ventas-simple-item">
+                        <span>{item.producto_nombre} · {money(item.precio_unitario)} c/u</span>
+                        <input aria-label={`Cantidad de ${item.producto_nombre}`} type="number" min="0" step="1" max="100000"
+                          value={item.cantidad} disabled={historicalGain} onChange={(e) => editItem(index, { cantidad: e.target.value })} />
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="ventas-simple-quantity__subtotal"><span>Subtotal de productos</span><strong>{money(productTotal)}</strong></div>
+            </section>
+            <section className="ventas-simple-quantity ventas-detail-card ventas-detail-card--gains" aria-label="Ganancias a cobrar">
+              <div className="ventas-detail-card__head">
+                <span className="ventas-detail-card__icon" aria-hidden="true"><FontAwesomeIcon icon={faCoins} /></span>
+                <div className="ventas-detail-card__heading"><strong>Ganancias a cobrar</strong><small>Unidades faltantes que se abonan como ganancia</small></div>
+              </div>
+              <div className="ventas-detail-card__body">
+                <div className="ventas-detail-card__count">
+                  <label htmlFor="ventas-quantity-gains">Unidades a cobrar</label>
+                  <input id="ventas-quantity-gains" aria-label="Cantidad de ganancias" type="number" min="0" max={objectiveReady ? availableGains : minimum} step="1"
+                    value={form.cantidad_ganancias ?? 0} disabled={editing || !objectiveEnabled}
+                    onChange={(e) => setForm((v) => ({ ...v, cantidad_ganancias: e.target.value }))} />
+                </div>
+                <div className="ventas-detail-card__description ventas-detail-card__description--rule">
+                  <span>Regla de la campaña</span>
+                  <small>{historicalGain ? "Ganancias ya cobradas: no se pueden recalcular al editar."
+                    : editing ? "No se pueden agregar ganancias a una venta ya registrada."
+                    : minimum > 0 ? `${money(perMissing)} por unidad faltante${noSales > 0 ? ` · ${money(noSales)} si no vendió ninguna y paga todo` : ""}`
+                    : "Esta campaña no tiene ganancias configuradas"}</small>
+                </div>
+              </div>
+              <div className="ventas-simple-quantity__subtotal"><span>Subtotal de ganancias</span><strong>{historicalGain ? money(form.ganancia_objetivo) : gainQuantity > 0 && !objectiveReady && !editing ? "Seleccioná un DNI" : money(gainPreview)}</strong></div>
+            </section>
+          </div>
+          {!editing && objectiveEnabled && hasPersonReference ? (
+            <div className="ventas-simple-status" aria-live="polite">
+              {objectiveBase.loading || !objectiveReady ? "Consultando registros anteriores…" : `Ya tiene ${soldBefore} productos vendidos y ${gainsBefore} unidades de ganancia registradas. Podés agregar hasta ${availableGains} ganancias en esta carga.`}
+            </div>
+          ) : null}
+          {!editing && quantitiesValid && gainQuantity > availableGains && objectiveReady ? <div className="ventas-simple-error" role="alert">Hay más ganancias que unidades pendientes. Corregí la cantidad.</div> : null}
+          {historicalGain ? <div className="ventas-simple-status">Esta venta incluye ganancias cobradas. Para proteger el importe, solo se puede modificar su observación.</div> : null}
+          <div className="ventas-simple-bottom ventas-detail-total">
+            <span className="ventas-detail-total__icon" aria-hidden="true"><FontAwesomeIcon icon={faReceipt} /></span>
+            <div className="ventas-detail-total__copy"><span>Total a cobrar</span><small>Importe final de la operación</small></div>
+            <strong>{!editing && gainQuantity > 0 && !objectiveReady ? "Elegí a la persona" : money(total)}</strong>
+          </div>
+          {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. La carga se registra como pagada.</small> : null}
+
         </div>
-        {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. La carga se registra como pagada.</small> : null}
-      </div>
+      </EntityTabPane>
     </CrudModal>
   );
 }

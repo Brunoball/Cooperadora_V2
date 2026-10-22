@@ -969,7 +969,7 @@ export default function ContableModule({ view = "summary" }) {
   ];
   const feePeriodFilter = {
     key: "periodo-cuotas",
-    label: "Mes / concepto pagado",
+    label: "Mes / concepto",
     type: "select",
     className: "contable-filter--period",
     value: feePeriod,

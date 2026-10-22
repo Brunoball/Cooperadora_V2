@@ -1,0 +1,105 @@
+/* Ancho exacto, medido por las opciones de CADA select.
+   La flecha nativa queda incluida en la medición: sin reservas arbitrarias.
+   No se agregan márgenes laterales ni padding derecho. */
+body select:not([multiple]) {
+  padding-right: 0 !important;
+}
+body select[data-global-select-sizing] {
+  box-sizing: border-box;
+  padding-left: 6px !important;
+  padding-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  text-overflow: clip !important;
+}
+
+/* Año, mes, curso, división y todos los valores cortos, a cualquier ancho.
+   Fijar también el wrapper evita los tamaños compartidos de Ventas y Cuotas. */
+body .module-headFilters > .module-filter.module-filter--select[data-global-select-sizing="compact"],
+body .mov-filter[data-global-select-sizing="compact"] {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 var(--global-select-option-width) !important;
+  width: var(--global-select-option-width) !important;
+  min-width: var(--global-select-option-width) !important;
+  max-width: var(--global-select-option-width) !important;
+  margin-right: 0 !important;
+  margin-left: 0 !important;
+}
+body select[data-global-select-sizing="compact"] {
+  width: min(100%, var(--global-select-option-width)) !important;
+  min-width: min(100%, var(--global-select-option-width)) !important;
+  max-width: 100% !important;
+  flex-shrink: 0 !important;
+}
+
+/* Desde 1600px también los valores extensos usan su máximo real.
+   Debajo, mantienen la distribución responsive del módulo. */
+@media (min-width: 1600px) {
+  body .module-headFilters > .module-filter.module-filter--select[data-global-select-sizing="wide"],
+  body .mov-filter[data-global-select-sizing="wide"] {
+    box-sizing: border-box;
+    display: inline-flex;
+    flex: 0 0 var(--global-select-option-width) !important;
+    width: var(--global-select-option-width) !important;
+    min-width: var(--global-select-option-width) !important;
+    max-width: var(--global-select-option-width) !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  body select[data-global-select-sizing="wide"] {
+    width: min(100%, var(--global-select-option-width)) !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Pantallas menores: un filtro largo puede ser flexible, pero no se achica
+   por debajo del valor seleccionado. Al elegir otra opción se recalcula. */
+@media (max-width: 1599px) {
+  body .module-headFilters > .module-filter.module-filter--select[data-global-select-sizing="wide"],
+  body .mov-filter[data-global-select-sizing="wide"] {
+    flex: 0 1 var(--global-select-option-width) !important;
+    min-width: min(100%, var(--global-select-current-width)) !important;
+    max-width: var(--global-select-option-width) !important;
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+  }
+  body .module-headFilters > .module-filter.module-filter--select[data-global-select-sizing="wide"] > select,
+  body .mov-filter[data-global-select-sizing="wide"] > select {
+    min-width: min(100%, var(--global-select-current-width)) !important;
+  }
+}
+
+/* El select llena exclusivamente SU wrapper (no el de sus vecinos). */
+body .module-headFilters > .module-filter.module-filter--select[data-global-select-sizing="compact"] > select.module-filterControl,
+body .mov-filter[data-global-select-sizing="compact"] > select,
+body .module-headFilters > .module-filter.module-filter--select[data-global-select-sizing="wide"] > select.module-filterControl,
+body .mov-filter[data-global-select-sizing="wide"] > select {
+  display: block;
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-left: 6px !important;
+  padding-right: 0 !important;
+  white-space: nowrap !important;
+  text-overflow: clip !important;
+}
+
+/* Cuando el contenido no entra con la barra desplegada, permitir que los
+   filtros salten completos, sin repartir el ancho de un select entre otros. */
+
+body .mov-page.module-page .module-headFilters:has(> .module-filter--select[data-global-select-sizing]):not(.cuotas-head-filters):not(.ventas-keep-grid) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+}
+
+/* Selects temporales de formularios: solo afecta al campo en sí y a su
+   contenedor temporal; las otras columnas de los modales no cambian. */
+body .entity-floating-field.entity-field--year-select[data-global-select-sizing],
+body .entity-floating-field.entity-field--month-select[data-global-select-sizing] {
+  width: min(100%, var(--global-select-option-width)) !important;
+  min-width: min(100%, var(--global-select-option-width)) !important;
+  max-width: 100% !important;
+}
