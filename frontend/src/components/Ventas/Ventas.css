@@ -4697,3 +4697,76 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   max-width: 260px !important;
   flex: none !important;
 }
+
+/* =========================================================
+   VENTAS REGISTRADAS — tabla compacta (8 columnas)
+   Venta · Persona · Medio · Total · Retiro · Origen · Fecha · Acciones
+   - Se quitó la columna "Pago" (el estado no cobrado se ve en Retiro).
+   - El subtítulo de Venta muestra solo "Cantidad: x" (sin repetir nombre).
+   - Acciones con ancho fijo para que ningún icono quede cortado
+     por el overflow-x: hidden de .entity-table-wrap.
+   ========================================================= */
+.ventas-grid--orders,
+.ventas-global-table .ventas-grid--orders {
+  grid-template-columns:
+    minmax(0, 1.5fr)
+    minmax(0, 1.45fr)
+    minmax(0, .75fr)
+    minmax(0, .75fr)
+    minmax(0, .85fr)
+    minmax(0, .7fr)
+    minmax(0, .75fr)
+    176px;
+}
+
+.ventas-grid--orders .mov-gridCell--actions {
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.ventas-grid--orders .mov-actionsInline {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.ventas-order-date {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Origen BOT: celeste, distinto del verde de "pagado/retirado". */
+.ventas-pill.bot {
+  border-color: #c9dcf5;
+  color: #1f4f91;
+  background: #eef4fd;
+}
+
+/* Ventas no cobradas (pendientes, canceladas…): total apagado para que
+   se distingan sin necesitar una columna extra. */
+.ventas-grid--orders.is-unpaid .ventas-money {
+  color: var(--mov-muted);
+}
+
+html[data-theme="oscuro"] .ventas-pill.bot {
+  border-color: color-mix(in srgb, #6aa0e8 45%, transparent);
+  color: #a9c8f3;
+  background: color-mix(in srgb, #3b6fb6 22%, transparent);
+}
+
+@media (max-width: 1180px) {
+  .ventas-grid--orders,
+  .ventas-global-table .ventas-grid--orders {
+    grid-template-columns:
+      minmax(0, 1.4fr)
+      minmax(0, 1.35fr)
+      minmax(0, .72fr)
+      minmax(0, .75fr)
+      minmax(0, .85fr)
+      minmax(0, .7fr)
+      minmax(0, .75fr)
+      164px;
+  }
+
+  .ventas-grid--orders .mov-actionsInline {
+    gap: 4px;
+  }
+}

@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { authenticatePage } = require("./helpers/auth.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
+const { openVentaTab } = require("./helpers/ventas-ui.helper");
 
 const env = loadTestEnv();
 const readSource = (...parts) => fs.readFileSync(path.join(process.cwd(), "src", ...parts), "utf8");
@@ -94,6 +95,12 @@ test("Ventas registradas: selector único venta (mes/año), origen y exportació
   expect(source).toContain('obtainAllExportSections');
   expect(source).toContain('ganancia_objetivo');
   expect(source).not.toContain('label: "Mes de ventas"');
+  // Tabla compacta: origen "BOT" (no "WHATSAPP"), sin columna "Pago" y con
+  // "Cantidad: x" como subtítulo en lugar de repetir el nombre del producto.
+  expect(source).toContain('bot_whatsapp: "BOT"');
+  expect(source).toContain('Cantidad: ');
+  expect(source).not.toContain('{ label: "Pago", align: "center" }');
+  expect(source).not.toContain('label: "WHATSAPP"');
 });
 
 test("Planillas: buscador integral, curso automático y descomposición contable sin duplicar cobros", () => {
@@ -150,6 +157,8 @@ test("Interfaz: ventas registradas muestra el selector vigente y permite abrir N
   await page.getByRole("button", { name: /nueva venta/i }).first().click();
   const dialog = page.getByRole("dialog", { name: /nueva venta/i });
   await expect(dialog).toBeVisible();
+  // Las cantidades viven en la pestaña "Productos y ganancias".
+  await openVentaTab(dialog, "productos");
   await expect(dialog.getByRole("spinbutton", { name: "Cantidad de productos vendidos" })).toBeVisible();
   await expect(dialog.getByRole("spinbutton", { name: "Cantidad de ganancias" })).toBeVisible();
   await dialog.getByRole("button", { name: /cancelar/i }).click();

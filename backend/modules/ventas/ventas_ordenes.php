@@ -679,23 +679,33 @@ trait VentasOrdenes
                 $ids = array_map(static fn(array $row): int => (int)$row['id_orden'], $items);
                 $placeholders = implode(',', array_fill(0, count($ids), '?'));
                 $concepts = $db->prepare(
-                    'SELECT id_orden, producto_nombre, cantidad FROM ventas_orden_items'
+                    'SELECT id_orden, id_producto, producto_nombre, cantidad FROM ventas_orden_items'
                     . ' WHERE id_orden IN (' . $placeholders . ') ORDER BY id_orden, id_item'
                 );
                 $concepts->execute($ids);
                 $counts = [];
                 $details = [];
+                $structured = [];
                 while ($concept = $concepts->fetch(PDO::FETCH_ASSOC)) {
                     $id = (int)$concept['id_orden'];
                     $counts[$id] = ($counts[$id] ?? 0) + 1;
                     if ($concept['producto_nombre'] !== null && $concept['cantidad'] !== null) {
                         $details[$id][] = (string)$concept['producto_nombre'] . ' x' . (string)$concept['cantidad'];
+                        // Versión estructurada para que el front muestre un
+                        // resumen compacto (cantidad de unidades / ganancias)
+                        // sin parsear el texto de detalle_items.
+                        $structured[$id][] = [
+                            'nombre' => (string)$concept['producto_nombre'],
+                            'cantidad' => (int)$concept['cantidad'],
+                            'es_producto' => $concept['id_producto'] !== null,
+                        ];
                     }
                 }
                 foreach ($items as &$item) {
                     $id = (int)$item['id_orden'];
                     $item['cantidad_items'] = $counts[$id] ?? 0;
                     $item['detalle_items'] = isset($details[$id]) ? implode(' · ', $details[$id]) : null;
+                    $item['conceptos'] = $structured[$id] ?? [];
                 }
                 unset($item);
             }

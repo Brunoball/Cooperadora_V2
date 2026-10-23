@@ -5,6 +5,7 @@ const { loadTestEnv } = require("./helpers/env.helper");
 const { ok, apiFetch } = require("./helpers/api.helper");
 const { suffix, today, currentYear } = require("./helpers/data.helper");
 const { baseCatalogs, createStudent } = require("./helpers/entities.helper");
+const { clickAndGetPrintPopup } = require("./helpers/print-popup.helper");
 
 const env = loadTestEnv();
 const SCHOOL_MONTHS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -263,10 +264,7 @@ test("Interfaz: Imprimir todos omite los cupones previos al ingreso de abril", a
     if (url.searchParams.get("action") === "cuotas_cupones_cobrador") calls.push(url);
   });
   await page.getByRole("textbox", { name: /buscar/i }).fill(f.student.num_documento);
-  const [popup] = await Promise.all([
-    page.waitForEvent("popup", { timeout: 20_000 }),
-    printButton.click(),
-  ]);
+  const popup = await clickAndGetPrintPopup(page, () => printButton.click());
 
   await expect(popup.locator(".cupon")).toHaveCount(27, { timeout: 30_000 });
   expect(calls, "Solo una llamada para imprimir la libreta filtrada").toHaveLength(1);
@@ -314,10 +312,7 @@ test("Interfaz: Imprimir todos abre los 30 cupones externos reales, no solo el m
     if (action === "cuotas_cupones_cobrador") invoked.push(new URL(req.url()));
     if (action === "cuotas_comprobante") extraLookups.push(req.url());
   });
-  const [popup] = await Promise.all([
-    page.waitForEvent("popup", { timeout: 20_000 }),
-    page.getByRole("button", { name: /imprimir todos/i }).first().click(),
-  ]);
+  const popup = await clickAndGetPrintPopup(page, () => page.getByRole("button", { name: /imprimir todos/i }).first().click());
   await expect(popup.locator(".cupon")).toHaveCount(30, { timeout: 30_000 });
   await expect(popup.locator(".cupon").first()).toContainText(f.student.num_documento);
   for (const name of MONTH_NAMES) {

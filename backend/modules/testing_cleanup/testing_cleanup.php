@@ -15,6 +15,16 @@ final class TestingCleanup
 {
     private const CONFIRMATION = 'LIMPIAR_PLAYWRIGHT';
 
+    /**
+     * Producción: [tabla => ['pk' => col, 'piso' => int]] firmado en el preflight.
+     * Ninguna fila con PK <= piso (es decir, que ya existía antes de la corrida)
+     * puede borrarse, sin importar con qué quede vinculada durante los tests.
+     * Local: vacío (comportamiento anterior).
+     */
+    private static array $floorGuards = [];
+    /** Filas preexistentes que la limpieza habría tocado y se protegieron. */
+    private static array $protected = [];
+
     public static function run(): never
     {
         $auth = require_admin();
@@ -40,6 +50,8 @@ final class TestingCleanup
         $currentSessionId = $closeCurrentSession ? (int)($auth['id_sesion'] ?? 0) : null;
 
         $auditFloor = TestingSafety::productionAuditBaseline($auth['db']);
+        self::$floorGuards = self::floorGuards($auth['db']);
+        self::$protected = [];
         api_success(
             self::cleanup($auth['db'], $currentSessionId, $auditFloor),
             'Limpieza final de Playwright completada.'
@@ -421,7 +433,9 @@ final class TestingCleanup
                     $clauses[] = 'id_alumno_origen IN (' . self::placeholders(count($safeStudents)) . ')';
                     array_push($params, ...$safeStudents);
                 }
-                $statement = $db->prepare('DELETE FROM egresos WHERE ' . implode(' OR ', $clauses));
+                $where = '(' . implode(' OR ', $clauses) . ')';
+                self::countProtected($db, 'egresos', $where, $params);
+                $statement = $db->prepare('DELETE FROM egresos WHERE ' . $where . self::floorSql('egresos'));
                 $statement->execute($params);
                 $counts['egresos_comision'] += $statement->rowCount();
             }
@@ -445,23 +459,22 @@ final class TestingCleanup
                 $safeStudents
             );
             if ($safeStudents !== []) {
-                $statement = $db->prepare(
-                    'DELETE FROM alumnos_eliminados WHERE id_alumno_original IN ('
+                $where = '(id_alumno_original IN ('
                     . self::placeholders(count($safeStudents)) . ")
                        OR UPPER(COALESCE(apellido,'')) LIKE 'PW E2E ALUMNO %'
                        OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE ALUMNO %'
                        OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW E2E ALUMNO %'
-                       OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %'"
-                );
+                       OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %')";
+                self::countProtected($db, 'alumnos_eliminados', $where, $safeStudents);
+                $statement = $db->prepare('DELETE FROM alumnos_eliminados WHERE ' . $where . self::floorSql('alumnos_eliminados'));
                 $statement->execute($safeStudents);
             } else {
-                $statement = $db->prepare(
-                    "DELETE FROM alumnos_eliminados
-                     WHERE UPPER(COALESCE(apellido,'')) LIKE 'PW E2E ALUMNO %'
+                $where = "(UPPER(COALESCE(apellido,'')) LIKE 'PW E2E ALUMNO %'
                         OR UPPER(COALESCE(apellido,'')) LIKE 'PW EEE ALUMNO %'
                         OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW E2E ALUMNO %'
-                        OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %'"
-                );
+                        OR UPPER(COALESCE(snapshot_json,'')) LIKE '%PW EEE ALUMNO %')";
+                self::countProtected($db, 'alumnos_eliminados', $where, []);
+                $statement = $db->prepare('DELETE FROM alumnos_eliminados WHERE ' . $where . self::floorSql('alumnos_eliminados'));
                 $statement->execute();
             }
             $counts['alumnos_eliminados'] += $statement->rowCount();
@@ -627,6 +640,9 @@ final class TestingCleanup
                 'eliminados' => $counts,
                 'total_eliminado' => array_sum($counts),
                 'omitidos_por_referencia_real' => $skipped,
+                // Filas reales anteriores a la corrida que coincidían con algún
+                // criterio de limpieza y NO se borraron (sólo producción).
+                'protegidos_preexistentes' => (object)self::$protected,
             ];
         } catch (Throwable $error) {
             if ($db->inTransaction()) $db->rollBack();
@@ -691,7 +707,9 @@ final class TestingCleanup
             array_push($params, ...$ids);
         }
 
-        $statement = $db->prepare('DELETE FROM auditoria WHERE ' . implode(' OR ', $clauses));
+        $where = '(' . implode(' OR ', $clauses) . ')';
+        self::countProtected($db, 'auditoria', $where, $params);
+        $statement = $db->prepare('DELETE FROM auditoria WHERE ' . $where . self::floorSql('auditoria'));
         $statement->execute($params);
         return $statement->rowCount();
     }
@@ -752,11 +770,58 @@ final class TestingCleanup
         if ($ids === []) return 0;
         self::assertIdentifier($table);
         self::assertIdentifier($column);
-        $statement = $db->prepare(
-            "DELETE FROM `{$table}` WHERE `{$column}` IN (" . self::placeholders(count($ids)) . ')'
-        );
+        $where = "`{$column}` IN (" . self::placeholders(count($ids)) . ')';
+        self::countProtected($db, $table, $where, array_values($ids));
+        $statement = $db->prepare("DELETE FROM `{$table}` WHERE " . $where . self::floorSql($table));
         $statement->execute(array_values($ids));
         return $statement->rowCount();
+    }
+
+    /**
+     * Pisos firmados del preflight. Requiere testing_safety.php actualizado:
+     * en producción, si falta, se cancela la limpieza SIN borrar nada
+     * (nunca limpiar producción sin la protección de filas preexistentes).
+     */
+    private static function floorGuards(PDO $db): array
+    {
+        $provider = [TestingSafety::class, 'productionFloorGuards'];
+        if (is_callable($provider)) {
+            $guards = call_user_func($provider, $db);
+            return is_array($guards) ? $guards : [];
+        }
+        if (strtolower(trim((string)env_value('APP_ENV', 'production'))) === 'production') {
+            api_error(
+                'testing_safety.php desactualizado: falta la protección de filas preexistentes. '
+                . 'Subí la versión nueva antes de limpiar. No se borró ningún registro.',
+                'E2E_SAFETY_OUTDATED',
+                409
+            );
+        }
+        return [];
+    }
+
+    /** " AND `pk` > piso" en producción; "" en local o tablas sin PK simple. */
+    private static function floorSql(string $table): string
+    {
+        $guard = self::$floorGuards[$table] ?? null;
+        if ($guard === null) return '';
+        self::assertIdentifier($guard['pk']);
+        return ' AND `' . $guard['pk'] . '` > ' . (int)$guard['piso'];
+    }
+
+    /** Registra cuántas filas preexistentes coincidían y quedaron protegidas. */
+    private static function countProtected(PDO $db, string $table, string $where, array $params): void
+    {
+        $guard = self::$floorGuards[$table] ?? null;
+        if ($guard === null) return;
+        self::assertIdentifier($table);
+        self::assertIdentifier($guard['pk']);
+        $statement = $db->prepare(
+            "SELECT COUNT(*) FROM `{$table}` WHERE ({$where}) AND `{$guard['pk']}` <= " . (int)$guard['piso']
+        );
+        $statement->execute($params);
+        $count = (int)$statement->fetchColumn();
+        if ($count > 0) self::$protected[$table] = (self::$protected[$table] ?? 0) + $count;
     }
 
     private static function withoutReferences(PDO $db, array $ids, array $relations): array

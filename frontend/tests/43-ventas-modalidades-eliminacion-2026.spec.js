@@ -11,6 +11,7 @@ const { token } = require("./helpers/auth.helper");
 const { createSalesProduct, createSalesCampaign } = require("./helpers/entities.helper");
 const { suffix, testDni, today } = require("./helpers/data.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
+const { openVentaTab, ventaTotal } = require("./helpers/ventas-ui.helper");
 const env = loadTestEnv();
 
 test.beforeEach(() => {
@@ -264,12 +265,15 @@ test("interfaz: nueva venta separa cantidad de productos y ganancias, con gananc
   await expect(modal).toBeVisible();
   await modal.getByRole("combobox", { name: "Venta / campaña" }).selectOption(String(f.campaign.id_campania));
   await modal.getByRole("combobox", { name: "Medio de pago" }).selectOption(String(f.id_medio_pago));
-  await modal.getByRole("spinbutton", { name: "Cantidad de productos vendidos" }).fill("2");
-  await expect(modal.getByRole("spinbutton", { name: "Cantidad de ganancias" })).toHaveValue("0");
+  // Pestaña "Datos de la venta": persona y observaciones.
   await modal.getByRole("textbox", { name: "DNI", exact: true }).fill(f.dni);
   await modal.getByRole("textbox", { name: "Nombre y apellido" }).fill(`PW E2E VTA PERSONA ${f.marker}`);
   await modal.getByRole("textbox", { name: "Observaciones" }).fill(`PW E2E VTA ORDEN ${f.marker}`);
-  await expect(modal.locator(".ventas-simple-bottom > div > strong")).toContainText("200");
+  // Pestaña "Productos y ganancias": cantidades y total.
+  await openVentaTab(modal, "productos");
+  await modal.getByRole("spinbutton", { name: "Cantidad de productos vendidos" }).fill("2");
+  await expect(modal.getByRole("spinbutton", { name: "Cantidad de ganancias" })).toHaveValue("0");
+  await expect(ventaTotal(modal)).toContainText("200", { timeout: 20_000 });
   await modal.getByRole("button", { name: /^guardar$/i }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
   const list = await orders(request, f, { estado: "aprobada" });

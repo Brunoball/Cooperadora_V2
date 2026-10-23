@@ -93,7 +93,32 @@ async function recoverPreviousRun(api, env) {
     }
     const hash = await ok(api, "e2e_integridad", { token: bootstrapToken, headers });
     if (hash.datos?.sha256 !== state.baselineHash) {
-      throw new Error("El hash de datos reales no coincide con el baseline anterior. No se permite una nueva corrida.");
+      // Entre la corrida interrumpida y esta recuperación puede pasar mucho
+      // tiempo, y en producción hay uso real (logins, sesiones, bot, ventas y
+      // cobros). Si TODAS las diferencias están en esas tablas "vivas", el
+      // cleanup ya confirmó 0 residuos E2E y el preflight vuelve a verificar
+      // la base antes de escribir: se informa y se continúa.
+      // Cualquier diferencia en otra tabla (alumnos, categorías, configuración,
+      // usuarios, etc.) sigue bloqueando para revisión supervisada.
+      const LIVE_TABLES = new Set([
+        "sis_sesiones", "sis_login_auditoria", "auditoria",
+        "ventas_personas", "ventas_ordenes", "ventas_orden_items",
+        "pagos", "ingresos", "egresos",
+      ]);
+      const before = state.baselineTables || {};
+      const after = hash.datos?.tablas || {};
+      const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((table) =>
+        (before[table] || {}).sha256 !== (after[table] || {}).sha256 ||
+        Number((before[table] || {}).filas || 0) !== Number((after[table] || {}).filas || 0));
+      const blocking = changed.filter((table) => !LIVE_TABLES.has(table));
+      const isRemote = !env.isLocal;
+      if (!isRemote || blocking.length > 0 || changed.length === 0) {
+        throw new Error(
+          "El hash de datos reales no coincide con el baseline anterior. No se permite una nueva corrida. " +
+          `Tablas: ${(blocking.length ? blocking : changed).join(", ") || "desconocidas"}.`
+        );
+      }
+      console.log(`[E2E] Recuperación: diferencias sólo en tablas con uso real concurrente (${changed.join(", ")}). Cleanup verificado con 0 residuos; se continúa.`);
     }
     await ok(api, "e2e_cleanup", {
       token: bootstrapToken, method: "POST", headers,

@@ -6,6 +6,7 @@ const { ok, apiFetch } = require("./helpers/api.helper");
 const { createSalesProduct, createSalesCampaign } = require("./helpers/entities.helper");
 const { suffix, testDni, today } = require("./helpers/data.helper");
 const { loadTestEnv } = require("./helpers/env.helper");
+const { openVentaTab, ventaTotal, expectVentaObservation } = require("./helpers/ventas-ui.helper");
 const env = loadTestEnv();
 test.beforeEach(() => test.skip(!env.isLocal && !env.allowRemoteWrites, "Solo entorno E2E autorizado."));
 
@@ -114,16 +115,19 @@ test("interfaz: campos independientes por defecto 0, cálculo mixto y guardado",
   const modal = page.getByRole("dialog", { name: /nueva venta/i });
   await modal.getByRole("combobox", { name: "Venta / campaña" }).selectOption(String(f.campaign.id_campania));
   await modal.getByRole("combobox", { name: "Medio de pago" }).selectOption(String(f.payment.id_medio_pago));
+  // Pestaña "Datos de la venta": persona y observaciones.
+  await modal.getByRole("textbox", { name: "DNI", exact: true }).fill(f.dni);
+  await modal.getByRole("textbox", { name: "Nombre y apellido" }).fill(`PW E2E VTA PERSONA ${f.marker}`);
+  await modal.getByRole("textbox", { name: "Observaciones" }).fill(`PW E2E VTA ORDEN ${f.marker}`);
+  // Pestaña "Productos y ganancias": cantidades independientes, ambas en 0.
+  await openVentaTab(modal, "productos");
   const products = modal.getByRole("spinbutton", { name: "Cantidad de productos vendidos" });
   const gains = modal.getByRole("spinbutton", { name: "Cantidad de ganancias" });
   await expect(products).toHaveValue("0");
   await expect(gains).toHaveValue("0");
   await products.fill("2");
   await gains.fill("1");
-  await modal.getByRole("textbox", { name: "DNI", exact: true }).fill(f.dni);
-  await modal.getByRole("textbox", { name: "Nombre y apellido" }).fill(`PW E2E VTA PERSONA ${f.marker}`);
-  await modal.getByRole("textbox", { name: "Observaciones" }).fill(`PW E2E VTA ORDEN ${f.marker}`);
-  await expect(modal.locator(".ventas-simple-bottom > div > strong")).toContainText("3.200", { timeout: 20_000 });
+  await expect(ventaTotal(modal)).toContainText("3.200", { timeout: 20_000 });
   await modal.getByRole("button", { name: /^guardar$/i }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
   const after = await balance(request, f);
@@ -144,7 +148,7 @@ test("interfaz: mismo campo para nombre y buscador; fecha y observación visible
   await expect(modal.getByRole("textbox", { name: "Observaciones" })).toBeVisible();
 });
 
-test("interfaz: edición conserva el formulario simple y la observación aparece debajo del comprador", async ({ page, request }) => {
+test("interfaz: edición conserva el formulario simple y la observación se consulta desde la fila", async ({ page, request }) => {
   test.setTimeout(100_000);
   const f = await fixture(request);
   const originalNote = `PW E2E VTA ORDEN ${f.marker} NOTA VENTA ORIGINAL`;
@@ -155,16 +159,22 @@ test("interfaz: edición conserva el formulario simple y la observación aparece
   await page.getByRole("combobox", { name: /venta \(mes y año\)/i }).selectOption(String(f.campaign.id_campania));
   const row = page.getByRole("row").filter({ hasText: `PW E2E VTA PERSONA ${f.marker}` });
   await expect(row).toBeVisible();
-  await expect(row.getByText(`OBS.: ${originalNote}`)).toBeVisible();
+  await expectVentaObservation(page, row, originalNote);
   await row.getByRole("button", { name: "Editar" }).click();
   const modal = page.getByRole("dialog", { name: "Editar venta" });
+  // El modal abre antes de terminar ventas_orden_detalle: esperar los datos
+  // reales en "Datos de la venta" y recién después revisar las cantidades.
+  await expect(modal.getByRole("textbox", { name: "Nombre y apellido" })).toHaveValue(`PW E2E VTA PERSONA ${f.marker}`, { timeout: 15_000 });
+  await openVentaTab(modal, "productos");
   await expect(modal.getByRole("spinbutton", { name: "Cantidad de productos vendidos" })).toHaveValue("1");
+  // Observaciones y comprador están en "Datos de la venta".
+  await openVentaTab(modal, "datos");
   await expect(modal.getByRole("textbox", { name: "Nombre y apellido" })).toHaveCount(1);
   await expect(modal.getByText(/referencia de pago|datos opcionales/i)).toHaveCount(0);
   await modal.getByRole("textbox", { name: "Observaciones" }).fill(changedNote);
   await modal.getByRole("button", { name: /^guardar$/i }).click();
   await expect(modal).toBeHidden({ timeout: 20_000 });
-  await expect(row.getByText(`OBS.: ${changedNote}`)).toBeVisible();
+  await expectVentaObservation(page, row, changedNote);
   const detail = await ok(request, "ventas_orden_detalle", { token: f.t, query: { id_orden: order.id_orden } });
   expect(detail.item.observacion).toBe(changedNote);
 });

@@ -22,6 +22,29 @@ final class TestingSafety
     ];
 
     /**
+     * Tablas que reciben actividad REAL continua en producción mientras corre
+     * la suite (logins de administradores, sesiones, bot de WhatsApp, ventas y
+     * cobros cargados por el personal). En producción la huella de estas tablas
+     * se calcula sólo sobre las filas que ya existían en el preflight (PK <= piso
+     * firmado). Las filas nuevas que NO son E2E se informan aparte como
+     * actividad concurrente real, sin hacer fallar la verificación.
+     * En local no se aplican pisos: la comparación sigue siendo exacta.
+     */
+    private const LIVE_TABLES = [
+        'sis_sesiones', 'sis_login_auditoria', 'auditoria',
+        'ventas_personas', 'ventas_ordenes', 'ventas_orden_items',
+        'pagos', 'ingresos', 'egresos',
+    ];
+
+    /**
+     * Columnas que cambian por el uso normal de una sesión (actividad, logout,
+     * vencimiento) y no representan datos de negocio.
+     */
+    private const VOLATILE_COLUMNS = [
+        'sis_sesiones' => ['ultima_actividad', 'activa'],
+    ];
+
+    /**
      * Preflight PÚBLICO únicamente en instancia APP_ENV=testing.
      * No crea sesiones ni altera datos: verifica DB física y ausencia de E2E
      * previo. Exige clave independiente en .env del backend aislado.
@@ -135,7 +158,11 @@ final class TestingSafety
         $historicalE2EAudit = self::scalarCount($db, "SELECT COUNT(*) FROM sis_login_auditoria
             WHERE LOWER(COALESCE(usuario_intentado,'')) LIKE 'pw_e2e_%'
                OR UPPER(COALESCE(user_agent,'')) LIKE 'PW-COOP-E2E-%'");
-        $auditBaselineToken = self::signAuditBaseline($dbName, $loginAuditMax, $configuredKey);
+        // Piso de PK por tabla tomado ANTES de cualquier escritura E2E. Como el
+        // preflight acaba de confirmar 0 registros E2E, toda fila con PK <= piso
+        // es real y queda protegida durante toda la corrida.
+        $tableFloors = self::tableFloors($db);
+        $auditBaselineToken = self::signAuditBaseline($dbName, $loginAuditMax, $configuredKey, $tableFloors);
         api_success(['datos' => [
             'app_env' => 'production',
             'base_datos' => $dbName,
@@ -149,11 +176,12 @@ final class TestingSafety
      * Token HMAC vinculado a DB y vencimiento; NO admite alterar el límite de
      * auditoría. Las filas anteriores al preflight no son propiedad de Playwright.
      */
-    private static function signAuditBaseline(string $dbName, int $maxId, string $key): string
+    private static function signAuditBaseline(string $dbName, int $maxId, string $key, array $floors = []): string
     {
         $payload = json_encode([
             'db' => $dbName,
             'limite' => $maxId,
+            'pisos' => (object)$floors,
             'vence' => time() + 7200,
             'nonce' => bin2hex(random_bytes(12)),
         ], JSON_THROW_ON_ERROR);
@@ -162,6 +190,71 @@ final class TestingSafety
     }
 
     public static function productionAuditBaseline(PDO $db): ?int
+    {
+        $payload = self::productionBaselinePayload($db);
+        return $payload === null ? null : $payload['limite'];
+    }
+
+    /**
+     * Pisos de PK firmados en el preflight para las tablas con actividad real
+     * concurrente. Tokens anteriores (sin "pisos") devuelven [] y mantienen la
+     * comparación exacta de siempre.
+     */
+    public static function productionTableFloors(PDO $db): array
+    {
+        $payload = self::productionBaselinePayload($db);
+        if ($payload === null || !isset($payload['pisos']) || !is_array($payload['pisos'])) return [];
+        $floors = [];
+        foreach ($payload['pisos'] as $table => $floor) {
+            if (in_array($table, self::TABLES, true) && is_int($floor) && $floor >= 0) {
+                $floors[$table] = $floor;
+            }
+        }
+        return $floors;
+    }
+
+    /**
+     * Para la limpieza: [tabla => ['pk' => columna, 'piso' => int]].
+     * En producción ninguna fila con PK <= piso puede borrarse. Local: [].
+     */
+    public static function productionFloorGuards(PDO $db): array
+    {
+        $guards = [];
+        foreach (self::productionTableFloors($db) as $table => $floor) {
+            $pk = self::integerPrimaryKey($db, $table);
+            if ($pk !== null) $guards[$table] = ['pk' => $pk, 'piso' => $floor];
+        }
+        return $guards;
+    }
+
+    /** Conjuntos E2E -> tabla física cuyo PK contienen. */
+    private const SET_TABLES = [
+        'usuarios' => 'sis_usuarios', 'alumnos' => 'alumnos', 'ingresantes' => 'ingresantes',
+        'familias' => 'familias', 'ventas_productos' => 'ventas_productos',
+        'ventas_campanias' => 'ventas_campanias', 'ventas_personas' => 'ventas_personas',
+        'ventas_ordenes' => 'ventas_ordenes', 'ventas_orden_items' => 'ventas_orden_items',
+        'ingresos_ventas' => 'ingresos', 'categoria_monto' => 'categoria_monto',
+        'categoria' => 'categoria', 'categoria_hermanos' => 'categoria_hermanos',
+        'pagos' => 'pagos', 'egresos_comision' => 'egresos', 'ingresos_contable' => 'ingresos',
+        'egresos_contable' => 'egresos', 'contable_categoria' => 'contable_categoria',
+        'contable_descripcion' => 'contable_descripcion', 'contable_proveedor' => 'contable_proveedor',
+        'sexo' => 'sexo', 'tipos_documentos' => 'tipos_documentos', 'docentes' => 'docentes',
+    ];
+
+    /** Quita de los conjuntos E2E todo ID que ya existía en el preflight. */
+    private static function withoutPreexisting(array $sets, array $floors): array
+    {
+        if ($floors === []) return $sets;
+        foreach ($sets as $name => $ids) {
+            $table = self::SET_TABLES[$name] ?? null;
+            if ($table === null || !isset($floors[$table])) continue;
+            $floor = $floors[$table];
+            $sets[$name] = array_values(array_filter($ids, static fn(int $id): bool => $id > $floor));
+        }
+        return $sets;
+    }
+
+    private static function productionBaselinePayload(PDO $db): ?array
     {
         if (strtolower(trim((string)env_value('APP_ENV', 'production'))) !== 'production') {
             return null;
@@ -186,7 +279,44 @@ final class TestingSafety
             api_error('La marca E2E venció o corresponde a otra base de datos.',
                 'E2E_AUDIT_BASELINE_INVALID', 403);
         }
-        return $payload['limite'];
+        return $payload;
+    }
+
+    /** MAX(PK) de cada tabla verificada, tomado ANTES de cualquier escritura E2E. */
+    private static function tableFloors(PDO $db): array
+    {
+        $floors = [];
+        foreach (self::TABLES as $table) {
+            if (!self::tableExists($db, $table)) continue;
+            $pk = self::integerPrimaryKey($db, $table);
+            if ($pk === null) continue;
+            $floors[$table] = self::scalarCount($db, 'SELECT COALESCE(MAX(`' . $pk . '`), 0) FROM `' . $table . '`');
+        }
+        return $floors;
+    }
+
+    /** Nombre de la PK si es de una sola columna entera; null en otro caso. */
+    public static function integerPrimaryKey(PDO $db, string $table): ?string
+    {
+        try {
+            $statement = $db->prepare(
+                "SELECT k.COLUMN_NAME, c.DATA_TYPE
+                   FROM information_schema.KEY_COLUMN_USAGE k
+                   INNER JOIN information_schema.COLUMNS c
+                     ON c.TABLE_SCHEMA = k.TABLE_SCHEMA AND c.TABLE_NAME = k.TABLE_NAME AND c.COLUMN_NAME = k.COLUMN_NAME
+                  WHERE k.TABLE_SCHEMA = DATABASE() AND k.TABLE_NAME = ? AND k.CONSTRAINT_NAME = 'PRIMARY'"
+            );
+            $statement->execute([$table]);
+            $columns = $statement->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $error) {
+            error_log('[testing_safety][pk] ' . $error->getMessage());
+            return null;
+        }
+        if (count($columns) !== 1) return null;
+        $type = strtolower((string)$columns[0]['DATA_TYPE']);
+        if (!in_array($type, ['tinyint', 'smallint', 'mediumint', 'int', 'integer', 'bigint'], true)) return null;
+        $name = (string)$columns[0]['COLUMN_NAME'];
+        return preg_match('/^[A-Za-z0-9_]+$/', $name) ? $name : null;
     }
 
     public static function probe(): never
@@ -257,11 +387,14 @@ final class TestingSafety
     {
         $auth = require_admin();
         self::requireE2EHeader();
-        $sets = self::e2eSets($auth['db']);
+        $floors = self::productionTableFloors($auth['db']);
+        $sets = self::withoutPreexisting(self::e2eSets($auth['db']), $floors);
         $counts = [];
         foreach ($sets as $key => $ids) $counts[$key] = count($ids);
 
         $auditFloor = self::productionAuditBaseline($auth['db']);
+        $generalAuditPk = isset($floors['auditoria']) ? self::integerPrimaryKey($auth['db'], 'auditoria') : null;
+        $generalAuditFilter = $generalAuditPk === null ? '' : '`' . $generalAuditPk . '` > ' . (int)$floors['auditoria'] . ' AND ';
         $auditFilter = $auditFloor === null ? '' : 'id_auditoria > ' . $auditFloor . ' AND ';
         $counts['login_auditoria'] = self::scalarCount(
             $auth['db'],
@@ -274,12 +407,12 @@ final class TestingSafety
         $counts['auditoria_marcada'] = self::scalarCount(
             $auth['db'],
             "SELECT COUNT(*) FROM auditoria
-             WHERE UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW E2E%'
+             WHERE {$generalAuditFilter}(UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW E2E%'
                 OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW E2E%'
                 OR UPPER(COALESCE(datos_anteriores,'')) LIKE '%PW EEE%'
                 OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PW EEE%'
                 OR UPPER(COALESCE(datos_anteriores,'')) LIKE '%PWE2E%'
-                OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PWE2E%'"
+                OR UPPER(COALESCE(datos_nuevos,'')) LIKE '%PWE2E%')"
         );
 
         $total = array_sum(array_map('intval', $counts));
@@ -294,29 +427,44 @@ final class TestingSafety
         $auth = require_admin();
         self::requireE2EHeader();
         $db = $auth['db'];
-        $sets = self::e2eSets($db);
+        $floors = self::productionTableFloors($db);
+        $sets = self::withoutPreexisting(self::e2eSets($db), $floors);
         // La propia sesión de bootstrap se crea para poder calcular la huella.
         // Excluir solamente esa PK evita que el setup altere artificialmente el baseline.
         $sets['sesion_actual'] = isset($auth['id_sesion']) ? [(int)$auth['id_sesion']] : [];
         $tables = [];
+        $concurrent = [];
         $auditFloor = self::productionAuditBaseline($db);
 
         foreach (self::TABLES as $table) {
             if (!self::tableExists($db, $table)) continue;
             $rows = $db->query('SELECT * FROM `' . $table . '`')->fetchAll(PDO::FETCH_ASSOC);
             $realRows = [];
+            $floor = $floors[$table] ?? null;
+            $pk = $floor === null ? null : self::integerPrimaryKey($db, $table);
 
             foreach ($rows as $row) {
-                // Las auditorías anteriores al preflight son datos históricos,
-                // aun cuando contengan un marcador usado en pruebas antiguas.
+                // Producción: toda fila que ya existía en el preflight es REAL
+                // (el preflight confirmó 0 E2E). Nunca se excluye de la huella,
+                // aunque durante la corrida quede vinculada a algo de prueba.
+                $preexisting = $pk !== null && (int)($row[$pk] ?? 0) <= $floor;
+                // Las auditorías de login anteriores al preflight son históricas.
                 $historicalLoginAudit = $table === 'sis_login_auditoria'
                     && $auditFloor !== null
                     && (int)($row['id_auditoria'] ?? 0) <= $auditFloor;
-                if (!$historicalLoginAudit && self::isE2ERow($table, $row, $sets)) continue;
+                if (!$preexisting && !$historicalLoginAudit) {
+                    if (self::isE2ERow($table, $row, $sets)) continue;
+                    // Fila nueva no E2E en una tabla con uso real continuo
+                    // (otro usuario, el bot, una venta real): se informa aparte.
+                    if ($pk !== null && in_array($table, self::LIVE_TABLES, true)) {
+                        $concurrent[$table] = ($concurrent[$table] ?? 0) + 1;
+                        continue;
+                    }
+                }
 
-                // Campo volátil actualizado por cada request autenticado. No forma
-                // parte de la integridad funcional de los datos productivos.
-                if ($table === 'sis_sesiones') unset($row['ultima_actividad']);
+                // Campos volátiles (actividad, logout o vencimiento de sesión).
+                // No forman parte de la integridad funcional de los datos.
+                foreach (self::VOLATILE_COLUMNS[$table] ?? [] as $column) unset($row[$column]);
 
                 ksort($row);
                 $realRows[] = $row;
@@ -344,6 +492,9 @@ final class TestingSafety
                     json_encode($tables, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}'
                 ),
                 'tablas' => $tables,
+                // Filas reales creadas por otros usuarios durante la corrida
+                // (sólo producción). No forman parte de la huella.
+                'filas_concurrentes_reales' => (object)$concurrent,
             ],
         ], 'Huella de datos reales calculada.');
     }

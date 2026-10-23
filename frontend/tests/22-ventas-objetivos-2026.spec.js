@@ -8,6 +8,7 @@ const { ok, apiFetch } = require('./helpers/api.helper');
 const { createSalesProduct, createSalesCampaign } = require('./helpers/entities.helper');
 const { suffix, testDni, today } = require('./helpers/data.helper');
 const { loadTestEnv } = require('./helpers/env.helper');
+const { openVentaTab, ventaTotal } = require('./helpers/ventas-ui.helper');
 
 const env = loadTestEnv();
 test.beforeEach(() => {
@@ -113,13 +114,16 @@ test('interfaz: permite registrar 0 unidades y cobrar solamente la ganancia del 
   await expect(modal).toBeVisible();
   await modal.getByRole('combobox', { name: 'Venta / campaña' }).selectOption(String(f.campaign.id_campania));
   await modal.getByRole('combobox', { name: 'Medio de pago' }).selectOption(String(f.payment.id_medio_pago));
-  const quantity = modal.getByRole('spinbutton', { name: 'Cantidad de productos vendidos' });
-  await expect(quantity).toHaveValue('0');
-  await modal.getByRole('spinbutton', { name: 'Cantidad de ganancias' }).fill('3');
+  // Pestaña "Datos de la venta": persona y observaciones.
   await modal.getByRole('textbox', { name: 'DNI', exact: true }).fill(f.dni);
   await modal.getByRole('textbox', { name: 'Nombre y apellido' }).fill(`PW E2E VTA PERSONA ${f.marker}`);
   await modal.getByRole('textbox', { name: 'Observaciones' }).fill(`PW E2E VTA ORDEN ${f.marker}`);
-  await expect(modal.locator('.ventas-simple-bottom > div > strong')).toContainText('10.000', { timeout: 20_000 });
+  // Pestaña "Productos y ganancias": cantidades y total.
+  await openVentaTab(modal, 'productos');
+  const quantity = modal.getByRole('spinbutton', { name: 'Cantidad de productos vendidos' });
+  await expect(quantity).toHaveValue('0');
+  await modal.getByRole('spinbutton', { name: 'Cantidad de ganancias' }).fill('3');
+  await expect(ventaTotal(modal)).toContainText('10.000', { timeout: 20_000 });
   const save = modal.getByRole('button', { name: /^guardar$/i });
   await expect(save).toBeEnabled();
   await save.click();

@@ -62,6 +62,12 @@ module.exports = async function globalTeardown() {
 
       const skipped = cleaned.omitidos_por_referencia_real || {};
       console.log(`[E2E] Limpieza de registros de prueba: ${Number(cleaned.total_eliminado || 0)} eliminados.`);
+      const protectedRows = cleaned.protegidos_preexistentes || {};
+      if (Object.keys(protectedRows).length > 0) {
+        // Filas reales anteriores a la corrida que coincidían con algún criterio
+        // de limpieza: NO se borraron. Se informa para poder revisar el motivo.
+        console.warn(`[E2E] AVISO: la limpieza protegió filas reales preexistentes (no borradas): ${JSON.stringify(protectedRows)}`);
+      }
       if (Object.keys(skipped).length > 0 && !finalError) {
         finalError = new Error(
           `Cleanup E2E omitió raíces por referencias reales: ${JSON.stringify(skipped)}`
@@ -80,6 +86,12 @@ module.exports = async function globalTeardown() {
 
       {
         const afterCleanup = await ok(api, "e2e_integridad", { token: state.bootstrapToken });
+        // Producción: filas creadas por usuarios reales/bot durante la corrida.
+        // No forman parte de la huella; se informan para trazabilidad.
+        const concurrent = afterCleanup.datos?.filas_concurrentes_reales || {};
+        if (Object.keys(concurrent).length > 0) {
+          console.log(`[E2E] Actividad real concurrente durante la corrida (no afecta la verificación): ${JSON.stringify(concurrent)}`);
+        }
         if (afterCleanup.datos?.sha256 !== state.baselineHash && !finalError) {
           const baselineTables = state.baselineTables || {};
           const currentTables = afterCleanup.datos?.tablas || {};
@@ -91,9 +103,14 @@ module.exports = async function globalTeardown() {
             const after = currentTables[table] || {};
             return before.sha256 !== after.sha256 || Number(before.filas || 0) !== Number(after.filas || 0);
           });
+          const detail = changedTables.map((table) =>
+            `${table}(filas ${Number(baselineTables[table]?.filas || 0)}→${Number(currentTables[table]?.filas || 0)})`
+          );
           finalError = new Error(
-            `INTEGRIDAD REAL POST-CLEANUP MODIFICADA: tablas=${changedTables.join(', ') || 'desconocidas'} ` +
-            `baseline=${state.baselineHash} actual=${afterCleanup.datos?.sha256}`
+            `INTEGRIDAD REAL POST-CLEANUP MODIFICADA: tablas=${detail.join(', ') || 'desconocidas'} ` +
+            `baseline=${state.baselineHash} actual=${afterCleanup.datos?.sha256}. ` +
+            'Se modificaron filas reales que ya existían antes de la corrida. Revisalas antes de volver a ejecutar; ' +
+            'después borrá tests/.auth/cooperadora.json para habilitar una nueva corrida.'
           );
         }
       }
@@ -115,7 +132,9 @@ module.exports = async function globalTeardown() {
       });
       if (post.status !== 200 || !post.body?.exito ||
           Number(post.body?.datos?.residuos_e2e) !== 0) {
+        // No ocultar este fallo detrás de un error anterior de integridad.
         throw new Error(
+          (finalError ? `${finalError.message} | ` : '') +
           `PRE-FLIGHT FINAL FALLIDO [${post.status}]: ` +
           `${post.body?.codigo || ''} ${JSON.stringify(post.body?.detalles?.conteos || {})}`
         );
@@ -124,7 +143,8 @@ module.exports = async function globalTeardown() {
       console.log('[E2E] LIMPIEZA VERIFICADA: 0 residuos; huella real sin cambios; sesión cerrada.');
     }
   } catch (error) {
-    if (!finalError) finalError = error;
+    // Un error posterior que ya incluye el mensaje anterior lo reemplaza.
+    if (!finalError || String(error?.message || '').startsWith(finalError.message)) finalError = error;
   } finally {
     await api.dispose();
     // Si la limpieza falla en remoto conservar credenciales/huella para

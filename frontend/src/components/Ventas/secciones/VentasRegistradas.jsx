@@ -23,9 +23,65 @@ const dateText = (value) => {
 };
 
 const originText = (origin) => ({
-  bot_whatsapp: "WHATSAPP",
+  bot_whatsapp: "BOT",
   manual: "MANUAL",
+  importado: "IMPORTADO",
 }[origin] || "—");
+
+const isBotOrder = (row) => row?.origen === "bot_whatsapp";
+
+const isGainName = (name) => /^GANANCIA/i.test(String(name || "").trim());
+
+/* Conceptos de la orden. Usa la lista estructurada del backend y, si no está
+   (respuesta anterior), interpreta detalle_items ("NOMBRE x2 · NOMBRE x1"). */
+const conceptList = (row) => {
+  if (Array.isArray(row?.conceptos) && row.conceptos.length) {
+    return row.conceptos.map((item) => ({
+      nombre: upper(item.nombre, 150),
+      cantidad: Number(item.cantidad || 0),
+      esProducto: typeof item.es_producto === "boolean" ? item.es_producto : !isGainName(item.nombre),
+    }));
+  }
+  return String(row?.detalle_items || "")
+    .split(" · ")
+    .map((part) => {
+      const match = part.trim().match(/^(.*?)\s+x(\d+)$/i);
+      return match ? { nombre: upper(match[1], 150), cantidad: Number(match[2]), esProducto: !isGainName(match[1]) } : null;
+    })
+    .filter(Boolean);
+};
+
+/* Subtítulo de la columna "Venta": en lugar de repetir el nombre del
+   producto ("PAN DULCE + DURAZNO X3"), solo la cantidad. Si hay ganancias se
+   agregan al lado ("Cantidad: 1 · Ganancia: 1"). */
+const orderSummary = (row) => {
+  const items = conceptList(row);
+  const units = items.filter((item) => item.esProducto).reduce((acc, item) => acc + item.cantidad, 0);
+  const gainUnits = items.filter((item) => !item.esProducto).reduce((acc, item) => acc + item.cantidad, 0);
+  const parts = [];
+  if (units > 0) parts.push(`Cantidad: ${units.toLocaleString("es-AR")}`);
+  if (gainUnits > 0) parts.push(`Ganancia: ${gainUnits.toLocaleString("es-AR")}`);
+  if (!parts.length) {
+    parts.push(Number(row?.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `Conceptos: ${Number(row?.cantidad_items || 0)}`);
+  }
+  return {
+    text: parts.join(" · "),
+    title: row?.detalle_items ? upper(row.detalle_items, 3000) : "",
+  };
+};
+
+const retreatPill = (row) => {
+  if (row.estado === "aprobada") {
+    return yes(row.retirado)
+      ? { className: "success", label: "RETIRADO" }
+      : { className: "warning", label: "PENDIENTE" };
+  }
+  // Sin columna "Pago": una venta no cobrada se indica acá en lugar del retiro.
+  return {
+    className: `state-${row.estado}`,
+    label: row.estado === "pendiente" ? "SIN PAGAR" : stateLabel(row.estado),
+  };
+};
 
 const exportRecord = (row) => ({
   campania: upper(row.campania_nombre, 150),
@@ -143,7 +199,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       onChange: (value) => { setPage(1); setCampaign(String(value)); } },
     { key: "estado", type: "select", className: "ventas-orders-filter--pago ventas-filter--option-width", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
     { key: "retiro", type: "select", className: "ventas-orders-filter--retiro ventas-filter--option-width", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
-    { key: "origen", type: "select", className: "ventas-orders-filter--origen ventas-filter--option-width", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "WHATSAPP" }], onChange: (v) => { setPage(1); setOrigin(v); } },
+    { key: "origen", type: "select", className: "ventas-orders-filter--origen ventas-filter--option-width", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "BOT" }], onChange: (v) => { setPage(1); setOrigin(v); } },
   ];
 
   const exportSections = useMemo(() => [{
@@ -213,7 +269,6 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           "Persona",
           "Medio",
           { label: "Total", align: "right" },
-          { label: "Pago", align: "center" },
           { label: "Retiro", align: "center" },
           { label: "Origen", align: "center" },
           { label: "Fecha", align: "center" },
@@ -232,34 +287,32 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             <span>Seleccioná una campaña o un año y mes para consultar ventas anteriores.</span>
           </div>
         ) : null}
-        {rows.map((row) => (
+        {rows.map((row) => {
+          const summary = orderSummary(row);
+          const retreatState = retreatPill(row);
+          return (
           <div
-            className="mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--orders"
+            className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--orders${row.estado !== "aprobada" ? " is-unpaid" : ""}`}
             role="row"
             key={row.id_orden}
           >
-            <div className="mov-gridCell entity-main-cell">
+            <div className="mov-gridCell entity-main-cell" title={summary.title}>
               <strong>{upper(row.campania_nombre, 150)}</strong>
-              <small>{row.detalle_items ? upper(row.detalle_items, 3000) : Number(row.ganancia_objetivo || 0) > 0 ? "GANANCIA POR OBJETIVO" : `${row.cantidad_items} CONCEPTOS`}</small>
+              <small>{summary.text}</small>
             </div>
             <div className="mov-gridCell entity-main-cell">
-              <strong>{row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA"}</strong>
+              <strong title={row.nombre_apellido ? upper(row.nombre_apellido, 160) : undefined}>{row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA"}</strong>
               <small>{row.dni ? `DNI ${row.dni}` : "Sin identificación"}</small>
             </div>
             <div className="mov-gridCell">{upper(row.medio_pago, 120)}</div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
-            <div className="mov-gridCell is-center"><span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span></div>
             <div className="mov-gridCell is-center">
-              {row.estado === "aprobada" ? (
-                <span className={`ventas-pill ${yes(row.retirado) ? "success" : "warning"}`}>{yes(row.retirado) ? "RETIRADO" : "PENDIENTE"}</span>
-              ) : (
-                <span className="ventas-pill neutral">—</span>
-              )}
+              <span className={`ventas-pill ${retreatState.className}`}>{retreatState.label}</span>
             </div>
             <div className="mov-gridCell is-center">
-              <span className={`ventas-pill ${row.origen === "bot_whatsapp" ? "whatsapp" : "neutral"}`}>{originText(row.origen)}</span>
+              <span className={`ventas-pill ${isBotOrder(row) ? "bot" : "neutral"}`}>{originText(row.origen)}</span>
             </div>
-            <div className="mov-gridCell is-center">{row.fecha_venta || String(row.aprobado_en || row.creado_en || "").slice(0, 10)}</div>
+            <div className="mov-gridCell is-center ventas-order-date">{dateText(row.fecha_venta || row.aprobado_en || row.creado_en)}</div>
             <div className="mov-gridCell mov-gridCell--actions">
               <div className="mov-actionsInline">
                 {String(row.observacion || "").trim() ? (
@@ -284,7 +337,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </GlobalDivTable>
 
       <GlobalPagination
