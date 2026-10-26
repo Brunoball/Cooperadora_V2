@@ -18,6 +18,8 @@ trait VentasConfiguracion
     abstract private static function product(PDO $db, int $id, bool $forUpdate = false): array;
     abstract private static function resolvePerson(PDO $db, array $body): ?int;
     abstract private static function objectiveForSold(array $campaign, int $sold): array;
+    abstract private static function categoryForPerson(PDO $db, ?int $personId = null, string $dni = ''): string;
+    abstract private static function campaignForCategory(array $campaign, string $category): array;
 
     // El mismo valor y visibilidad que Ventas::MONEY_MAX. PHP 8.2+
     // permite declarar una constante compatible en la clase y en su trait.
@@ -141,6 +143,24 @@ trait VentasConfiguracion
             }
         }
 
+        // Docentes heredan la regla de alumnos cuando se omiten campos (clientes anteriores).
+        // Terceros comienzan sin obligación hasta que se configure expresamente.
+        $categoryRules = [];
+        foreach (['docentes', 'terceros'] as $category) {
+            $suffix = $category;
+            $defaultMin = $category === 'docentes' ? $minimumQuantity : 0;
+            $defaultUnit = $category === 'docentes' ? $missingUnitGain : 0;
+            $defaultNoSales = $category === 'docentes' ? $noSalesGain : 0;
+            $min = self::integer($body['cantidad_minima_' . $suffix] ?? $defaultMin, 'objetivo ' . $category, 0, 10000);
+            $unit = decimal_amount($body['ganancia_unidad_' . $suffix] ?? $defaultUnit, 'ganancia por faltante ' . $category, 0, self::MONEY_MAX);
+            $none = decimal_amount($body['ganancia_sin_ventas_' . $suffix] ?? $defaultNoSales, 'ganancia sin ventas ' . $category, 0, self::MONEY_MAX);
+            if ($min === 0) { $unit = 0.0; $none = 0.0; }
+            elseif (!$productId || $unit <= 0 || $none <= 0) {
+                api_error('Revisá el objetivo y las ganancias de ' . $category . '.', 'VENTA_OBJETIVO_GANANCIA_REQUERIDA', 422);
+            }
+            $categoryRules[$category] = [$min, $unit, $none];
+        }
+
         // Los mensajes legados se usan solo como valor inicial de campañas nuevas.
         // Al editar, se conservan los valores anteriores para NO sobrescribir el
         // flujo actual del bot con textos fijos. La integración se hará después.
@@ -173,7 +193,7 @@ trait VentasConfiguracion
             api_error('Definí las fechas de inicio, fin y entrega de la campaña.', 'VENTA_FECHAS_REQUERIDAS');
         }
 
-        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate, $delivery, $providedSaleMessage, $providedGainMessage, $providedPurchaseMessage, $providedSlots, $newSaleMessage, $newGainMessage, $newPurchaseMessage, $deliveryProvided) {
+        $result = transaction($db, function () use ($db, $auth, $id, $name, $productId, $start, $end, $visibleRequested, $minimumQuantity, $missingUnitGain, $noSalesGain, $question, $startMessage, $approvedMessage, $isolatedE2ECreate, $delivery, $providedSaleMessage, $providedGainMessage, $providedPurchaseMessage, $providedSlots, $newSaleMessage, $newGainMessage, $newPurchaseMessage, $deliveryProvided, $categoryRules) {
             // Bloqueamos primero el producto solicitado y después la configuración.
             // De esta forma una edición de una configuración activa no puede aprobar un
             // producto que fue dado de baja concurrentemente.
@@ -222,10 +242,11 @@ trait VentasConfiguracion
                 );
             }
 
-            // Una vez que la configuración tiene ventas, su producto principal y la
-            // regla económica del objetivo pasan a ser históricas. Permitir modificarlas
-            // recalcularía planillas viejas con criterios nuevos, por eso se bloquean
-            // también en backend (no sólo desde la interfaz).
+            // Las reglas de objetivo y ganancias de alumnos, docentes y terceros
+            // son editables por decisión del administrador, aunque existan cobros.
+            // No se alteran los montos persistidos en órdenes ya registradas.
+            // Seguimos bloqueando producto y fechas cuando hay ventas: esa
+            // protección es independiente de la configuración económica.
             if ($before) {
                 $orderStatement = $db->prepare(
                     'SELECT id_orden FROM ventas_ordenes WHERE id_campania=? ORDER BY id_orden LIMIT 1 FOR UPDATE'
@@ -234,13 +255,9 @@ trait VentasConfiguracion
                 $hasOrders = $orderStatement->fetchColumn() !== false;
                 if ($hasOrders) {
                     $beforeProductId = self::nullablePositiveId($before['id_producto_principal'] ?? null);
-                    $objectiveChanged =
-                        (int)($before['cantidad_minima_persona'] ?? 0) !== $minimumQuantity
-                        || round((float)($before['ganancia_unidad_faltante'] ?? 0), 2) !== round((float)$missingUnitGain, 2)
-                        || round((float)($before['ganancia_total_sin_ventas'] ?? 0), 2) !== round((float)$noSalesGain, 2);
-                    if ($beforeProductId !== $productId || $objectiveChanged || $start !== $before['fecha_inicio'] || $end !== $before['fecha_fin']) {
+                    if ($beforeProductId !== $productId || $start !== $before['fecha_inicio'] || $end !== $before['fecha_fin']) {
                         api_error(
-                            'Esta campaña ya tiene ventas: el producto, la vigencia y el objetivo económico no se pueden modificar. La entrega y los mensajes sí.',
+                            'Esta campaña ya tiene ventas: el producto y la vigencia no se pueden modificar. Los objetivos y ganancias sí.',
                             'VENTA_CAMPANIA_REGLA_HISTORICA',
                             409
                         );
@@ -252,11 +269,14 @@ trait VentasConfiguracion
                     'UPDATE ventas_campanias
                         SET nombre=?, visible_menu=?, id_producto_principal=?, fecha_inicio=?, fecha_fin=?, fecha_entrega=?,
                             cantidad_minima_persona=?, ganancia_unidad_faltante=?, ganancia_total_sin_ventas=?,
+                            cantidad_minima_docentes=?, ganancia_unidad_docentes=?, ganancia_sin_ventas_docentes=?,
+                            cantidad_minima_terceros=?, ganancia_unidad_terceros=?, ganancia_sin_ventas_terceros=?,
                             mensaje_indicaciones=?, mensaje_pago_ganancia=?, mensaje_pago_compra=?, horarios_entrega=?
                       WHERE id_campania=?'
                 )->execute([
                     $name, $visible, $productId, $start, $end, $delivery,
                     $minimumQuantity, $missingUnitGain, $noSalesGain,
+                    ...$categoryRules['docentes'], ...$categoryRules['terceros'],
                     $saleMessage, $gainMessage, $purchaseMessage, $deliverySlots, $id
                 ]);
                 $recordId = $id;
@@ -265,12 +285,15 @@ trait VentasConfiguracion
                     'INSERT INTO ventas_campanias
                         (nombre, activo, visible_menu, id_producto_principal, fecha_inicio, fecha_fin, fecha_entrega,
                          cantidad_minima_persona, ganancia_unidad_faltante, ganancia_total_sin_ventas,
+                         cantidad_minima_docentes, ganancia_unidad_docentes, ganancia_sin_ventas_docentes,
+                         cantidad_minima_terceros, ganancia_unidad_terceros, ganancia_sin_ventas_terceros,
                          tipo_persona, pregunta_persona, mensaje_inicio, mensaje_aprobado,
                          mensaje_indicaciones, mensaje_pago_ganancia, mensaje_pago_compra, horarios_entrega)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?, ?, ?, ?, ?)'
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \'comprador\', ?, ?, ?, ?, ?, ?, ?)'
                 )->execute([
                     $name, $active, $visible, $productId, $start, $end, $delivery,
                     $minimumQuantity, $missingUnitGain, $noSalesGain,
+                    ...$categoryRules['docentes'], ...$categoryRules['terceros'],
                     $question, $startMessage, $approvedMessage,
                     $saleMessage, $gainMessage, $purchaseMessage, $deliverySlots
                 ]);
@@ -675,6 +698,8 @@ trait VentasConfiguracion
             $personId=$person ? (int)$person['id_persona'] : null;
         }
 
+        $category = self::categoryForPerson($db, $personId, (string)$dni);
+        $campaign = self::campaignForCategory($campaign, $category);
         $sold=0;
         $previousGain=0.0;
         $previousGainUnits=0;
@@ -708,6 +733,12 @@ trait VentasConfiguracion
         $minimum=max(0,(int)($campaign['cantidad_minima_persona'] ?? 0));
         $covered=min($minimum,$sold+$previousGainUnits);
         api_success([
+            'categoria_persona'=>$category,
+            'regla_aplicada'=>[
+                'cantidad_minima_persona'=>(int)$campaign['cantidad_minima_persona'],
+                'ganancia_unidad_faltante'=>(float)$campaign['ganancia_unidad_faltante'],
+                'ganancia_total_sin_ventas'=>(float)$campaign['ganancia_total_sin_ventas'],
+            ],
             'id_venta_persona'=>$personId,
             'persona_encontrada'=>$personId ? 1 : 0,
             'vendidas_previas'=>$sold,

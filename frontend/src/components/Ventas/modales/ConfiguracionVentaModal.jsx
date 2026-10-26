@@ -13,6 +13,8 @@ import {
 const defaults = {
   id_campania: "", nombre: "", id_producto_principal: "", fecha_inicio: "", fecha_fin: "", fecha_entrega: "",
   cantidad_minima_persona: "0", ganancia_unidad_faltante: "0", ganancia_total_sin_ventas: "0",
+  cantidad_minima_docentes: "0", ganancia_unidad_docentes: "0", ganancia_sin_ventas_docentes: "0",
+  cantidad_minima_terceros: "0", ganancia_unidad_terceros: "0", ganancia_sin_ventas_terceros: "0",
   visible_menu: true,
   horarios_entrega: [],
   mensaje_indicaciones: MENSAJE_CANTIDAD_DEFECTO,
@@ -31,11 +33,13 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
   const [form, setForm] = useState(defaults);
   const [copyId, setCopyId] = useState("");
   const [activeTab, setActiveTab] = useState("datos");
+  const [objectiveTab, setObjectiveTab] = useState("alumnos");
 
   useEffect(() => {
     if (!open) return;
     setCopyId("");
     setActiveTab("datos");
+    setObjectiveTab("alumnos");
     setForm({
       ...defaults, ...initial,
       id_campania: asId(initial?.id_campania),
@@ -44,6 +48,12 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       cantidad_minima_persona: String(initial?.cantidad_minima_persona ?? 0),
       ganancia_unidad_faltante: String(initial?.ganancia_unidad_faltante ?? 0),
       ganancia_total_sin_ventas: String(initial?.ganancia_total_sin_ventas ?? 0),
+      cantidad_minima_docentes: String(initial?.cantidad_minima_docentes ?? initial?.cantidad_minima_persona ?? 0),
+      ganancia_unidad_docentes: String(initial?.ganancia_unidad_docentes ?? initial?.ganancia_unidad_faltante ?? 0),
+      ganancia_sin_ventas_docentes: String(initial?.ganancia_sin_ventas_docentes ?? initial?.ganancia_total_sin_ventas ?? 0),
+      cantidad_minima_terceros: String(initial?.cantidad_minima_terceros ?? 0),
+      ganancia_unidad_terceros: String(initial?.ganancia_unidad_terceros ?? 0),
+      ganancia_sin_ventas_terceros: String(initial?.ganancia_sin_ventas_terceros ?? 0),
       visible_menu: initial ? yes(initial.visible_menu) : true,
       horarios_entrega: parseHorariosEntrega(initial?.horarios_entrega),
       mensaje_indicaciones: mensajeVentaInicial(initial?.mensaje_indicaciones),
@@ -55,6 +65,13 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
   const isNew = !form.id_campania;
   const hasSales = !isNew && Number(initial?.cantidad_ordenes || 0) > 0;
   const minimum = Number(form.cantidad_minima_persona || 0);
+  const objectiveFields = {
+    alumnos: ["cantidad_minima_persona", "ganancia_unidad_faltante", "ganancia_total_sin_ventas"],
+    docentes: ["cantidad_minima_docentes", "ganancia_unidad_docentes", "ganancia_sin_ventas_docentes"],
+    terceros: ["cantidad_minima_terceros", "ganancia_unidad_terceros", "ganancia_sin_ventas_terceros"],
+  };
+  const objectiveNames = { alumnos: "Alumnos", docentes: "Docentes", terceros: "Terceros" };
+  const [objectiveMinField, objectiveUnitField, objectiveTotalField] = objectiveFields[objectiveTab];
   const options = useMemo(() => ordenarCampanias(campaigns), [campaigns]);
   // Si una familia borró del texto la fecha o los horarios, volver a insertar
   // sus campos dinámicos al modificarlos desde Datos de la venta. No se toca
@@ -96,6 +113,12 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       cantidad_minima_persona: String(source.cantidad_minima_persona ?? 0),
       ganancia_unidad_faltante: String(source.ganancia_unidad_faltante ?? 0),
       ganancia_total_sin_ventas: String(source.ganancia_total_sin_ventas ?? 0),
+      cantidad_minima_docentes: String(source.cantidad_minima_docentes ?? source.cantidad_minima_persona ?? 0),
+      ganancia_unidad_docentes: String(source.ganancia_unidad_docentes ?? source.ganancia_unidad_faltante ?? 0),
+      ganancia_sin_ventas_docentes: String(source.ganancia_sin_ventas_docentes ?? source.ganancia_total_sin_ventas ?? 0),
+      cantidad_minima_terceros: String(source.cantidad_minima_terceros ?? 0),
+      ganancia_unidad_terceros: String(source.ganancia_unidad_terceros ?? 0),
+      ganancia_sin_ventas_terceros: String(source.ganancia_sin_ventas_terceros ?? 0),
       visible_menu: true,
       mensaje_indicaciones: mensajeVentaInicial(source.mensaje_indicaciones),
       mensaje_pago_ganancia: source.mensaje_pago_ganancia ?? MENSAJE_GANANCIA_DEFECTO,
@@ -108,9 +131,15 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
   const submit = (event) => {
     event.preventDefault();
     if (!form.nombre.trim() || !form.id_producto_principal) { onFeedback?.("error", "Indicá un nombre y un producto principal."); return; }
-    if (!Number.isInteger(minimum) || minimum < 0 || minimum > 10000 ||
-      (minimum > 0 && [form.ganancia_unidad_faltante, form.ganancia_total_sin_ventas].some((v) => !v || !Number.isFinite(Number(v)) || Number(v) <= 0))) {
-      onFeedback?.("error", "Revisá la cantidad mínima y los importes de ganancia por faltante."); return;
+    for (const [category, [minField, unitField, totalField]] of Object.entries(objectiveFields)) {
+      const qty = Number(form[minField]);
+      const values = [form[unitField], form[totalField]];
+      if (!Number.isInteger(qty) || qty < 0 || qty > 10000 ||
+        (qty > 0 && values.some((v) => v === "" || !Number.isFinite(Number(v)) || Number(v) <= 0)) ||
+        values.some((v) => !Number.isFinite(Number(v)) || Number(v) < 0)) {
+        setActiveTab("datos"); setObjectiveTab(category);
+        onFeedback?.("error", `Revisá la cantidad y las ganancias de ${objectiveNames[category].toLowerCase()}.`); return;
+      }
     }
     // Las ventas legadas con registros pueden conservar sus fechas originales en blanco.
     const legacyWithSales = hasSales && !initial?.fecha_inicio && !initial?.fecha_fin;
@@ -155,6 +184,11 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       cantidad_minima_persona: minimum,
       ganancia_unidad_faltante: minimum ? Number(form.ganancia_unidad_faltante) : 0,
       ganancia_total_sin_ventas: minimum ? Number(form.ganancia_total_sin_ventas) : 0,
+      ...Object.fromEntries(Object.entries(objectiveFields).flatMap(([category, [minField, unitField, totalField]]) => category === "alumnos" ? [] : [
+        [minField, Number(form[minField])],
+        [unitField, Number(form[minField]) ? Number(form[unitField]) : 0],
+        [totalField, Number(form[minField]) ? Number(form[totalField]) : 0],
+      ])),
     });
   };
 
@@ -224,25 +258,32 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
       </section>
       <section className="ventas-objective-card ventas-field--wide" aria-label="Objetivo de venta">
         <div className="ventas-objective-card__head"><div>
-          <strong>Objetivo por persona</strong>
-          <span>Si no se exige una cantidad mínima, dejá 0.</span>
+          <strong>Objetivo por tipo de persona</strong>
+          <span>Configurá las unidades y ganancias de cada categoría. Con 0 no hay obligación.</span>
         </div></div>
-        <div className="ventas-objective-grid">
+        <div className="ventas-objective-category-tabs" role="tablist" aria-label="Objetivo según persona" style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
+          {Object.keys(objectiveFields).map((category) => <button key={category} type="button" role="tab"
+            aria-selected={objectiveTab === category} className={`ventas-delivery-add${objectiveTab === category ? " is-active" : ""}`}
+            style={objectiveTab === category ? { fontWeight: 700, outline: "2px solid currentColor" } : {}}
+            onClick={() => setObjectiveTab(category)}>{objectiveNames[category]}</button>)}
+        </div>
+        <div className="ventas-objective-grid" role="tabpanel" aria-label={`Objetivos de ${objectiveNames[objectiveTab]}`}>
           <FloatingField label="Cantidad mínima" className="ventas-modal-field">
-            <input type="number" step="1" min="0" max="10000" disabled={hasSales} value={form.cantidad_minima_persona} onChange={(e) => set("cantidad_minima_persona", e.target.value)} />
+            <input type="number" step="1" min="0" max="10000" value={form[objectiveMinField]} onChange={(e) => set(objectiveMinField, e.target.value)} />
           </FloatingField>
           <FloatingField label="Ganancia por unidad faltante" className="ventas-modal-field">
-            <input type="number" step="0.01" min="0" disabled={hasSales || !minimum} value={form.ganancia_unidad_faltante} onChange={(e) => set("ganancia_unidad_faltante", e.target.value)} />
+            <input type="number" step="0.01" min="0" value={form[objectiveUnitField]} onChange={(e) => set(objectiveUnitField, e.target.value)} />
           </FloatingField>
           <FloatingField label="Ganancia total si no vendió ninguna" className="ventas-modal-field">
-            <input type="number" step="0.01" min="0" disabled={hasSales || !minimum} value={form.ganancia_total_sin_ventas} onChange={(e) => set("ganancia_total_sin_ventas", e.target.value)} />
+            <input type="number" step="0.01" min="0" value={form[objectiveTotalField]} onChange={(e) => set(objectiveTotalField, e.target.value)} />
           </FloatingField>
         </div>
+        <small>Los cambios de objetivo y ganancias se aplican a los cálculos posteriores. Los pagos ya registrados conservan sus importes.</small>
       </section>
       <div className="ventas-field--wide">
         <VentasCheckbox checked={Boolean(form.visible_menu)} label="Visible en WhatsApp durante las fechas de venta" onChange={(checked) => set("visible_menu", checked)} />
       </div>
-      {hasSales && <div className="ventas-note ventas-field--wide">Esta venta ya tiene registros: su período de ventas, producto y objetivo económico siguen protegidos. Podés editar la fecha y horarios de entrega y los mensajes.</div>}
+      {hasSales && <div className="ventas-note ventas-field--wide">Esta venta ya tiene registros: el producto y las fechas están protegidos. Los objetivos y ganancias de alumnos, docentes y terceros se pueden cambiar en cualquier momento. Los pagos anteriores no se modifican.</div>}
     </div>
     </EntityTabPane>
     <EntityTabPane active={activeTab === "mensajes"} disableWhenInactive>

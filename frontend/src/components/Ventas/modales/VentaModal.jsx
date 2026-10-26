@@ -239,10 +239,12 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     editItem(index, { tipo_precio: type, precio_unitario: price ?? item.precio_unitario });
   };
 
-  const minimum = Math.max(0, Number(selectedCampaign?.cantidad_minima_persona || 0));
-  const perMissing = Math.max(0, Number(selectedCampaign?.ganancia_unidad_faltante || 0));
-  const noSales = Math.max(0, Number(selectedCampaign?.ganancia_total_sin_ventas || 0));
-  const objectiveEnabled = minimum > 0 && Number(selectedCampaign?.id_producto_principal || 0) > 0;
+  // La API resuelve el padrón (alumno/docente/tercero) por DNI y devuelve la regla correcta.
+  const regla = objectiveBase.ready && objectiveBase.requestKey === `${form.id_campania}|${form.id_venta_persona || ""}|${String(form.dni || "").replace(/\D/g, "")}|${initialId || ""}` ? objectiveBase.regla_aplicada : null;
+  const minimum = Math.max(0, Number(regla?.cantidad_minima_persona ?? selectedCampaign?.cantidad_minima_persona ?? 0));
+  const perMissing = Math.max(0, Number(regla?.ganancia_unidad_faltante ?? selectedCampaign?.ganancia_unidad_faltante ?? 0));
+  const noSales = Math.max(0, Number(regla?.ganancia_total_sin_ventas ?? selectedCampaign?.ganancia_total_sin_ventas ?? 0));
+  const objectiveEnabled = Number(selectedCampaign?.id_producto_principal || 0) > 0;
   const dni = String(form.dni || "").replace(/\D/g, "");
   const hasPersonReference = Boolean(form.id_venta_persona || dni.length >= 6);
   const validPerson = Boolean(form.id_venta_persona || (dni.length >= 6 && /[A-ZÁÉÍÓÚÑ]/i.test(form.nombre_apellido || "")));
@@ -467,7 +469,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 <div className="ventas-detail-card__count">
                   <label htmlFor="ventas-quantity-gains">Unidades a cobrar</label>
                   <input id="ventas-quantity-gains" aria-label="Cantidad de ganancias" type="number" min="0" max={objectiveReady ? availableGains : minimum} step="1"
-                    value={form.cantidad_ganancias ?? 0} disabled={editing || !objectiveEnabled || pendingPayment}
+                    value={form.cantidad_ganancias ?? 0} disabled={editing || (!objectiveEnabled || !objectiveReady || minimum === 0) || pendingPayment}
                     onChange={(e) => setForm((v) => ({ ...v, cantidad_ganancias: e.target.value }))} />
                 </div>
                 <div className="ventas-detail-card__description ventas-detail-card__description--rule">

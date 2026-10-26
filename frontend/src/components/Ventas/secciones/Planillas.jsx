@@ -337,7 +337,7 @@ export default function Planillas({ writable, showFeedback }) {
   const previewProductName = upper(previewData?.campania?.producto_principal_nombre || "", 150);
 
   // Los terceros son compradores externos: su planilla no tiene objetivo.
-  const tieneObjetivo = type !== "terceros" && Number(previewData?.campania?.cantidad_minima_persona || 0) > 0;
+  const tieneObjetivo = Number(previewData?.campania?.[type === "terceros" ? "cantidad_minima_terceros" : type === "docentes" ? "cantidad_minima_docentes" : "cantidad_minima_persona"] ?? (type === "docentes" ? previewData?.campania?.cantidad_minima_persona : 0)) > 0;
   const esListado = type !== "cursos";
   const info = tipoInfo(type);
   const totales = previewData?.totales || {};
@@ -348,7 +348,7 @@ export default function Planillas({ writable, showFeedback }) {
   const exportProductName = upper(exportSourceData?.campania?.producto_principal_nombre || "", 150);
 
   const exportSections = useMemo(() => {
-    const tieneObjetivo = type !== "terceros" && Number(exportSourceData?.campania?.cantidad_minima_persona || 0) > 0;
+    const tieneObjetivo = Number(exportSourceData?.campania?.[type === "terceros" ? "cantidad_minima_terceros" : type === "docentes" ? "cantidad_minima_docentes" : "cantidad_minima_persona"] ?? (type === "docentes" ? exportSourceData?.campania?.cantidad_minima_persona : 0)) > 0;
     const asignaciones = new Map((exportSourceData?.docentes_responsables || [])
       .map((r) => [`${r.id_anio}:${r.id_division}`, r.docente_nombre]));
     const rows = exportItems.map((row, index) => ({

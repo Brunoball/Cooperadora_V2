@@ -46,6 +46,8 @@ trait VentasPlanillas
         $campaigns=$db->query("SELECT c.id_campania,c.nombre,c.activo,c.id_producto_principal,c.fecha_inicio,c.fecha_fin,c.fecha_entrega,c.estado_cierre,
                                       COALESCE(c.fecha_inicio, (SELECT MIN(COALESCE(o.fecha_venta, DATE(o.aprobado_en), DATE(o.creado_en))) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania), DATE(c.creado_en)) AS fecha_referencia,
                                       c.cantidad_minima_persona,c.ganancia_unidad_faltante,c.ganancia_total_sin_ventas,
+                                      c.cantidad_minima_docentes,c.ganancia_unidad_docentes,c.ganancia_sin_ventas_docentes,
+                                      c.cantidad_minima_terceros,c.ganancia_unidad_terceros,c.ganancia_sin_ventas_terceros,
                                       p.nombre AS producto_principal_nombre
                                  FROM ventas_campanias c
                                  LEFT JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
@@ -448,19 +450,13 @@ trait VentasPlanillas
             $summary = $stats[$id] ?? [];
             $sold = (int)($summary['cantidad_vendida'] ?? 0);
             $paidUnits = (int)($summary['cantidad_ganancias'] ?? 0);
-            if ($type === 'terceros') {
-                // Los terceros son compradores externos: no tienen un mínimo
-                // de ventas asignado ni generan ganancia pendiente. Sí se
-                // informa la ganancia que hayan pagado efectivamente.
-                $objective = self::objectiveForSold(['cantidad_minima_persona' => 0] + $campaign, $sold);
-            } else {
-                $objective = self::objectiveForSold($campaign, $sold);
-                $remainingUnits = max(0, (int)$objective['cantidad_faltante'] - $paidUnits);
-                $objective['cantidad_faltante'] = $remainingUnits;
-                if ($remainingUnits === 0) {
-                    $objective['objetivo_cumplido'] = 1;
-                    $objective['estado_objetivo'] = 'CUMPLIDO';
-                }
+            $category = $type === 'cursos' ? 'alumnos' : $type;
+            $objective = self::objectiveForSold(self::campaignForCategory($campaign, $category), $sold);
+            $remainingUnits = max(0, (int)$objective['cantidad_faltante'] - $paidUnits);
+            $objective['cantidad_faltante'] = $remainingUnits;
+            if ($remainingUnits === 0 && (int)$objective['cantidad_objetivo'] > 0) {
+                $objective['objetivo_cumplido'] = 1;
+                $objective['estado_objetivo'] = 'CUMPLIDO';
             }
             $determined = (float)$objective['ganancia_pendiente'];
             $collected = (float)($summary['ganancia_cobrada'] ?? 0);

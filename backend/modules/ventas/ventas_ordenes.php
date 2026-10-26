@@ -21,6 +21,47 @@ trait VentasOrdenes
     abstract private static function pagination(): array;
     abstract private static function product(PDO $db, int $id, bool $forUpdate = false): array;
 
+    // El padrón manda; ventas_personas.origen no identifica docentes.
+    // Prioridad alumnos, luego docentes, luego terceros (también DNI aún no cargado).
+    private static function categoryForPerson(PDO $db, ?int $personId = null, string $dni = ''): string
+    {
+        if ($personId) {
+            $p = self::fetchOne($db, 'SELECT id_alumno,dni FROM ventas_personas WHERE id_persona=?', [$personId]);
+            if ($p) {
+                $dni = preg_replace('/\D+/', '', (string)$p['dni']) ?: $dni;
+                if ((int)($p['id_alumno'] ?? 0) > 0) {
+                    $found = self::fetchOne($db, 'SELECT id_alumno FROM alumnos WHERE id_alumno=? AND activo=1 AND eliminado=0 LIMIT 1', [(int)$p['id_alumno']]);
+                    if ($found) return 'alumnos';
+                }
+            }
+        }
+        $dni = preg_replace('/\D+/', '', $dni) ?: '';
+        if ($dni === '') return 'terceros';
+        if (self::fetchOne($db, 'SELECT id_alumno FROM alumnos WHERE num_documento=? AND activo=1 AND eliminado=0 LIMIT 1', [$dni])) return 'alumnos';
+        if (self::fetchOne($db, 'SELECT id_docente FROM docentes WHERE dni=? AND activo=1 LIMIT 1', [$dni])) return 'docentes';
+        return 'terceros';
+    }
+
+    // Reutiliza exactamente los cálculos actuales, inyectando los 3 valores de la categoría.
+    private static function campaignForCategory(array $campaign, string $category): array
+    {
+        if ($category === 'docentes') {
+            $minimum = $campaign['cantidad_minima_docentes'] ?? $campaign['cantidad_minima_persona'] ?? 0;
+            $unit = $campaign['ganancia_unidad_docentes'] ?? $campaign['ganancia_unidad_faltante'] ?? 0;
+            $noSales = $campaign['ganancia_sin_ventas_docentes'] ?? $campaign['ganancia_total_sin_ventas'] ?? 0;
+        } elseif ($category === 'terceros') {
+            $minimum = $campaign['cantidad_minima_terceros'] ?? 0;
+            $unit = $campaign['ganancia_unidad_terceros'] ?? 0;
+            $noSales = $campaign['ganancia_sin_ventas_terceros'] ?? 0;
+        } else {
+            return $campaign;
+        }
+        $campaign['cantidad_minima_persona'] = max(0, (int)$minimum);
+        $campaign['ganancia_unidad_faltante'] = max(0, (float)$unit);
+        $campaign['ganancia_total_sin_ventas'] = max(0, (float)$noSales);
+        return $campaign;
+    }
+
     // Objetivos y ganancias
     private static function objectiveForSold(array $campaign, int $sold): array
     {
@@ -54,6 +95,7 @@ trait VentasOrdenes
         array $items,
         string $state
     ): float {
+        $campaign = self::campaignForCategory($campaign, self::categoryForPerson($db, $personId));
         $minimum = max(0, (int)($campaign['cantidad_minima_persona'] ?? 0));
         $principalId = (int)($campaign['id_producto_principal'] ?? 0);
         if ($minimum <= 0 || $principalId <= 0 || !$personId) return 0.0;
@@ -109,6 +151,7 @@ trait VentasOrdenes
     private static function objectiveChargeForQuantities(
         PDO $db, array $campaign, int $personId, array $items, int $requested
     ): float {
+        $campaign = self::campaignForCategory($campaign, self::categoryForPerson($db, $personId));
         $minimum = max(0, (int)($campaign['cantidad_minima_persona'] ?? 0));
         $principalId = (int)($campaign['id_producto_principal'] ?? 0);
         if ($requested <= 0 || $minimum <= 0 || $principalId <= 0) {
@@ -847,7 +890,7 @@ trait VentasOrdenes
             // persona, para impedir cobros dobles en peticiones simultáneas.
             if ($incluirGanancia) {
                 $principalId=(int)($campaign['id_producto_principal'] ?? 0);
-                $minimo=(int)($campaign['cantidad_minima_persona'] ?? 0);
+                $minimo=(int)(self::campaignForCategory($campaign, self::categoryForPerson($db, $personId))['cantidad_minima_persona'] ?? 0);
                 $combos=0;
                 foreach ($items as $item) {
                     if ((int)($item['id_producto'] ?? 0) === $principalId) {
