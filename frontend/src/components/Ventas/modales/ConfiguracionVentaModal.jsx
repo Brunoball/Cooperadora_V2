@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClipboardList, faCommentDots, faFilePdf, faCircleInfo } from "@fortawesome/free-solid-svg-icons";
+import { faBullseye, faClipboardList, faCommentDots, faFilePdf, faCircleInfo, faUserGraduate, faUserTie, faUsers } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { EntityTabPane, EntityTabs, FloatingField } from "../../Global/Formularios/TabbedForm";
 import { VentasCheckbox } from "../VentasUI";
@@ -71,6 +71,7 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
     terceros: ["cantidad_minima_terceros", "ganancia_unidad_terceros", "ganancia_sin_ventas_terceros"],
   };
   const objectiveNames = { alumnos: "Alumnos", docentes: "Docentes", terceros: "Terceros" };
+  const objectiveIcons = { alumnos: faUserGraduate, docentes: faUserTie, terceros: faUsers };
   const [objectiveMinField, objectiveUnitField, objectiveTotalField] = objectiveFields[objectiveTab];
   const options = useMemo(() => ordenarCampanias(campaigns), [campaigns]);
   // Si una familia borró del texto la fecha o los horarios, volver a insertar
@@ -256,18 +257,23 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
         </div>
         <button type="button" className="ventas-delivery-add" disabled={form.horarios_entrega.length >= 8} onClick={addHorario}>+ Agregar rango horario</button>
       </section>
-      <section className="ventas-objective-card ventas-field--wide" aria-label="Objetivo de venta">
-        <div className="ventas-objective-card__head"><div>
-          <strong>Objetivo por tipo de persona</strong>
-          <span>Configurá las unidades y ganancias de cada categoría. Con 0 no hay obligación.</span>
-        </div></div>
-        <div className="ventas-objective-category-tabs" role="tablist" aria-label="Objetivo según persona" style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
-          {Object.keys(objectiveFields).map((category) => <button key={category} type="button" role="tab"
-            aria-selected={objectiveTab === category} className={`ventas-delivery-add${objectiveTab === category ? " is-active" : ""}`}
-            style={objectiveTab === category ? { fontWeight: 700, outline: "2px solid currentColor" } : {}}
-            onClick={() => setObjectiveTab(category)}>{objectiveNames[category]}</button>)}
+      <section className="ventas-message-panel ventas-objective-card ventas-field--wide" aria-label="Objetivo de venta">
+        <div className="ventas-message-panel__heading">
+          <span className="ventas-message-panel__icon" aria-hidden="true"><FontAwesomeIcon icon={faBullseye} /></span>
+          <div className="ventas-config-group-title">
+            <strong>Objetivo por tipo de persona</strong>
+            <small>Configurá las unidades y ganancias de cada categoría. Con 0 no hay obligación.</small>
+          </div>
         </div>
-        <div className="ventas-objective-grid" role="tabpanel" aria-label={`Objetivos de ${objectiveNames[objectiveTab]}`}>
+        <EntityTabs
+          tabs={Object.keys(objectiveFields).map((category) => ({ value: category, label: objectiveNames[category], icon: objectiveIcons[category] }))}
+          value={objectiveTab} onChange={setObjectiveTab}
+          idPrefix="ventas-objective-tab"
+          ariaLabel="Objetivo según persona"
+          className="ventas-objective-tabs"
+        />
+        <div className="ventas-objective-grid" role="tabpanel" id={`ventas-objective-tab-${objectiveTab}-panel`}
+          aria-labelledby={`ventas-objective-tab-${objectiveTab}`}>
           <FloatingField label="Cantidad mínima" className="ventas-modal-field">
             <input type="number" step="1" min="0" max="10000" value={form[objectiveMinField]} onChange={(e) => set(objectiveMinField, e.target.value)} />
           </FloatingField>
@@ -278,7 +284,10 @@ export default function ConfiguracionVentaModal({ open, initial, products = [], 
             <input type="number" step="0.01" min="0" value={form[objectiveTotalField]} onChange={(e) => set(objectiveTotalField, e.target.value)} />
           </FloatingField>
         </div>
-        <small>Los cambios de objetivo y ganancias se aplican a los cálculos posteriores. Los pagos ya registrados conservan sus importes.</small>
+        <small className="ventas-objective-card__note">
+          <FontAwesomeIcon icon={faCircleInfo} aria-hidden="true" />
+          <span>Los cambios de objetivo y ganancias se aplican a los cálculos posteriores. Los pagos ya registrados conservan sus importes.</span>
+        </small>
       </section>
       <div className="ventas-field--wide">
         <VentasCheckbox checked={Boolean(form.visible_menu)} label="Visible en WhatsApp durante las fechas de venta" onChange={(checked) => set("visible_menu", checked)} />

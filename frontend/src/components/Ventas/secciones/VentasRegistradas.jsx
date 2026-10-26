@@ -306,7 +306,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         columns={[
           "Venta",
           "Persona",
-          "Medio",
+          { label: "Medio", align: "center" },
           { label: "Total", align: "right" },
           // { label: "Pago", align: "center" },
           // { label: "Retiro", align: "center" },
@@ -348,7 +348,11 @@ export default function VentasRegistradas({ writable, showFeedback }) {
               <strong title={row.nombre_apellido ? upper(row.nombre_apellido, 160) : undefined}>{row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA"}</strong>
               <small>{row.dni ? `DNI ${row.dni}` : "Sin identificación"}</small>
             </div>
-            <div className="mov-gridCell">{upper(row.medio_pago, 120)}</div>
+            <div className="mov-gridCell is-center ventas-payment-method-cell">
+              {row.medio_pago
+                ? <span className="ventas-pill medio" title={upper(row.medio_pago, 120)}><span>{upper(row.medio_pago, 120)}</span></span>
+                : <span className="ventas-pill neutral">—</span>}
+            </div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
             {/* Columna "Pago" comentada (no eliminada).
             <div className="mov-gridCell is-center ventas-order-payment">

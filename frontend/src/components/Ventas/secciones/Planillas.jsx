@@ -416,11 +416,18 @@ export default function Planillas({ writable, showFeedback }) {
     return `planilla_${base || "ventas"}`;
   }, [exportCampaignName, previewCampaignName]);
 
+  /* Año, Imprimir y Exportar: arriba desde 1500px; debajo de 1499px pasan
+     al pie (.ventas-pagination-actions), igual que en Ventas registradas. */
+  const yearOptions = (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) }));
+  const accionesDeshabilitadas = loading || previewLoading || !campaign;
+  const abrirImpresion = () => { setPrintMode("vacia"); setPrintOpen(true); };
+
   return (
     <ModulePage
       className="ventas-page ventas-page--planillas"
       title="Planillas de ventas"
       tabsInTitle
+      headFiltersClassName="ventas-keep-grid"
       filters={[
         { key: "tipo", type: "tabs", label: "Tipo de planilla", value: type, onChange: cambiarConsulta(setType),
           options: [{ value: "cursos", label: "Cursos y alumnos" }, { value: "docentes", label: "Docentes" }, { value: "terceros", label: "Terceros" }] },
@@ -434,7 +441,7 @@ export default function Planillas({ writable, showFeedback }) {
           onChange: cambiarConsulta(setCampaign), includeEmptyOption: false,
           options: campaignOptions },
         ...(type === "cursos" ? [
-          { key: "anio", type: "select", className: "ventas-filter--option-width", label: "Año", value: year, onChange: cambiarConsulta(setYear), options: (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) })), placeholder: "TODOS" },
+          { key: "anio", type: "select", className: "ventas-filter--option-width ventas-planillas-filter--anio", label: "Año", value: year, onChange: cambiarConsulta(setYear), options: yearOptions, placeholder: "TODOS" },
           { key: "division", type: "select", className: "ventas-filter--option-width", label: "División", value: division, onChange: cambiarConsulta(setDivision), options: (options.divisiones || []).map((item) => ({ value: String(item.id_division), label: upper(item.nombre_division, 80) })), placeholder: "TODAS" },
         ] : []),
       ]}
@@ -442,13 +449,13 @@ export default function Planillas({ writable, showFeedback }) {
       headerActions={(
         <BotonExportarGlobal
           label="Exportar"
-          className="ventas-headAction"
+          className="ventas-headAction ventas-headAction--export"
           onClick={openExport}
-          disabled={loading || previewLoading || !campaign}
+          disabled={accionesDeshabilitadas}
         />
       )}
       secondaryActions={[
-        { key: "imprimir", label: "Imprimir", icon: faPrint, className: "mov-btn--primary", onClick: () => { setPrintMode("vacia"); setPrintOpen(true); }, disabled: loading || previewLoading || !campaign },
+        { key: "imprimir", label: "Imprimir", icon: faPrint, className: "mov-btn--primary global-tableAction--top", onClick: abrirImpresion, disabled: accionesDeshabilitadas },
       ]}
     >
       {busqueda.trim() && buscarAbierto && campaign && (
@@ -640,8 +647,38 @@ export default function Planillas({ writable, showFeedback }) {
             ariaLabel="Paginación de planillas de ventas"
             compactPageItems
             className="ventas-tableFooter ventas-planillas-pagination"
-            leftContent={isPreviewPending ? null : (
+            leftContent={(
               <>
+                <div className="ventas-pagination-actions" aria-label="Acciones de planillas">
+                  {type === "cursos" ? (
+                    <select
+                      className="ventas-footer-action ventas-footer-action--origin ventas-footer-select"
+                      aria-label="Año"
+                      title="Año"
+                      value={year}
+                      onChange={(event) => cambiarConsulta(setYear)(event.target.value)}
+                    >
+                      <option value="">TODOS LOS AÑOS</option>
+                      {yearOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ventas-footer-action ventas-footer-action--new"
+                    onClick={abrirImpresion}
+                    disabled={accionesDeshabilitadas}
+                  >
+                    <FontAwesomeIcon icon={faPrint} />
+                    <span>Imprimir</span>
+                  </button>
+                  <BotonExportarGlobal
+                    label="Exportar"
+                    className="ventas-footer-action ventas-footer-action--export"
+                    onClick={openExport}
+                    disabled={accionesDeshabilitadas}
+                  />
+                </div>
+                {isPreviewPending ? null : <>
                 <div className="ventas-planillas-preview">
                   <span className="ventas-planillas-preview__icon" aria-hidden="true">
                     <FontAwesomeIcon icon={esListado ? faUsers : faFileLines} />
@@ -665,6 +702,7 @@ export default function Planillas({ writable, showFeedback }) {
                     <FontAwesomeIcon icon={faChevronDown} aria-hidden="true" />
                   </button>
                 )}
+                </>}
               </>
             )}
           /> : null}

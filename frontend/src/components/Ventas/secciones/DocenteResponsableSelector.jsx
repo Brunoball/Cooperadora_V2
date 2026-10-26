@@ -135,7 +135,7 @@ export default function DocenteResponsableSelector({ grupo, docentes, asignacion
           />
           <span className="module-floatingLabel">Buscar docente por nombre o DNI</span>
           </label>
-          {nombre && <button type="button" disabled={saving} className="ventas-docente-responsable__clear" onClick={() => onElegir(null, "")} aria-label={`Quitar docente responsable de ${etiquetaCurso}`}><FontAwesomeIcon icon={faXmark} aria-hidden="true" /><span>Quitar</span></button>}
+          {nombre && <button type="button" disabled={saving} className="ventas-docente-responsable__clear" onClick={() => onElegir(null, "")} aria-label={`Quitar docente responsable de ${etiquetaCurso}`}><FontAwesomeIcon icon={faXmark} aria-hidden="true" /></button>}
           {panelOpen && open && !saving && listStyle && createPortal(
             <div ref={listRef} style={listStyle} className="ventas-docente-responsable__results ventas-docente-responsable__results--portal" >
               <div className="ventas-docente-responsable__resultsScroll" style={{ maxHeight: Math.max(0, listStyle.maxHeight - 12) }} id={`docentes-curso-${grupo.id_anio}-${grupo.id_division}`} role="listbox" aria-label={`Docentes disponibles para ${etiquetaCurso}`}>

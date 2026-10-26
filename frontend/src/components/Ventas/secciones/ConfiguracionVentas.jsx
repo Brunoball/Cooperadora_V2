@@ -14,6 +14,22 @@ import { ActionButton } from "../VentasUI";
 import { campaniaOpcion, money, ordenarCampanias, upper, yes, today } from "../ventasUtils";
 import { precioUnitarioVenta } from "../ventaMensajes";
 
+const etapaVenta = (row) => (row.etapa === "finalizada" ? "FINALIZADA · CIERRE PENDIENTE" : !yes(row.activo) ? "PAUSADA" : row.etapa === "programada" ? "PROGRAMADA" : "EN CURSO");
+
+const precioVenta = (row) => (row.precio_anticipada == null ? "" : Number(precioUnitarioVenta(row)) === Number(row.precio_puerta)
+  ? `PRECIO ÚNICO ${money(precioUnitarioVenta(row))}`
+  : `PRINCIPAL ${money(precioUnitarioVenta(row))} · ALTERNATIVO ${money(row.precio_puerta)}`);
+
+const textoComparable = (value) => upper(value, 150).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+
+/* Columna única "Venta": el producto principal se muestra solo si aporta
+   información (el nombre de la venta no lo contiene, p. ej. "VENTA DE …"). */
+const productoRelevante = (row) => {
+  const producto = textoComparable(row.producto_principal_nombre);
+  if (!producto) return "SIN PRODUCTO";
+  return textoComparable(row.nombre).includes(producto) ? "" : upper(row.producto_principal_nombre, 150);
+};
+
 /** Un solo espacio de trabajo; el historial se consulta en Registradas/Planillas. */
 export default function ConfiguracionVentas({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
@@ -64,7 +80,7 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
         bodyClassName="entity-table-wrap"
         gridClassName="ventas-grid ventas-grid--campaigns"
         columns={[
-          "Venta", "Producto principal", "Objetivo por persona",
+          "Venta", { label: "Objetivo por persona", align: "center" },
           { label: "Ganancia por no vender", align: "right", className: "ventas-nosales-head" },
           { label: "Fechas", align: "center", className: "ventas-validity-head" },
           // { label: "WhatsApp", align: "center" },
@@ -86,15 +102,16 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
         ) : null}
         {openRows.map((row) => (
           <div className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--campaigns ventas-campaign-row ${changingStateId === row.id_campania ? "is-changing" : ""}`.trim()} role="row" key={row.id_campania}>
-            <div className="mov-gridCell entity-main-cell">
-              <strong>{upper(row.nombre, 150)}</strong>
-              <small>{row.etapa === "finalizada" ? "FINALIZADA · CIERRE PENDIENTE" : !yes(row.activo) ? "PAUSADA" : row.etapa === "programada" ? "PROGRAMADA" : "EN CURSO"}</small>
-            </div>
-            <div className="mov-gridCell entity-main-cell">
-              <strong>{upper(row.producto_principal_nombre || "SIN PRODUCTO", 150)}</strong>
-              {row.precio_anticipada != null ? <small>{Number(precioUnitarioVenta(row)) === Number(row.precio_puerta) ? `PRECIO ÚNICO ${money(precioUnitarioVenta(row))}` : `PRINCIPAL ${money(precioUnitarioVenta(row))} · ALTERNATIVO ${money(row.precio_puerta)}`}</small> : null}
-            </div>
-            <div className="mov-gridCell entity-main-cell ventas-objective-cell">
+            {(() => {
+              const detalle = [etapaVenta(row), productoRelevante(row), precioVenta(row)].filter(Boolean).join(" · ");
+              return (
+                <div className="mov-gridCell entity-main-cell" title={`${upper(row.nombre, 150)}\n${detalle}`}>
+                  <strong>{upper(row.nombre, 150)}</strong>
+                  <small>{detalle}</small>
+                </div>
+              );
+            })()}
+            <div className="mov-gridCell is-center entity-main-cell ventas-objective-cell">
               {Number(row.cantidad_minima_persona || 0)
                 ? <strong>MÍN. {Number(row.cantidad_minima_persona)} UNIDADES</strong>
                 : <strong>SIN OBJETIVO</strong>}

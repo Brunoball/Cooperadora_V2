@@ -1191,7 +1191,7 @@ export default function ContableModule({ view = "summary" }) {
             : view !== "summary"
               ? (
                   <BotonExportarGlobal
-                    className="contable-export-top"
+                    className={`contable-export-top${view === "expense" ? " contable-export-responsive" : ""}`}
                     onClick={() => setExportOpen(true)}
                     disabled={!data.items?.length}
                   />
@@ -1401,6 +1401,13 @@ export default function ContableModule({ view = "summary" }) {
                         <FontAwesomeIcon icon={faPlus} />
                         {view === "income" ? "Registrar ingreso" : "Registrar egreso"}
                       </button>
+                    ) : null}
+                    {view === "expense" ? (
+                      <BotonExportarGlobal
+                        className="contable-export-lower"
+                        onClick={() => setExportOpen(true)}
+                        disabled={!data.items?.length}
+                      />
                     ) : null}
                   </div>
                 )}

@@ -111,19 +111,14 @@
 }
 
 .ventas-grid--campaigns {
-  /* Venta · Producto · Objetivo · Ganancia por no vender · Fechas ·
-     Registros · Acciones ("WhatsApp" oculta en ConfiguracionVentas.jsx).
-     Mínimos reales para que encabezados, objetivo y fechas entren en una
-     línea; Acciones con ancho fijo para que sus cuatro íconos no se corten.
-     Con el módulo angosto (@container 1150px) pasan a minmax(0) y se evita
-     el scroll horizontal. */
+  /* Venta mantiene prioridad, pero con ancho moderado. Ganancia por no
+     vender recupera su encabezado completo, sin ocupar espacio excesivo. */
   grid-template-columns:
-    minmax(115px, 1.2fr)
-    minmax(105px, 1.1fr)
-    minmax(180px, .82fr)
-    minmax(200px, .84fr)
-    minmax(290px, 1.36fr)
-    minmax(94px, .5fr)
+    minmax(265px, 2.6fr)
+    minmax(175px, 1fr)
+    minmax(185px, 1.02fr)
+    minmax(265px, 1.65fr)
+    minmax(80px, .48fr)
     148px;
 }
 
@@ -258,6 +253,21 @@
   color: var(--mov-muted);
 }
 
+/* Medio de pago como chip: misma altura que Origen/Retiro (filas uniformes)
+   y colores de los tokens primarios globales. Nombres largos con elipsis. */
+.ventas-pill.medio {
+  overflow: hidden;
+  border-color: var(--primary-200);
+  color: var(--primary-800);
+  background: var(--primary-50);
+}
+
+.ventas-pill.medio > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Formularios dentro de CrudModal: mismas medidas, radios y foco globales. */
 .ventas-form-grid {
   display: grid;
@@ -290,14 +300,10 @@
 
 
 .ventas-objective-card {
+  /* Configuración de venta: usa el mismo panel que Mensajes
+     (.ventas-message-panel); aquí solo ocupa el ancho completo. */
   grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  padding: 15px;
-  border: 1px solid #e8c9c9;
-  border-radius: 14px;
-  background: #fff8f8;
+  min-width: 0;
 }
 
 .ventas-objective-card__head {
@@ -1385,17 +1391,19 @@
 }
 
 
-/* Origen en el pie: select con la misma escala compacta de 32px. El
+/* Origen (Registradas) y Año (Planillas) en el pie: select con la misma escala compacta de 32px. El
    padding supera al de selectSizing para que el texto no toque el borde. */
-.ventas-page--orders .ventas-pagination-actions select.ventas-footer-select {
-  width: auto;
-  max-width: 100%;
+.ventas-page .ventas-pagination-actions select.ventas-footer-select {
+  /* Ancho natural: el pie no usa el ancho compacto medido por selectSizing. */
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   padding-left: 10px !important;
   padding-right: 6px !important;
   text-align: left;
 }
 
-html[data-theme="oscuro"] .ventas-page--orders .ventas-pagination-actions .ventas-footer-select {
+html[data-theme="oscuro"] .ventas-page .ventas-pagination-actions .ventas-footer-select {
   border-color: color-mix(in srgb, #6aa0e8 45%, transparent);
   color: #a9c8f3;
   background: color-mix(in srgb, #3b6fb6 22%, transparent);
@@ -1473,7 +1481,8 @@ html[data-theme="oscuro"] .ventas-page--orders .ventas-pagination-actions .venta
     gap: 8px;
   }
 
-  .ventas-page--orders .ventas-pagination-actions {
+  .ventas-page--orders .ventas-pagination-actions,
+  .ventas-page--planillas .ventas-pagination-actions {
     width: 100%;
     flex-wrap: wrap;
   }
@@ -1804,7 +1813,8 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   min-width: 0;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: nowrap;
+  /* Una fila mientras entran; "Venta (mes y año)" no se recorta. */
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1870,10 +1880,12 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 }
 
 @media (max-width: 1499px) {
-  .ventas-page--orders .module-card__actions .ventas-headAction--export { display: none; }
-  /* Origen sigue a Nueva venta / Exportar: pasa al pie (.ventas-pagination-actions). */
-  .ventas-page--orders .module-headFilters > .ventas-orders-filter--origen { display: none !important; }
-  .ventas-page--orders .ventas-pagination-actions .ventas-footer-action--export {
+  .ventas-page .module-card__actions .ventas-headAction--export { display: none; }
+  /* Origen (Registradas) y Año (Planillas) siguen a sus acciones: pasan al pie
+     (.ventas-pagination-actions). Imprimir usa global-tableAction--top. */
+  .ventas-page--orders .module-headFilters > .ventas-orders-filter--origen,
+  .ventas-page--planillas .module-headFilters > .ventas-planillas-filter--anio { display: none !important; }
+  .ventas-page .ventas-pagination-actions .ventas-footer-action--export {
     min-height: 32px;
     height: 32px;
     padding: 0 10px;
@@ -2156,8 +2168,6 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   min-width: 90px;
   max-width: 205px;
   margin-left: 0;
-  /* Buscador a la izquierda; los selectores quedan alineados a la derecha. */
-  margin-right: auto;
 }
 
 .ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen):not(.ventas-orders-filter--medio) {
@@ -2272,8 +2282,11 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   gap: 12px;
 }
 .ventas-page--planillas .module-titleBox {
-  flex: 0 1 230px;
-  min-width: 170px;
+  /* Ancho real de las pestañas: "Cursos y alumnos", "Docentes" y "Terceros"
+     completas; los filtros ceden el espacio restante. */
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 .ventas-page--planillas .module-headFilters {
   flex: 1 1 0;
@@ -2349,6 +2362,12 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 
 .ventas-page--campaigns .ventas-validity-date {
   white-space: nowrap;
+}
+
+/* Objetivo por persona: encabezado y contenido centrados. */
+.ventas-page--campaigns .ventas-objective-cell {
+  align-items: center;
+  text-align: center;
 }
 
 /* Ganancia por no vender: encabezado alineado con el importe. */
@@ -2614,11 +2633,10 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 @container (max-width: 1150px) {
   .ventas-global-table .ventas-grid--campaigns {
     grid-template-columns:
-      minmax(0, .96fr)
-      minmax(0, .9fr)
-      minmax(0, .96fr)
-      minmax(0, 1.04fr)
-      minmax(0, 1.5fr)
+      minmax(0, 2.05fr)
+      minmax(0, 1.08fr)
+      minmax(0, 1.14fr)
+      minmax(0, 1.8fr)
       minmax(0, .5fr)
       148px;
   }
@@ -4146,8 +4164,9 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 /* Aviso discreto si el texto personalizado supera el límite permitido. */
 .ventas-message-editor small.ventas-message-count--error { color: #b42318; font-weight: 600; }
 
-/* Edición de configuración de venta — mensajes con componentes y foco globales. */
-.ventas-campaign-messages-tab .ventas-message-panel {
+/* Edición de configuración de venta — paneles (Mensajes y Objetivo) con
+   componentes y foco globales. */
+.ventas-campaign-modal .ventas-message-panel {
   min-width: 0;
   gap: 18px;
   padding: 17px;
@@ -4155,29 +4174,29 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   border-radius: 13px;
   background: var(--entity-modal-bg);
 }
-.ventas-campaign-messages-tab .ventas-message-panel__heading {
+.ventas-campaign-modal .ventas-message-panel__heading {
   display: flex;
   align-items: flex-start;
   gap: 11px;
   min-width: 0;
 }
-.ventas-campaign-messages-tab .ventas-message-panel__heading .ventas-config-group-title {
+.ventas-campaign-modal .ventas-message-panel__heading .ventas-config-group-title {
   flex: 1 1 0;
   min-width: 0;
   gap: 6px;
 }
-.ventas-campaign-messages-tab .ventas-message-panel__heading .ventas-config-group-title strong {
+.ventas-campaign-modal .ventas-message-panel__heading .ventas-config-group-title strong {
   color: var(--entity-modal-ink);
   font-size: 13px;
   font-weight: 680;
   line-height: 1.35;
 }
-.ventas-campaign-messages-tab .ventas-message-panel__heading .ventas-config-group-title small {
+.ventas-campaign-modal .ventas-message-panel__heading .ventas-config-group-title small {
   color: var(--entity-modal-text);
   font-size: 11.5px;
   line-height: 1.5;
 }
-.ventas-campaign-messages-tab .ventas-message-panel__icon {
+.ventas-campaign-modal .ventas-message-panel__icon {
   width: 34px;
   height: 34px;
   display: inline-flex;
@@ -4227,9 +4246,53 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   color: var(--entity-modal-danger);
   font-weight: 650;
 }
+/* Objetivo por tipo de persona: pestañas globales (EntityTabs) compactas
+   dentro del panel y campos flotantes globales en una fila. */
+.ventas-campaign-modal .ventas-objective-card {
+  /* Siempre a todo el ancho: evita que .ventas-field--wide lo reduzca a
+     media grilla en pantallas medianas y corte los labels flotantes. */
+  grid-column: 1 / -1;
+}
+.ventas-campaign-modal .ventas-objective-tabs {
+  min-height: 40px;
+  gap: 22px;
+  /* Solo actúa cuando el global (≤480px) pasa las pestañas a grilla:
+     las tres categorías quedan en una misma fila. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: -4px 0 0;
+  border-bottom-color: var(--entity-modal-border);
+}
+.ventas-campaign-modal .ventas-objective-tabs .entity-form-tab {
+  min-height: 40px;
+  white-space: nowrap;
+}
+.ventas-campaign-modal .ventas-objective-grid {
+  gap: 14px;
+  align-items: end;
+}
+.ventas-campaign-modal .ventas-objective-grid > .entity-floating-field {
+  min-width: 0;
+}
+.ventas-campaign-modal .ventas-objective-card__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding-top: 12px;
+  border-top: 1px solid var(--entity-modal-border);
+  color: var(--entity-modal-text);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.ventas-campaign-modal .ventas-objective-card__note > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--entity-modal-action);
+}
 @media (max-width: 560px) {
-  .ventas-campaign-messages-tab .ventas-message-panel { padding: 12px; gap: 15px; }
-  .ventas-campaign-messages-tab .ventas-message-panel__icon { width: 30px; height: 30px; font-size: 12px; }
+  .ventas-campaign-modal .ventas-message-panel { padding: 12px; gap: 15px; }
+  .ventas-campaign-modal .ventas-message-panel__icon { width: 30px; height: 30px; font-size: 12px; }
+  .ventas-campaign-modal .ventas-objective-tabs { gap: 6px; }
+  .ventas-campaign-modal .ventas-objective-tabs .entity-form-tab { gap: 6px; padding: 0 2px; }
 }
 
 /* VENTAS REGISTRADAS · Pie de tabla integrado.
@@ -4462,7 +4525,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   min-width: 0;
 }
 @container (max-width: 1250px) {
-  .ventas-page--orders .module-headFilters { flex-wrap: wrap; justify-content: flex-end; }
+  .ventas-page--orders .module-headFilters { flex-wrap: nowrap; justify-content: flex-end; }
   .ventas-page--orders .module-headFilters > .ventas-orders-filter--campaign { flex: 1 1 270px !important; max-width: 100% !important; }
 }
 
@@ -4553,18 +4616,25 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   }
 }
 
-/* PLANILLAS · Venta (mes y año): desde 1500 px usa la medición global
-   de la opción más larga. Registradas conserva su umbral de 1600 px.
-   Debajo de 1500 px sigue vigente el máximo de 280 px. */
-@media (min-width: 1500px) and (max-width: 1599px) {
-  body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.module-filter--select.ventas-filter--campaign-period {
-    box-sizing: border-box;
-    display: inline-flex;
-    flex: 0 0 var(--global-select-option-width, 280px) !important;
-    width: var(--global-select-option-width, 280px) !important;
-    min-width: var(--global-select-option-width, 280px) !important;
-    max-width: var(--global-select-option-width, 280px) !important;
-  }
+/* PLANILLAS · Venta (mes y año): en todas las resoluciones toma el ancho
+   de su opción más larga (medición global de selectSizing), sin truncar.
+   Nunca supera el espacio disponible; si no entra junto a los demás
+   filtros, la fila de filtros baja de línea en lugar de recortarlo.
+   Registradas conserva su umbral de 1600 px. */
+body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.module-filter--select.ventas-filter--campaign-period {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto !important;
+  /* Tope = ancho real del módulo (container-type de .module-card) menos el
+     padding de la cabecera; evita que en móviles fuerce el ancho del head. */
+  width: min(var(--global-select-option-width, 280px), calc(100cqw - 40px)) !important;
+  min-width: min(var(--global-select-option-width, 280px), calc(100cqw - 40px)) !important;
+  max-width: 100% !important;
+}
+body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.module-filter--select.ventas-filter--campaign-period > select.module-filterControl {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 
 /* NUEVA Y EDITAR VENTA · Pestañas globales, sin tarjetas en Datos de la venta. */
@@ -4807,6 +4877,12 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   color: var(--mov-muted);
 }
 
+html[data-theme="oscuro"] .ventas-pill.medio {
+  border-color: color-mix(in srgb, var(--primary-300) 45%, transparent);
+  color: var(--primary-100);
+  background: color-mix(in srgb, var(--primary-600) 24%, transparent);
+}
+
 html[data-theme="oscuro"] .ventas-pill.bot {
   border-color: color-mix(in srgb, #6aa0e8 45%, transparent);
   color: #a9c8f3;
@@ -4862,9 +4938,16 @@ html[data-theme="oscuro"] .ventas-payment-select.is-pendiente {
   background-color: color-mix(in srgb, #b58614 22%, transparent);
 }
 
-/* Nueva / Editar venta · Campaña, medio y estado de pago en una línea. */
+/* Nueva / Editar venta · Campaña, medio y estado de pago en una línea,
+   con el mismo ancho y alto (altura global de 44px de los campos flotantes). */
 .ventas-order-simple .ventas-simple-top.ventas-simple-top--pago {
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, .8fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+.ventas-order-simple .ventas-simple-top--pago > .entity-floating-field > select {
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 @media (max-width: 670px) {
   .ventas-order-simple .ventas-simple-top.ventas-simple-top--pago { grid-template-columns: minmax(0, 1fr); }

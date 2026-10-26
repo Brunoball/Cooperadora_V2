@@ -200,7 +200,28 @@
   align-items: center;
 }
 
+/* Montos/Importes: encabezado y valores alineados a la derecha en ambas tablas. */
+.contable-page .contable-grid--expense > :nth-child(5),
+.contable-page .contable-grid--income > :nth-child(4),
+.contable-page .contable-grid--income-readonly > :nth-child(4) {
+  justify-content: flex-end;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 
+
+
+/* Ingresos de alumnos: la hoja específica centraba el contenido de Monto.
+   Alinear encabezado e importes a la derecha, manteniendo el centrado vertical. */
+.contable-page .ct-student-table .ct-student-grid.mov-gridTable--head > :nth-child(4),
+.contable-page .ct-student-table .ct-student-grid.mov-gridTable--row > .ct-student-money {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.contable-page .ct-student-table .ct-student-grid.mov-gridTable--row > .ct-student-money {
+  align-items: center;
+}
 
 /* Resumen: paneles propios sobre la misma paleta, radios y densidad global. */
 .ct-summary {
@@ -861,6 +882,11 @@
 
 @media (max-width: 1499px) {
   .module-card__actions .mov-btn.contable-create-top {
+    display: none !important;
+  }
+
+  /* Exportar en Egresos baja con Registrar egreso, usando el mismo breakpoint. */
+  .contable-page .module-card__actions .contable-export-responsive {
     display: none !important;
   }
 
