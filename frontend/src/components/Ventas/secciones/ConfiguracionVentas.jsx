@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faClipboardList, faCommentDots, faPen, faPowerOff, faArchive, faCopy } from "@fortawesome/free-solid-svg-icons";
+// faCommentDots: usado por la columna "WhatsApp", oculta en la tabla. Volver a
+// importarlo al reactivarla.
+import { faCheckCircle, faClipboardList, faPen, faPowerOff, faArchive, faCopy } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -63,8 +65,9 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
         gridClassName="ventas-grid ventas-grid--campaigns"
         columns={[
           "Venta", "Producto principal", "Objetivo por persona",
+          { label: "Ganancia por no vender", align: "right", className: "ventas-nosales-head" },
           { label: "Fechas", align: "center", className: "ventas-validity-head" },
-          { label: "WhatsApp", align: "center" },
+          // { label: "WhatsApp", align: "center" },
           { label: "Registros", align: "center" },
           { label: "Acciones", align: "center" },
         ]}
@@ -92,20 +95,28 @@ export default function ConfiguracionVentas({ writable, showFeedback }) {
               {row.precio_anticipada != null ? <small>{Number(precioUnitarioVenta(row)) === Number(row.precio_puerta) ? `PRECIO ÚNICO ${money(precioUnitarioVenta(row))}` : `PRINCIPAL ${money(precioUnitarioVenta(row))} · ALTERNATIVO ${money(row.precio_puerta)}`}</small> : null}
             </div>
             <div className="mov-gridCell entity-main-cell ventas-objective-cell">
-              {Number(row.cantidad_minima_persona || 0) ? <>
-                <strong>MÍN. {Number(row.cantidad_minima_persona)} UNIDADES</strong>
-                <small>{money(row.ganancia_unidad_faltante)} / FALTANTE · {money(row.ganancia_total_sin_ventas)} SIN VENTAS</small>
-              </> : <strong>SIN OBJETIVO</strong>}
+              {Number(row.cantidad_minima_persona || 0)
+                ? <strong>MÍN. {Number(row.cantidad_minima_persona)} UNIDADES</strong>
+                : <strong>SIN OBJETIVO</strong>}
+            </div>
+            <div className="mov-gridCell is-right is-strong ventas-money ventas-nosales-cell">
+              {Number(row.cantidad_minima_persona || 0) ? money(row.ganancia_total_sin_ventas) : "—"}
             </div>
             <div className="mov-gridCell is-center entity-main-cell ventas-validity-cell">
-              <strong>{row.fecha_inicio || "SIN FECHA"} AL {row.fecha_fin || "SIN FECHA"}</strong>
+              <strong>
+                <span className="ventas-validity-date">{row.fecha_inicio || "SIN FECHA"}</span>
+                {" AL "}
+                <span className="ventas-validity-date">{row.fecha_fin || "SIN FECHA"}</span>
+              </strong>
               <small>ENTREGA: {row.fecha_entrega || "SIN DEFINIR"} · {(() => { try { const h = JSON.parse(row.horarios_entrega || "[]"); return h.length ? h.map((r) => `${r.desde}-${r.hasta}`).join(" / ") : "SIN HORARIOS"; } catch { return "SIN HORARIOS"; } })()}</small>
             </div>
+            {/* Columna "WhatsApp" oculta (no eliminada); la visibilidad se sigue editando en el modal.
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${yes(row.disponible_bot) ? "whatsapp" : "neutral"}`}>
                 <FontAwesomeIcon icon={faCommentDots} /> {yes(row.disponible_bot) ? "VISIBLE" : "NO DISPONIBLE"}
               </span>
             </div>
+            */}
             <div className="mov-gridCell is-center is-strong">{Number(row.cantidad_ordenes || 0)}</div>
             <div className="mov-gridCell mov-gridCell--actions">
               <div className="mov-actionsInline">

@@ -70,6 +70,9 @@ const orderSummary = (row) => {
   };
 };
 
+/* Columna "Retiro" oculta en la tabla: se conserva para reactivarla. El
+   retiro se sigue gestionando desde Acciones, el filtro y la exportación. */
+// eslint-disable-next-line no-unused-vars
 const retreatPill = (row) => {
   if (row.estado === "aprobada") {
     return yes(row.retirado)
@@ -80,6 +83,16 @@ const retreatPill = (row) => {
   return { className: "neutral", label: "—" };
 };
 
+/* Opciones únicas del filtro Origen: las usan el selector superior
+   (escritorio) y el del pie (pantallas menores). */
+const ORIGIN_OPTIONS = [
+  { value: "manual", label: "MANUAL" },
+  { value: "bot_whatsapp", label: "BOT" },
+];
+
+/* Columna "Pago" comentada temporalmente en la tabla: se conservan sus
+   opciones y reglas para volver a habilitarla sin reescribir código. */
+// eslint-disable-next-line no-unused-vars
 const PAYMENT_OPTIONS = [
   { value: "aprobada", label: "PAGADA" },
   { value: "pendiente", label: "PENDIENTE" },
@@ -87,6 +100,7 @@ const PAYMENT_OPTIONS = [
 
 /* Motivo por el cual el estado de pago no se puede cambiar desde la tabla.
    Las mismas reglas se validan en el backend (ventas_orden_pago). */
+// eslint-disable-next-line no-unused-vars
 const paymentLockReason = (row, writable) => {
   if (!writable) return "Sin permisos de edición";
   if (row.estado_cierre === "cerrada") return "Campaña cerrada";
@@ -123,6 +137,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   const [state, setState] = useState("");
   const [retreat, setRetreat] = useState("");
   const [origin, setOrigin] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -156,7 +171,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
     solo_actual: !campaign ? 1 : 0,
     retiro: retreat,
     origen: origin,
-  }), [campaign, origin, retreat, search, state]);
+    id_medio_pago: paymentMethod,
+  }), [campaign, origin, paymentMethod, retreat, search, state]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -206,14 +222,18 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   const campaignOptions = useMemo(() => ordenarCampanias(catalogs.campanias || [])
     .map((item) => ({ value: String(item.id_campania), label: campaniaOpcion(item) })), [catalogs.campanias]);
 
+  const paymentMethodOptions = useMemo(() => (catalogs.medios_pago || [])
+    .map((item) => ({ value: String(item.id_medio_pago), label: upper(item.medio_pago, 120) })), [catalogs.medios_pago]);
+
   const filters = [
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI u observación...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
     { key: "venta", type: "select", className: "ventas-orders-filter--campaign ventas-filter--campaign-period", label: "Venta (mes y año)", value: campaign,
       includeEmptyOption: false, options: campaignOptions,
       onChange: (value) => { setPage(1); setCampaign(String(value)); } },
+    { key: "medio", type: "select", className: "ventas-orders-filter--medio ventas-filter--option-width", label: "Medio de pago", value: paymentMethod, placeholder: "TODOS", options: paymentMethodOptions, onChange: (v) => { setPage(1); setPaymentMethod(v); } },
     { key: "estado", type: "select", className: "ventas-orders-filter--pago ventas-filter--option-width", label: "Pago", value: state, includeEmptyOption: true, placeholder: "TODOS", options: ["aprobada", "pendiente", "cancelada", "fallida", "vencida"].map((s) => ({ value: s, label: stateLabel(s) })), onChange: (v) => { setPage(1); setState(v); } },
     { key: "retiro", type: "select", className: "ventas-orders-filter--retiro ventas-filter--option-width", label: "Retiro", value: retreat, placeholder: "TODOS", options: [{ value: "pendiente", label: "PENDIENTES" }, { value: "retirado", label: "RETIRADOS" }], onChange: (v) => { setPage(1); setRetreat(v); } },
-    { key: "origen", type: "select", className: "ventas-orders-filter--origen ventas-filter--option-width", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "BOT" }], onChange: (v) => { setPage(1); setOrigin(v); } },
+    { key: "origen", type: "select", className: "ventas-orders-filter--origen ventas-filter--option-width", label: "Origen", value: origin, placeholder: "TODOS", options: ORIGIN_OPTIONS, onChange: (v) => { setPage(1); setOrigin(v); } },
   ];
 
   const exportSections = useMemo(() => [{
@@ -253,14 +273,15 @@ export default function VentasRegistradas({ writable, showFeedback }) {
     selectedCampaignName ? upper(selectedCampaignName, 150) : "VENTA ACTUAL",
     state ? stateLabel(state) : "PAGADOS Y PENDIENTES",
     origin ? originText(origin) : "TODOS LOS ORÍGENES",
-  ].join(" · ");
+    paymentMethod ? paymentMethodOptions.find((item) => item.value === String(paymentMethod))?.label : "",
+  ].filter(Boolean).join(" · ");
 
   return (
     <ModulePage
       className="ventas-page ventas-page--orders"
       title="Ventas registradas"
-      description="Consultá y administrá las ventas realizadas."
       filters={filters}
+      headFiltersClassName="ventas-keep-grid"
       canCreate={writable && (catalogs.campanias || []).some((c) => c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (yes(c.activo) || Boolean(c.fecha_fin && c.fecha_fin < today())))}
       primaryActionLabel="Nueva venta"
       primaryActionClassName="global-tableAction--top ventas-headAction ventas-headAction--new"
@@ -283,8 +304,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           "Persona",
           "Medio",
           { label: "Total", align: "right" },
-          { label: "Pago", align: "center" },
-          { label: "Retiro", align: "center" },
+          // { label: "Pago", align: "center" },
+          // { label: "Retiro", align: "center" },
           { label: "Origen", align: "center" },
           { label: "Fecha", align: "center" },
           { label: "Acciones", align: "center" },
@@ -304,9 +325,11 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         ) : null}
         {rows.map((row) => {
           const summary = orderSummary(row);
-          const retreatState = retreatPill(row);
-          const paymentLock = paymentLockReason(row, writable);
-          const paymentEditable = !paymentLock;
+          // Columna "Retiro" oculta: reactivar junto con su celda.
+          // const retreatState = retreatPill(row);
+          // Columna "Pago" comentada: reactivar junto con su celda.
+          // const paymentLock = paymentLockReason(row, writable);
+          // const paymentEditable = !paymentLock;
           return (
           <div
             className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--orders${row.estado !== "aprobada" ? " is-unpaid" : ""}`}
@@ -323,6 +346,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             </div>
             <div className="mov-gridCell">{upper(row.medio_pago, 120)}</div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
+            {/* Columna "Pago" comentada (no eliminada).
             <div className="mov-gridCell is-center ventas-order-payment">
               {["aprobada", "pendiente"].includes(row.estado) ? (
                 <select
@@ -342,9 +366,12 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                 <span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span>
               )}
             </div>
+            */}
+            {/* Columna "Retiro" oculta (no eliminada).
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${retreatState.className}`}>{retreatState.label}</span>
             </div>
+            */}
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${isBotOrder(row) ? "bot" : "neutral"}`}>{originText(row.origen)}</span>
             </div>
@@ -394,6 +421,17 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         leftContent={(
           <>
             <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
+              {/* Mismo filtro Origen que la cabecera: visible aquí solo debajo de 1500px. */}
+              <select
+                className="ventas-footer-action ventas-footer-action--origin ventas-footer-select"
+                aria-label="Origen"
+                title="Origen"
+                value={origin}
+                onChange={(event) => { setPage(1); setOrigin(event.target.value); }}
+              >
+                <option value="">TODOS LOS ORÍGENES</option>
+                {ORIGIN_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
               {writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today())) ? <button
                 type="button"
                 className="ventas-footer-action ventas-footer-action--new"

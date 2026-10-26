@@ -593,6 +593,17 @@ trait VentasOrdenes
                 $where[] = 'o.origen = ?';
                 $params[] = $origin;
             }
+            // Filtro opcional por medio de pago (id de la tabla medio_pago,
+            // mismos valores que expone ventas_catalogos.medios_pago).
+            $paymentMethodRaw = trim((string)($_GET['id_medio_pago'] ?? ''));
+            if ($paymentMethodRaw !== '') {
+                $paymentMethod = self::nullablePositiveId($paymentMethodRaw);
+                if ($paymentMethod === null) {
+                    api_error('Filtro de medio de pago inválido.', 'VALIDATION_ERROR');
+                }
+                $where[] = 'o.id_medio_pago = ?';
+                $params[] = $paymentMethod;
+            }
             if ($calendarYear !== '') {
                 if (!preg_match('/^\d{4}$/',$calendarYear)) api_error('Año inválido.','VALIDATION_ERROR');
                 $where[] = 'COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en) >= ? AND COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en) < ?';

@@ -111,24 +111,28 @@
 }
 
 .ventas-grid--campaigns {
+  /* Venta · Producto · Objetivo · Ganancia por no vender · Fechas ·
+     Registros · Acciones ("WhatsApp" oculta en ConfiguracionVentas.jsx).
+     Mínimos reales para que encabezados, objetivo y fechas entren en una
+     línea; Acciones con ancho fijo para que sus cuatro íconos no se corten.
+     Con el módulo angosto (@container 1150px) pasan a minmax(0) y se evita
+     el scroll horizontal. */
   grid-template-columns:
-    1.35fr
-    1.05fr
-    1.35fr
-    .78fr
-    .72fr
-    .45fr
-    .66fr;
+    minmax(115px, 1.2fr)
+    minmax(105px, 1.1fr)
+    minmax(180px, .82fr)
+    minmax(200px, .84fr)
+    minmax(290px, 1.36fr)
+    minmax(94px, .5fr)
+    148px;
 }
 
 .ventas-grid--orders {
   grid-template-columns:
     1.28fr
     1.18fr
+    .82fr
     .72fr
-    .72fr
-    .67fr
-    .67fr
     .68fr
     .72fr
     .82fr;
@@ -1163,10 +1167,8 @@
     grid-template-columns:
       1.18fr
       1.05fr
-      .62fr
+      .74fr
       .66fr
-      .62fr
-      .62fr
       .62fr
       .66fr
       .78fr;
@@ -1382,6 +1384,22 @@
   color: var(--secondary-900);
 }
 
+
+/* Origen en el pie: select con la misma escala compacta de 32px. El
+   padding supera al de selectSizing para que el texto no toque el borde. */
+.ventas-page--orders .ventas-pagination-actions select.ventas-footer-select {
+  width: auto;
+  max-width: 100%;
+  padding-left: 10px !important;
+  padding-right: 6px !important;
+  text-align: left;
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-pagination-actions .ventas-footer-select {
+  border-color: color-mix(in srgb, #6aa0e8 45%, transparent);
+  color: #a9c8f3;
+  background: color-mix(in srgb, #3b6fb6 22%, transparent);
+}
 
 /* Alta: replica el botón "Nuevo" compacto que ya usan Alumnos y Cuotas. */
 .ventas-footer-action--new {
@@ -1853,6 +1871,8 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 
 @media (max-width: 1499px) {
   .ventas-page--orders .module-card__actions .ventas-headAction--export { display: none; }
+  /* Origen sigue a Nueva venta / Exportar: pasa al pie (.ventas-pagination-actions). */
+  .ventas-page--orders .module-headFilters > .ventas-orders-filter--origen { display: none !important; }
   .ventas-page--orders .ventas-pagination-actions .ventas-footer-action--export {
     min-height: 32px;
     height: 32px;
@@ -1878,6 +1898,7 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 /* VENTAS REGISTRADAS: estos filtros ocupan solo el espacio que necesita
    el valor visible, en lugar de reservar permanentemente todo su ancho máximo.
    La regla incluye al contenedor Y al select para evitar el espacio sobrante. */
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--medio,
 .ventas-page--orders .module-headFilters > .ventas-orders-filter--pago,
 .ventas-page--orders .module-headFilters > .ventas-orders-filter--retiro,
 .ventas-page--orders .module-headFilters > .ventas-orders-filter--origen {
@@ -1896,6 +1917,7 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   max-width: 120px;
 }
 
+.ventas-page--orders .module-headFilters > .ventas-orders-filter--medio .module-filterControl,
 .ventas-page--orders .module-headFilters > .ventas-orders-filter--pago .module-filterControl,
 .ventas-page--orders .module-headFilters > .ventas-orders-filter--retiro .module-filterControl,
 .ventas-page--orders .module-headFilters > .ventas-orders-filter--origen .module-filterControl {
@@ -2098,10 +2120,10 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   justify-content: center;
 }
 
-/* La descripción cede algo de ancho antes que los filtros. */
+/* Sin descripción: el título ocupa solo su ancho y cede el resto a los filtros. */
 .ventas-page--orders .module-titleBox {
-  flex: 0 1 250px;
-  min-width: 168px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .ventas-page--products .module-titleBox {
@@ -2134,9 +2156,11 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   min-width: 90px;
   max-width: 205px;
   margin-left: 0;
+  /* Buscador a la izquierda; los selectores quedan alineados a la derecha. */
+  margin-right: auto;
 }
 
-.ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen) {
+.ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen):not(.ventas-orders-filter--medio) {
   flex: 1.2 1 120px;
   width: auto;
   min-width: 76px;
@@ -2175,7 +2199,7 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   .ventas-page--orders .module-headFilters {
     flex: 0 0 100%;
     width: 100%;
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
   .ventas-page--orders .module-card__actions {
     align-self: flex-start;
@@ -2213,7 +2237,7 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 @container (max-width: 660px) {
   .ventas-page--orders .module-headFilters {
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: flex-end;
     gap: 8px;
   }
   .ventas-page--orders .module-headFilters > .module-filter--search {
@@ -2221,7 +2245,7 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
     width: 100%;
     max-width: 100%;
   }
-  .ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen) {
+  .ventas-page--orders .module-headFilters > .module-filter--select:not(.ventas-orders-filter--pago):not(.ventas-orders-filter--retiro):not(.ventas-orders-filter--origen):not(.ventas-orders-filter--medio) {
     flex: 1 1 110px;
     max-width: 155px;
   }
@@ -2311,6 +2335,25 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
   display: block;
   width: 100%;
   text-align: center;
+}
+
+/* Fechas completas: la línea puede partirse entre inicio y fin (y entre
+   entrega y horarios), pero nunca dentro de una fecha ni con puntos suspensivos. */
+.ventas-page--campaigns .ventas-validity-cell > strong,
+.ventas-page--campaigns .ventas-validity-cell > small {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+.ventas-page--campaigns .ventas-validity-date {
+  white-space: nowrap;
+}
+
+/* Ganancia por no vender: encabezado alineado con el importe. */
+.ventas-page--campaigns .ventas-nosales-head {
+  text-align: right;
 }
 
 /* Productos de ventas: uso compacto. El dato principal va en un chip y
@@ -2569,6 +2612,23 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 /* Cuando se abre el menú lateral, mantener legibles las cifras dentro de
    las mismas 11 / 10 / 6 columnas sin introducir desplazamiento horizontal. */
 @container (max-width: 1150px) {
+  .ventas-global-table .ventas-grid--campaigns {
+    grid-template-columns:
+      minmax(0, .96fr)
+      minmax(0, .9fr)
+      minmax(0, .96fr)
+      minmax(0, 1.04fr)
+      minmax(0, 1.5fr)
+      minmax(0, .5fr)
+      148px;
+  }
+  /* Solo cuando ya no entra: el objetivo baja de línea en vez de cortarse. */
+  .ventas-page--campaigns .ventas-objective-cell > strong {
+    overflow: visible;
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.35;
+  }
   .ventas-page--planillas .ventas-planillas-paperGrid { font-size: 10px; }
   .ventas-page--planillas .ventas-planillas-headCell { font-size: 9px; }
   .ventas-page--planillas .ventas-planillas-paperCell { padding-inline: 2px; }
@@ -4402,7 +4462,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   min-width: 0;
 }
 @container (max-width: 1250px) {
-  .ventas-page--orders .module-headFilters { flex-wrap: wrap; justify-content: flex-start; }
+  .ventas-page--orders .module-headFilters { flex-wrap: wrap; justify-content: flex-end; }
   .ventas-page--orders .module-headFilters > .ventas-orders-filter--campaign { flex: 1 1 270px !important; max-width: 100% !important; }
 }
 
@@ -4699,9 +4759,11 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 /* =========================================================
-   VENTAS REGISTRADAS — tabla compacta (9 columnas)
-   Venta · Persona · Medio · Total · Pago · Retiro · Origen · Fecha · Acciones
-   - "Pago" es un selector PAGADA / PENDIENTE (ventas_orden_pago).
+   VENTAS REGISTRADAS — tabla compacta (7 columnas)
+   Venta · Persona · Medio · Total · Origen · Fecha · Acciones
+   - Las columnas "Pago" (selector PAGADA / PENDIENTE) y "Retiro" están
+     comentadas en VentasRegistradas.jsx; al reactivarlas, volver a sumar
+     sus columnas (.95fr y .8fr).
    - El subtítulo de Venta muestra solo "Cantidad: x" (sin repetir nombre).
    - Acciones con ancho fijo para que ningún icono quede cortado
      por el overflow-x: hidden de .entity-table-wrap.
@@ -4709,14 +4771,12 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 .ventas-grid--orders,
 .ventas-global-table .ventas-grid--orders {
   grid-template-columns:
-    minmax(0, 1.45fr)
-    minmax(0, 1.4fr)
-    minmax(0, .72fr)
-    minmax(0, .72fr)
-    minmax(0, .95fr)
+    minmax(0, 1.6fr)
+    minmax(0, 1.55fr)
+    minmax(0, 1fr)
     minmax(0, .8fr)
     minmax(0, .66fr)
-    minmax(0, .72fr)
+    minmax(0, .74fr)
     176px;
 }
 
@@ -4757,14 +4817,12 @@ html[data-theme="oscuro"] .ventas-pill.bot {
   .ventas-grid--orders,
   .ventas-global-table .ventas-grid--orders {
     grid-template-columns:
-      minmax(0, 1.32fr)
-      minmax(0, 1.28fr)
-      minmax(0, .7fr)
-      minmax(0, .72fr)
+      minmax(0, 1.46fr)
+      minmax(0, 1.4fr)
       minmax(0, .95fr)
-      minmax(0, .8fr)
+      minmax(0, .78fr)
       minmax(0, .66fr)
-      minmax(0, .72fr)
+      minmax(0, .74fr)
       164px;
   }
 
