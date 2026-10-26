@@ -10,6 +10,18 @@ const BOT_WHATSAPP = "3564 665050";
 const ALUMNOS_POR_HOJA = 36;
 const DOCENTES_POR_HOJA = 42;
 
+// Docentes y Terceros comparten la misma hoja de listado; sólo cambian los textos.
+const LISTADOS = {
+  docentes: {
+    titulo: "PROFESORES / DOCENTES", meta: "Listado de docentes",
+    conteo: "Docentes en esta hoja", columna: "DOCENTE", totalFinal: "TOTAL DOCENTES",
+  },
+  terceros: {
+    titulo: "TERCEROS / OTRAS PERSONAS", meta: "Listado de terceros",
+    conteo: "Personas en esta hoja", columna: "PERSONA", totalFinal: "TOTAL TERCEROS",
+  },
+};
+
 const separarEnHojas = (rows, cantidad) => {
   const result = [];
   for (let i = 0; i < rows.length; i += cantidad) result.push(rows.slice(i, i + cantidad));
@@ -31,7 +43,8 @@ export function filaPlanilla(row, tipo, indice = 0) {
     productos: Number(row.importe_productos || 0),
     observaciones: String(row.observaciones || ""),
   };
-  if (tipo === "docentes") return {
+  // Docentes y terceros: el backend envía nombre_completo y dni.
+  if (tipo === "docentes" || tipo === "terceros") return {
     ...comunes, orden: indice + 1,
     nombre: String(row.nombre_completo || ""), dni: String(row.dni || ""),
   };
@@ -85,7 +98,7 @@ function hojaCurso(rows, curso, division, campania, anio, nroPagina, totalPagina
   </section>`;
 }
 
-function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTexto, anio, conObjetivo, totalDocentes, modo = "datos") {
+function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTexto, anio, conObjetivo, totalDocentes, modo = "datos", listado = LISTADOS.docentes) {
   const vacia = modo === "vacia";
   const subtotal = rows.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
   const span = conObjetivo ? 8 : 6;
@@ -93,14 +106,14 @@ function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTex
     ? `<colgroup><col class="t-order"><col class="t-name t-name--objective"><col class="t-dni"><col class="t-qty"><col class="t-qty"><col class="t-gain"><col class="t-paid"><col class="t-notes"></colgroup>`
     : `<colgroup><col class="t-order"><col class="t-name"><col class="t-dni"><col class="t-qty"><col class="t-paid"><col class="t-notes"></colgroup>`;
   return `<section class="legacy-sheet">
-    <div class="legacy-meta"><span>Listado de docentes · Página ${pagina} de ${cantidadHojas}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>Docentes en esta hoja: ${rows.length}</span></div>
+    <div class="legacy-meta"><span>${listado.meta} · Página ${pagina} de ${cantidadHojas}</span><strong>Número bot: ${BOT_WHATSAPP}</strong><span>${listado.conteo}: ${rows.length}</span></div>
     <table class="legacy-grid legacy-grid--teachers ${conObjetivo ? "legacy-grid--teachers-objective" : ""}">
       ${columnas}
       <tbody>
         <tr><th class="legacy-school" colspan="${span}">I.P.E.T. Nº 50 &quot;Ing.Emilio F. Olmos&quot;</th></tr>
-        <tr class="legacy-top"><th colspan="2">PROFESORES / DOCENTES</th><th colspan="${span - 3}">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
+        <tr class="legacy-top"><th colspan="2">${listado.titulo}</th><th colspan="${span - 3}">${escapeHtml(campania.toLocaleUpperCase("es-AR"))}</th><th>${anio}</th></tr>
         <tr class="legacy-course-line"><th colspan="${Math.floor(span / 2)}">PRODUCTO: ${escapeHtml(producto.toLocaleUpperCase("es-AR"))}</th><th colspan="${span - Math.floor(span / 2)}">PRECIO UNITARIO: ${vacia ? "" : precioTexto ? escapeHtml(precioTexto) : "SIN VENTAS"}</th></tr>
-        <tr class="legacy-columns"><th>ORDEN</th><th>DOCENTE</th><th>DNI</th><th>CANT.</th>${conObjetivo ? "<th>FALT.</th><th>GANANCIA PENDIENTE</th>" : ""}<th>TOTAL COBRADO</th><th>OBSERVACIONES</th></tr>
+        <tr class="legacy-columns"><th>ORDEN</th><th>${listado.columna}</th><th>DNI</th><th>CANT.</th>${conObjetivo ? "<th>FALT.</th><th>GANANCIA PENDIENTE</th>" : ""}<th>TOTAL COBRADO</th><th>OBSERVACIONES</th></tr>
         ${rows.map((row, index) => {
           const f = filaPlanilla(row, "docentes", (pagina - 1) * DOCENTES_POR_HOJA + index);
           return `<tr class="legacy-data-row"><td>${vacia ? "" : f.orden}</td><td class="legacy-name">${escapeHtml(f.nombre)}</td><td>${escapeHtml(f.dni)}</td><td>${vacia ? "" : f.vendidas}</td>${conObjetivo ? `<td>${vacia ? "" : f.faltantes}</td><td class="legacy-amount">${vacia ? "" : escapeHtml(money(f.ganancia))}</td>` : ""}<td class="legacy-amount">${vacia ? "" : escapeHtml(money(f.cobrado))}${!vacia && f.gananciaCobrada > 0 ? `<small class="legacy-amountBreakdown" title="Productos y ganancia cobrada">Prod. ${escapeHtml(money(f.productos))}<br>Gan. ${escapeHtml(money(f.gananciaCobrada))}</small>` : ""}</td><td class="legacy-notes">${vacia ? "" : escapeHtml(f.observaciones)}</td></tr>`;
@@ -108,7 +121,7 @@ function hojaDocentes(rows, pagina, cantidadHojas, campania, producto, precioTex
       </tbody>
     </table>
     <div class="legacy-total">${cantidadHojas > 1 ? "SUBTOTAL DE HOJA" : "TOTAL COBRADO"}: <strong>${vacia ? "" : escapeHtml(money(subtotal))}</strong></div>
-    ${cantidadHojas > 1 && pagina === cantidadHojas ? `<div class="legacy-final-total">TOTAL DOCENTES: <strong>${vacia ? "" : escapeHtml(money(totalDocentes))}</strong></div>` : ""}
+    ${cantidadHojas > 1 && pagina === cantidadHojas ? `<div class="legacy-final-total">${listado.totalFinal}: <strong>${vacia ? "" : escapeHtml(money(totalDocentes))}</strong></div>` : ""}
   </section>`;
 }
 
@@ -153,11 +166,12 @@ export function crearDocumentoPlanillas(data, tipo, { modo = "datos" } = {}) {
   const anio = Number(data?.meta?.anio_planilla) || new Date().getFullYear();
   let paginas = [];
 
-  if (tipo === "docentes") {
+  if (tipo === "docentes" || tipo === "terceros") {
     const grupos = separarEnHojas(items, DOCENTES_POR_HOJA);
-    const conObjetivo = Number(data?.campania?.cantidad_minima_persona || 0) > 0;
-    const totalDocentes = items.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
-    paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio, conObjetivo, totalDocentes, modo));
+    // Los terceros son compradores externos: no tienen objetivo de ventas.
+    const conObjetivo = tipo === "docentes" && Number(data?.campania?.cantidad_minima_persona || 0) > 0;
+    const totalListado = items.reduce((sum, row) => sum + Number(row.importe_cobrado || 0), 0);
+    paginas = grupos.map((rows, i) => hojaDocentes(rows, i + 1, grupos.length, campania, producto, precioTexto, anio, conObjetivo, totalListado, modo, LISTADOS[tipo]));
   } else {
     const responsables = new Map((data?.docentes_responsables || [])
       .map((asignacion) => [JSON.stringify([String(asignacion.id_anio), String(asignacion.id_division)]), asignacion.docente_nombre]));

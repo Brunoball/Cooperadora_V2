@@ -41,7 +41,15 @@ const OPCIONES_CONTENIDO = [
   { value: "datos", label: "Planilla con datos", description: "Incluye las unidades, importes y observaciones reales registradas en el sistema." },
 ];
 
-const filaId = (row, tipo) => String(tipo === "docentes" ? row.id_docente : row.id_alumno);
+// Terceros: personas de Ventas que no son alumnos ni docentes (backend).
+const TIPOS = {
+  cursos: { plural: "alumnos", hoja: "Alumnos", titulo: "ALUMNOS", buscar: "Buscar alumno o DNI", columna: "Apellido y nombres" },
+  docentes: { plural: "docentes", hoja: "Docentes", titulo: "PROFESORES / DOCENTES", buscar: "Buscar docente o DNI", columna: "Docente" },
+  terceros: { plural: "terceros", hoja: "Terceros", titulo: "TERCEROS / OTRAS PERSONAS", buscar: "Buscar persona o DNI", columna: "Persona" },
+};
+const tipoInfo = (tipo) => TIPOS[tipo] || TIPOS.cursos;
+
+const filaId = (row, tipo) => String(tipo === "docentes" ? row.id_docente : tipo === "terceros" ? row.id_persona : row.id_alumno);
 
 export default function Planillas({ writable, showFeedback }) {
   const [options, setOptions] = useState({ campanias: [], anios: [], divisiones: [], docentes: [], total_docentes: 0 });
@@ -328,7 +336,10 @@ export default function Planillas({ writable, showFeedback }) {
   const previewCampaignName = upper(previewData?.campania?.nombre || "", 150);
   const previewProductName = upper(previewData?.campania?.producto_principal_nombre || "", 150);
 
-  const tieneObjetivo = Number(previewData?.campania?.cantidad_minima_persona || 0) > 0;
+  // Los terceros son compradores externos: su planilla no tiene objetivo.
+  const tieneObjetivo = type !== "terceros" && Number(previewData?.campania?.cantidad_minima_persona || 0) > 0;
+  const esListado = type !== "cursos";
+  const info = tipoInfo(type);
   const totales = previewData?.totales || {};
   const sinAsignar = previewData?.ventas_sin_asignar || {};
   const exportSourceData = exportOpen && exportData ? exportData : previewData;
@@ -337,15 +348,15 @@ export default function Planillas({ writable, showFeedback }) {
   const exportProductName = upper(exportSourceData?.campania?.producto_principal_nombre || "", 150);
 
   const exportSections = useMemo(() => {
-    const tieneObjetivo = Number(exportSourceData?.campania?.cantidad_minima_persona || 0) > 0;
+    const tieneObjetivo = type !== "terceros" && Number(exportSourceData?.campania?.cantidad_minima_persona || 0) > 0;
     const asignaciones = new Map((exportSourceData?.docentes_responsables || [])
       .map((r) => [`${r.id_anio}:${r.id_division}`, r.docente_nombre]));
     const rows = exportItems.map((row, index) => ({
       ...filaPlanilla(row, type, index),
       docenteResponsable: asignaciones.get(`${row.id_anio}:${row.id_division}`) || "SIN ASIGNAR",
     }));
-    const columnasBase = type === "docentes"
-      ? [{ label: "Orden", key: "orden" }, { label: "Docente", key: "nombre" }, { label: "DNI", key: "dni" }]
+    const columnasBase = type !== "cursos"
+      ? [{ label: "Orden", key: "orden" }, { label: tipoInfo(type).columna, key: "nombre" }, { label: "DNI", key: "dni" }]
       : [{ label: "Apellido y nombres", key: "nombre" }, { label: "DNI", key: "dni" },
           { label: "Año", key: "anio" }, { label: "División", key: "division" },
           { label: "Docente responsable", key: "docenteResponsable" }];
@@ -362,7 +373,7 @@ export default function Planillas({ writable, showFeedback }) {
       { label: "Observaciones", key: "observaciones" },
     ];
     const sections = [{
-      hoja: type === "docentes" ? "Docentes" : "Alumnos",
+      hoja: tipoInfo(type).hoja,
       titulo: exportCampaignName || "Planilla de ventas",
       subtitulo: `${exportProductName ? `Producto: ${exportProductName}` : ""}${type === "cursos" && (exportSourceData?.totales_por_curso || []).length === 1 ? ` · Docente responsable: ${rows[0]?.docenteResponsable || "SIN ASIGNAR"}` : ""}`,
       columnas,
@@ -385,7 +396,7 @@ export default function Planillas({ writable, showFeedback }) {
   }, [exportItems, exportCampaignName, exportProductName, exportSourceData, type]);
 
   const exportSubtitle = useMemo(() => {
-    const parts = [type === "docentes" ? "DOCENTES" : "ALUMNOS"];
+    const parts = [tipoInfo(type).plural.toLocaleUpperCase("es-AR")];
     if (type === "cursos") {
       const selectedYear = (options.anios || []).find((item) => String(item.id_anio) === String(year));
       const selectedDivision = (options.divisiones || []).find((item) => String(item.id_division) === String(division));
@@ -412,8 +423,8 @@ export default function Planillas({ writable, showFeedback }) {
       tabsInTitle
       filters={[
         { key: "tipo", type: "tabs", label: "Tipo de planilla", value: type, onChange: cambiarConsulta(setType),
-          options: [{ value: "cursos", label: "Cursos y alumnos" }, { value: "docentes", label: "Docentes" }] },
-        { key: "buscar-persona", type: "search", label: type === "docentes" ? "Buscar docente o DNI" : "Buscar alumno o DNI",
+          options: [{ value: "cursos", label: "Cursos y alumnos" }, { value: "docentes", label: "Docentes" }, { value: "terceros", label: "Terceros" }] },
+        { key: "buscar-persona", type: "search", label: tipoInfo(type).buscar,
           value: busqueda, placeholder: "Nombre o DNI", onChange: (value) => {
             setBusqueda(value);
             setBuscarAbierto(true);
@@ -524,23 +535,25 @@ export default function Planillas({ writable, showFeedback }) {
               </div>
             ) : !previewItems.length ? (
               <div className="ventas-planillas-empty"><FontAwesomeIcon icon={faFileLines} />
-                <strong>Sin registros para estos filtros</strong><span>Cambiá el año o la división para visualizar otros registros.</span>
+                <strong>Sin registros para estos filtros</strong><span>{type === "terceros"
+                  ? "No hay terceros (personas que no son alumnos ni docentes) con compras pagadas o pendientes en esta venta."
+                  : "Cambiá el año o la división para visualizar otros registros."}</span>
               </div>
             ) : (
               <div className="ventas-planillas-sheetScroll">
                 <div
-                  className={`ventas-planillas-paperGrid ${type === "docentes" ? `is-docentes${tieneObjetivo ? " has-objective" : ""}` : "is-alumnos"}`}
+                  className={`ventas-planillas-paperGrid ${esListado ? `is-docentes${type === "terceros" ? " is-terceros" : ""}${tieneObjetivo ? " has-objective" : ""}` : "is-alumnos"}`}
                   role="table"
                   aria-busy={isPreviewPending || previewLoading}
-                  aria-label={`Planilla de ${type === "docentes" ? "docentes" : "alumnos"} · ${previewCampaignName}`}
+                  aria-label={`Planilla de ${info.plural} · ${previewCampaignName}`}
                 >
                   <div className="ventas-planillas-paperHeader" role="rowgroup">
                     <div className="ventas-planillas-school" role="row">
-                      <div role="columnheader" aria-colspan={type === "docentes" ? (tieneObjetivo ? 10 : 6) : 11}>I.P.E.T. Nº 50 &quot;Ing. Emilio F. Olmos&quot;</div>
+                      <div role="columnheader" aria-colspan={esListado ? (tieneObjetivo ? 10 : 6) : 11}>I.P.E.T. Nº 50 &quot;Ing. Emilio F. Olmos&quot;</div>
                     </div>
                     <div className="ventas-planillas-paperTitle" role="row">
-                      <div role="columnheader" aria-colspan={type === "docentes" ? (tieneObjetivo ? 10 : 6) : 11}>
-                        {type === "docentes" ? "PROFESORES / DOCENTES" : "ALUMNOS"} · {previewCampaignName} · {previewData?.meta?.anio_planilla}
+                      <div role="columnheader" aria-colspan={esListado ? (tieneObjetivo ? 10 : 6) : 11}>
+                        {info.titulo} · {previewCampaignName} · {previewData?.meta?.anio_planilla}
                       </div>
                     </div>
                     {type === "cursos" ? (
@@ -565,7 +578,7 @@ export default function Planillas({ writable, showFeedback }) {
                       </div>
                     ) : (
                       <div className="ventas-planillas-paperGroup ventas-planillas-paperGroup--docentes" role="row">
-                        {["ORDEN", "DOCENTE", "DNI", "CANT.", ...(tieneObjetivo ? ["FALT.", "GANANCIA PENDIENTE", "GANANCIA COBRADA", "PRODUCTOS COBRADOS"] : []), "TOTAL COBRADO", "OBSERVACIONES"].map((label) => (
+                        {["ORDEN", type === "terceros" ? "PERSONA" : "DOCENTE", "DNI", "CANT.", ...(tieneObjetivo ? ["FALT.", "GANANCIA PENDIENTE", "GANANCIA COBRADA", "PRODUCTOS COBRADOS"] : []), "TOTAL COBRADO", "OBSERVACIONES"].map((label) => (
                           <div className="ventas-planillas-headCell" role="columnheader" key={label}>{label}</div>
                         ))}
                       </div>
@@ -576,8 +589,8 @@ export default function Planillas({ writable, showFeedback }) {
                       const f = filaPlanilla(row, type, previewStart + index);
                       const marcada = filaLocalizada?.id === filaId(row, type) && filaLocalizada?.type === type && filaLocalizada?.campaign === campaign;
                       return <div className={`ventas-planillas-paperRow${marcada ? " is-located" : ""}`} role="row"
-                        ref={marcada ? filaMarcadaRef : null} key={type === "docentes" ? row.id_docente : row.id_alumno}>
-                        {type === "docentes" ? <>
+                        ref={marcada ? filaMarcadaRef : null} key={filaId(row, type)}>
+                        {esListado ? <>
                           <div className="ventas-planillas-paperCell" role="cell">{f.orden}</div>
                           <div className="ventas-planillas-paperCell ventas-planillas-paperName" role="cell" title={upper(f.nombre, 180)}><span><TextoResaltado texto={upper(f.nombre, 180)} busqueda={busqueda} /></span></div>
                           <div className="ventas-planillas-paperCell" role="cell"><TextoResaltado texto={f.dni} busqueda={busqueda} /></div>
@@ -623,7 +636,7 @@ export default function Planillas({ writable, showFeedback }) {
             }}
             loading={isPreviewPending}
             showSummary={false}
-            itemLabel={type === "docentes" ? "docentes" : "alumnos"}
+            itemLabel={info.plural}
             ariaLabel="Paginación de planillas de ventas"
             compactPageItems
             className="ventas-tableFooter ventas-planillas-pagination"
@@ -631,11 +644,11 @@ export default function Planillas({ writable, showFeedback }) {
               <>
                 <div className="ventas-planillas-preview">
                   <span className="ventas-planillas-preview__icon" aria-hidden="true">
-                    <FontAwesomeIcon icon={type === "docentes" ? faUsers : faFileLines} />
+                    <FontAwesomeIcon icon={esListado ? faUsers : faFileLines} />
                   </span>
                   <div>
                     <strong>{`TOTAL COBRADO: ${money(totales.importe_cobrado || 0)}`}</strong>
-                    <span>{`${previewItems.length} ${type === "docentes" ? "docentes" : "alumnos"} · ${Number(totales.cantidad_vendida || 0)} unidades vendidas · ${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""}`}</span>
+                    <span>{`${previewItems.length} ${info.plural} · ${Number(totales.cantidad_vendida || 0)} unidades vendidas · ${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""}`}</span>
                   </div>
                 </div>
                 {previewData && Number(sinAsignar.cantidad || 0) > 0 && (
@@ -667,7 +680,7 @@ export default function Planillas({ writable, showFeedback }) {
                   <div className="ventas-planillas-conciliacion__head">
                     <strong>{`${sinAsignar.cantidad} venta(s) sin asignar en la campaña · ${money(sinAsignar.importe_cobrado)}`}</strong>
                   </div>
-                  <p>Estas órdenes están aprobadas pero no tienen una vinculación inequívoca con un alumno o docente. Se incluyen en el total de la campaña, no en el de esta planilla.</p>
+                  <p>Estas órdenes están aprobadas pero no tienen una vinculación inequívoca con un alumno, docente o tercero. Se incluyen en el total de la campaña, no en el de esta planilla.</p>
                   <div className="ventas-planillas-conciliacionScroll">
                     <div className="ventas-planillas-conciliacionGrid" role="table" aria-label="Ventas sin asignar">
                       <div className="ventas-planillas-conciliacionRow is-header" role="row">

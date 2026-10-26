@@ -4699,9 +4699,9 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 /* =========================================================
-   VENTAS REGISTRADAS — tabla compacta (8 columnas)
-   Venta · Persona · Medio · Total · Retiro · Origen · Fecha · Acciones
-   - Se quitó la columna "Pago" (el estado no cobrado se ve en Retiro).
+   VENTAS REGISTRADAS — tabla compacta (9 columnas)
+   Venta · Persona · Medio · Total · Pago · Retiro · Origen · Fecha · Acciones
+   - "Pago" es un selector PAGADA / PENDIENTE (ventas_orden_pago).
    - El subtítulo de Venta muestra solo "Cantidad: x" (sin repetir nombre).
    - Acciones con ancho fijo para que ningún icono quede cortado
      por el overflow-x: hidden de .entity-table-wrap.
@@ -4709,13 +4709,14 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 .ventas-grid--orders,
 .ventas-global-table .ventas-grid--orders {
   grid-template-columns:
-    minmax(0, 1.5fr)
     minmax(0, 1.45fr)
-    minmax(0, .75fr)
-    minmax(0, .75fr)
-    minmax(0, .85fr)
-    minmax(0, .7fr)
-    minmax(0, .75fr)
+    minmax(0, 1.4fr)
+    minmax(0, .72fr)
+    minmax(0, .72fr)
+    minmax(0, .95fr)
+    minmax(0, .8fr)
+    minmax(0, .66fr)
+    minmax(0, .72fr)
     176px;
 }
 
@@ -4756,17 +4757,78 @@ html[data-theme="oscuro"] .ventas-pill.bot {
   .ventas-grid--orders,
   .ventas-global-table .ventas-grid--orders {
     grid-template-columns:
-      minmax(0, 1.4fr)
-      minmax(0, 1.35fr)
-      minmax(0, .72fr)
-      minmax(0, .75fr)
-      minmax(0, .85fr)
+      minmax(0, 1.32fr)
+      minmax(0, 1.28fr)
       minmax(0, .7fr)
-      minmax(0, .75fr)
+      minmax(0, .72fr)
+      minmax(0, .95fr)
+      minmax(0, .8fr)
+      minmax(0, .66fr)
+      minmax(0, .72fr)
       164px;
   }
 
   .ventas-grid--orders .mov-actionsInline {
     gap: 4px;
   }
+}
+
+/* Ventas registradas · selector de estado de pago en la tabla. */
+.ventas-order-payment { min-width: 0; }
+.ventas-payment-select {
+  width: 100%;
+  max-width: 124px;
+  min-height: 28px;
+  padding: 3px 22px 3px 9px;
+  border: 1px solid var(--mov-border);
+  border-radius: 999px;
+  color: var(--mov-muted);
+  background-color: color-mix(in srgb, var(--balto-bg) 68%, #fff);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ventas-payment-select.is-aprobada { border-color: #cbe9d5; color: #217445; background-color: #eef9f2; }
+.ventas-payment-select.is-pendiente { border-color: #f0d99d; color: #8a6500; background-color: #fff8e6; }
+.ventas-payment-select:disabled { cursor: default; opacity: .85; }
+.ventas-payment-select:focus-visible { outline: 2px solid var(--balto-action, #1d428a); outline-offset: 1px; }
+html[data-theme="oscuro"] .ventas-payment-select.is-aprobada {
+  border-color: color-mix(in srgb, #4fbf7f 45%, transparent);
+  color: #9fe0b8;
+  background-color: color-mix(in srgb, #2f8f57 22%, transparent);
+}
+html[data-theme="oscuro"] .ventas-payment-select.is-pendiente {
+  border-color: color-mix(in srgb, #e0b24a 45%, transparent);
+  color: #f1d48c;
+  background-color: color-mix(in srgb, #b58614 22%, transparent);
+}
+
+/* Nueva / Editar venta · Campaña, medio y estado de pago en una línea. */
+.ventas-order-simple .ventas-simple-top.ventas-simple-top--pago {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, .8fr);
+}
+@media (max-width: 670px) {
+  .ventas-order-simple .ventas-simple-top.ventas-simple-top--pago { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Buscador de personas · primera opción "Agregar nueva persona". */
+.ventas-search-results > button.ventas-search-results__add {
+  border-bottom: 1px dashed var(--mov-border);
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 4px;
+}
+.ventas-search-results__add strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--balto-action, #1d428a);
+}
+html[data-theme="oscuro"] .ventas-search-results__add strong { color: #a9c8f3; }
+
+/* Modal pequeño de alta de persona. */
+.ventas-persona-modal__fields { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; padding: 4px 2px 8px; }
+.ventas-persona-modal .ventas-simple-error { margin-top: 6px; }
+@media (max-width: 560px) {
+  .ventas-persona-modal__fields { grid-template-columns: minmax(0, 1fr); }
 }

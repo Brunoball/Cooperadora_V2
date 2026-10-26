@@ -861,6 +861,7 @@ function e2e_scope_guard(string $action, array $auth): void
             return;
 
         case 'ventas_persona_guardar':
+        case 'ventas_persona_crear':
             e2e_assert_sales_person_payload($db, $action, $body);
             return;
 
@@ -877,6 +878,7 @@ function e2e_scope_guard(string $action, array $auth): void
             return;
 
         case 'ventas_orden_retiro':
+        case 'ventas_orden_pago':
         case 'ventas_orden_eliminar':
             e2e_assert_target($db, $action, 'ventas_orden', $body['id_orden'] ?? $body['id'] ?? null);
             return;

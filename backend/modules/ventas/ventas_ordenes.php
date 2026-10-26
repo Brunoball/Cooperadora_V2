@@ -953,6 +953,92 @@ trait VentasOrdenes
         api_success([], $retired?'Venta marcada como retirada.':'Retiro revertido.');
     }
 
+    /**
+     * Cambio rápido Pagada <-> Pendiente desde la tabla de Ventas registradas.
+     * No modifica persona, productos, importes ni fecha: sólo el estado y sus
+     * efectos (stock de órdenes V2V-, asiento contable y retiro). Mantiene el
+     * mismo orden de bloqueos que guardarOrden (campaña -> venta -> persona).
+     */
+    public static function estadoPagoOrden(): never
+    {
+        $db = self::db();
+        $auth = self::auth();
+        $body = request_body();
+        $id = positive_id($body['id_orden'] ?? $body['id'] ?? null, 'venta');
+        $raw = strtolower(trim((string)($body['estado'] ?? '')));
+        /** @disregard P1012 */
+        if (!in_array($raw, self::PAYMENT_STATES, true)) {
+            api_error('El estado de pago debe ser pagado o pendiente.', 'VALIDATION_ERROR');
+        }
+        $state = $raw;
+
+        $result = transaction($db, function () use ($db, $auth, $id, $state): array {
+            $reference = self::fetchOne($db, 'SELECT id_campania FROM ventas_ordenes WHERE id_orden = ?', [$id]);
+            if (!$reference) api_error('La venta no existe.', 'VENTA_NO_ENCONTRADA', 404);
+            $campaign = self::campaign($db, (int)$reference['id_campania'], true);
+            if (($campaign['estado_cierre'] ?? 'abierta') === 'cerrada') {
+                api_error('La campaña está cerrada. Consultá el historial; no se admiten cambios.', 'VENTA_CAMPANIA_CERRADA', 409);
+            }
+            $before = self::order($db, $id, true);
+            /** @disregard P1012 */
+            if (!in_array($before['estado'], self::PAYMENT_STATES, true)) {
+                api_error('Solo una venta pagada o pendiente puede cambiar su estado de pago.', 'VENTA_ESTADO_INVALIDO', 409);
+            }
+            if ($before['estado'] === $state) return ['item' => $before, 'cambio' => false];
+            if ($before['origen'] === 'bot_whatsapp' && $state !== 'aprobada') {
+                api_error('Las ventas de WhatsApp ya están pagadas y no pueden pasar a pendientes.', 'VALIDATION_ERROR', 409);
+            }
+            // Una ganancia cobrada no puede reabrirse: al volver a aprobarla
+            // podría duplicarse con otra liquidación de la misma persona.
+            if ((float)$before['ganancia_objetivo'] > 0 || (int)$before['cantidad_ganancias'] > 0) {
+                api_error('Esta venta incluye ganancias cobradas y su estado de pago no puede modificarse. Usá anulación con motivo y conciliación.', 'VENTA_GANANCIA_HISTORICA_INMUTABLE', 409);
+            }
+            $personId = self::nullablePositiveId($before['id_venta_persona'] ?? null);
+            if ($personId !== null) {
+                self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona = ? FOR UPDATE', [$personId]);
+            }
+
+            $items = self::orderItems($db, $id);
+            $stockManaged = self::isStockManagedOrder($before);
+            if ($state === 'aprobada') {
+                // Las mismas reglas de catálogo que al aprobar desde el modal:
+                // campaña inactiva o productos archivados no admiten un cobro nuevo.
+                self::assertOrderCatalogAvailability($db, $campaign, $items, $before, $items, 'aprobada');
+                if ($stockManaged) self::adjustStock($db, $items, -1);
+                $saleDate = (string)($before['fecha_venta'] ?: substr((string)$before['creado_en'], 0, 10));
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $saleDate)) $saleDate = date('Y-m-d');
+                $db->prepare("UPDATE ventas_ordenes
+                                 SET estado = 'aprobada', aprobado_en = ?, cancelado_en = NULL,
+                                     retirado = 0, retirado_en = NULL
+                               WHERE id_orden = ?")
+                   ->execute([self::approvedTimestampForDate($saleDate, null), $id]);
+                self::syncIncome($db, $id);
+            } else {
+                if ($stockManaged) self::adjustStock($db, $items, +1);
+                $db->prepare("UPDATE ventas_ordenes
+                                 SET estado = 'pendiente', aprobado_en = NULL, cancelado_en = NULL,
+                                     retirado = 0, retirado_en = NULL
+                               WHERE id_orden = ?")
+                   ->execute([$id]);
+                self::deleteLinkedIncome($db, self::order($db, $id, true));
+            }
+            $after = self::order($db, $id);
+            audit_change($db, $auth, 'VENTAS', 'CAMBIAR_ESTADO_PAGO', 'ventas_ordenes', $id,
+                $state === 'aprobada' ? 'Venta marcada como pagada.' : 'Venta marcada como pendiente de pago.',
+                $before, $after);
+            return ['item' => $after, 'cambio' => true];
+        });
+
+        api_success(
+            ['item' => $result['item']],
+            !$result['cambio']
+                ? 'La venta ya tenía ese estado de pago.'
+                : ($state === 'aprobada'
+                    ? 'Venta marcada como pagada. Se registró el ingreso contable.'
+                    : 'Venta marcada como pendiente. Se quitó su ingreso contable y el retiro.')
+        );
+    }
+
     public static function eliminarOrden(): never
     {
         $db = self::db();

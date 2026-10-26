@@ -29,7 +29,12 @@ trait VentasCiclos
             $pending=(int)self::fetchOne($db,"SELECT COUNT(*) n FROM ventas_ordenes WHERE id_campania=? AND estado='pendiente'",[$id])['n'];
             $unretired=(int)self::fetchOne($db,"SELECT COUNT(*) n FROM ventas_ordenes WHERE id_campania=? AND estado='aprobada' AND retirado=0",[$id])['n'];
             $insert=$db->prepare('INSERT INTO ventas_planillas_cerradas(id_campania,tipo,datos) VALUES (?,?,?)');
-            foreach(['cursos','docentes'] as $type) {
+            // La foto de Terceros requiere la migración del ENUM `tipo`. Sin
+            // ella, el cierre conserva el comportamiento anterior y no falla.
+            $types=['cursos','docentes'];
+            $column=self::fetchOne($db,"SHOW COLUMNS FROM ventas_planillas_cerradas LIKE 'tipo'");
+            if ($column && str_contains((string)($column['Type'] ?? ''), "'terceros'")) $types[]='terceros';
+            foreach($types as $type) {
                 // Congelamos el padrón, la asignación de ventas, los montos y las
                 // estadísticas de la planilla; filtros posteriores son locales al JSON.
                 $data=self::calcularPlanilla($db,$id,$type,null,null);

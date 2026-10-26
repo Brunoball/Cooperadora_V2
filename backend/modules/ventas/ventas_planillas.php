@@ -213,9 +213,49 @@ trait VentasPlanillas
         api_success($data);
     }
 
+    /**
+     * Terceros: compradores de ESTA campaña (venta pagada o pendiente) que no son alumnos ni docentes.
+     * Se excluyen las vinculadas a un alumno (id_alumno) y aquellas cuyo DNI
+     * coincide con CUALQUIER alumno o docente cargado, sin importar su estado,
+     * para no presentar como externo a un alumno egresado o a un docente
+     * inactivo. Las ventas se atribuyen por id_venta_persona, nunca por nombre.
+     */
+    private static function planillasTerceros(PDO $db, int $campaignId): array
+    {
+        $known = [];
+        foreach ($db->query('SELECT num_documento FROM alumnos')->fetchAll(PDO::FETCH_COLUMN) ?: [] as $value) {
+            $dni = self::planillasDni($value);
+            if ($dni !== '') $known[$dni] = true;
+        }
+        foreach ($db->query('SELECT dni FROM docentes WHERE dni IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN) ?: [] as $value) {
+            $dni = self::planillasDni($value);
+            if ($dni !== '') $known[$dni] = true;
+        }
+        // Solo terceros que compraron EN ESTA campaña (bot o sistema), con la
+        // venta pagada o pendiente. No se listan todas las personas históricas.
+        $statement = $db->prepare(
+            "SELECT vp.id_persona, vp.nombre_apellido AS nombre_completo, vp.dni, vp.origen
+               FROM ventas_personas vp
+              WHERE vp.id_alumno IS NULL
+                AND EXISTS (
+                    SELECT 1 FROM ventas_ordenes o
+                     WHERE o.id_venta_persona = vp.id_persona
+                       AND o.id_campania = ?
+                       AND o.estado IN ('aprobada', 'pendiente')
+                )
+              ORDER BY vp.nombre_apellido, vp.id_persona"
+        );
+        $statement->execute([$campaignId]);
+        $people = $statement->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return array_values(array_filter($people, static function (array $row) use ($known): bool {
+            $dni = self::planillasDni($row['dni'] ?? null);
+            return $dni === '' || !isset($known[$dni]);
+        }));
+    }
+
     private static function calcularPlanilla(PDO $db, int $campaignId, string $type, ?int $year, ?int $division): array
     {
-        if (!in_array($type, ['cursos', 'docentes'], true)) {
+        if (!in_array($type, ['cursos', 'docentes', 'terceros'], true)) {
             api_error('El tipo de planilla no es válido.', 'VALIDATION_ERROR');
         }
         $campaign = self::campaign($db, $campaignId); // Incluye campañas inactivas históricas.
@@ -262,6 +302,13 @@ trait VentasPlanillas
             $dni = self::planillasDni($row['dni']);
             if ($dni !== '') $dniOwners[$dni]['docentes'][] = $id;
         }
+        // Se calculan en todas las planillas para que la conciliación de la
+        // campaña sea la misma en las tres pestañas.
+        $thirdParties = self::planillasTerceros($db, $campaignId);
+        $thirdPartyIds = [];
+        foreach ($thirdParties as $row) {
+            $thirdPartyIds[(int)$row['id_persona']] = true;
+        }
 
         // Una fila por orden: no sumar o.total sobre un JOIN directo de ítems.
         // El historial de precios se obtiene sólo de los ítems aprobados.
@@ -290,6 +337,7 @@ trait VentasPlanillas
 
         $byStudent = [];
         $byTeacher = [];
+        $byThirdParty = [];
         $unassigned = [];
         $campaignTotal = 0.0;
         $campaignUnits = 0;
@@ -338,6 +386,13 @@ trait VentasPlanillas
                     $reason = 'DNI ausente o inválido';
                 }
             }
+            // Por construcción, un tercero no comparte DNI con alumnos ni
+            // docentes: no compite con las asignaciones anteriores.
+            $thirdPartyId = (int)($order['id_venta_persona'] ?? 0);
+            if ($kind === null && $thirdPartyId > 0 && isset($thirdPartyIds[$thirdPartyId])) {
+                $kind = 'terceros';
+                $ownerId = $thirdPartyId;
+            }
 
             if ($kind === null) {
                 $unassigned[] = [
@@ -354,6 +409,7 @@ trait VentasPlanillas
             }
             // La agregación se realiza por persona, nunca por nombre ni por orden.
             if ($kind === 'alumnos') $bucket = &$byStudent;
+            elseif ($kind === 'terceros') $bucket = &$byThirdParty;
             else $bucket = &$byTeacher;
             if (!isset($bucket[$ownerId])) {
                 $bucket[$ownerId] = [
@@ -376,8 +432,11 @@ trait VentasPlanillas
             unset($bucket);
         }
 
-        $source = $type === 'docentes' ? $teachers : $students;
-        $stats = $type === 'docentes' ? $byTeacher : $byStudent;
+        [$source, $stats, $idField] = match ($type) {
+            'docentes' => [$teachers, $byTeacher, 'id_docente'],
+            'terceros' => [$thirdParties, $byThirdParty, 'id_persona'],
+            default => [$students, $byStudent, 'id_alumno'],
+        };
         $rows = [];
         $courseTotals = [];
         foreach ($source as $row) {
@@ -385,16 +444,23 @@ trait VentasPlanillas
                 if ($year !== null && (int)$row['id_anio'] !== $year) continue;
                 if ($division !== null && (int)$row['id_division'] !== $division) continue;
             }
-            $id = (int)$row[$type === 'docentes' ? 'id_docente' : 'id_alumno'];
+            $id = (int)$row[$idField];
             $summary = $stats[$id] ?? [];
             $sold = (int)($summary['cantidad_vendida'] ?? 0);
-            $objective = self::objectiveForSold($campaign, $sold);
             $paidUnits = (int)($summary['cantidad_ganancias'] ?? 0);
-            $remainingUnits = max(0, (int)$objective['cantidad_faltante'] - $paidUnits);
-            $objective['cantidad_faltante'] = $remainingUnits;
-            if ($remainingUnits === 0) {
-                $objective['objetivo_cumplido'] = 1;
-                $objective['estado_objetivo'] = 'CUMPLIDO';
+            if ($type === 'terceros') {
+                // Los terceros son compradores externos: no tienen un mínimo
+                // de ventas asignado ni generan ganancia pendiente. Sí se
+                // informa la ganancia que hayan pagado efectivamente.
+                $objective = self::objectiveForSold(['cantidad_minima_persona' => 0] + $campaign, $sold);
+            } else {
+                $objective = self::objectiveForSold($campaign, $sold);
+                $remainingUnits = max(0, (int)$objective['cantidad_faltante'] - $paidUnits);
+                $objective['cantidad_faltante'] = $remainingUnits;
+                if ($remainingUnits === 0) {
+                    $objective['objetivo_cumplido'] = 1;
+                    $objective['estado_objetivo'] = 'CUMPLIDO';
+                }
             }
             $determined = (float)$objective['ganancia_pendiente'];
             $collected = (float)($summary['ganancia_cobrada'] ?? 0);
@@ -449,7 +515,8 @@ trait VentasPlanillas
         ];
         $unassignedTotal = round(array_sum(array_column($unassigned, 'importe_cobrado')), 2);
         $assignedTotal = round(array_sum(array_column($byStudent, 'importe_cobrado')) +
-            array_sum(array_column($byTeacher, 'importe_cobrado')), 2);
+            array_sum(array_column($byTeacher, 'importe_cobrado')) +
+            array_sum(array_column($byThirdParty, 'importe_cobrado')), 2);
         return [
             'tipo' => $type, 'campania' => $campaign, 'meta' => $meta,
             'items' => $rows, 'totales' => self::planillasTotales($rows),

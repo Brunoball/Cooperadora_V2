@@ -596,6 +596,71 @@ trait VentasConfiguracion
         api_success(['id_persona'=>$id]);
     }
 
+    /**
+     * Alta desde "Agregar nueva persona" del buscador de Nueva/Editar venta.
+     * A diferencia de guardarPersona (resolvePerson), un DNI ya registrado
+     * NUNCA se sobrescribe: se devuelve la persona existente sin cambios.
+     */
+    public static function crearPersona(): never
+    {
+        $db = self::db();
+        $auth = self::auth();
+        $body = request_body();
+        $name = clean_text($body['nombre_apellido'] ?? '', 160, true);
+        $dni = preg_replace('/\D+/', '', (string)($body['dni'] ?? '')) ?: '';
+        if ($name === '' || !preg_match('/\p{L}/u', $name)) {
+            api_error('Ingresá el nombre y apellido de la persona.', 'VALIDATION_ERROR', 422);
+        }
+        if (strlen($dni) < 6 || strlen($dni) > 12) {
+            api_error('El DNI debe tener entre 6 y 12 números.', 'VALIDATION_ERROR', 422);
+        }
+
+        $result = transaction($db, function () use ($db, $auth, $name, $dni): array {
+            $existing = self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE dni = ? LIMIT 1 FOR UPDATE', [$dni]);
+            if ($existing) {
+                return ['id' => (int)$existing['id_persona'], 'existente' => true, 'alumno' => false];
+            }
+            // Mismo criterio que el buscador: no ofrecer como comprador a un
+            // alumno egresado, dado de baja, eliminado o con ingreso futuro.
+            $student = self::fetchOne($db,
+                'SELECT id_alumno, activo, eliminado, ingreso FROM alumnos WHERE num_documento = ? LIMIT 1',
+                [$dni]
+            );
+            $activeStudent = $student && (int)$student['activo'] === 1 && (int)$student['eliminado'] === 0
+                && (string)$student['ingreso'] !== '' && (string)$student['ingreso'] <= date('Y-m-d');
+            if ($student && !$activeStudent) {
+                api_error('El DNI corresponde a un alumno que no está activo. No se puede cargar como persona nueva.', 'VENTA_PERSONA_ALUMNO_INACTIVO', 409);
+            }
+            // resolvePerson vincula al alumno activo (con su nombre registrado)
+            // y convierte una alta simultánea del mismo DNI en reutilización.
+            $personId = self::resolvePerson($db, ['dni' => $dni, 'nombre_apellido' => $name]);
+            if (!$personId) api_error('No se pudo registrar la persona.', 'VALIDATION_ERROR');
+            $after = self::fetchOne($db, 'SELECT * FROM ventas_personas WHERE id_persona = ?', [$personId]);
+            audit_change($db, $auth, 'VENTAS', 'CREAR_PERSONA', 'ventas_personas', $personId,
+                'Persona agregada desde el buscador de ventas.', null, $after);
+            return ['id' => $personId, 'existente' => false, 'alumno' => $activeStudent];
+        });
+
+        $person = self::fetchOne($db,
+            "SELECT vp.id_persona, vp.dni, vp.nombre_apellido, vp.id_alumno, vp.origen, a.telefono,
+                    an.nombre_anio, d.nombre_division
+               FROM ventas_personas vp
+               LEFT JOIN alumnos a ON a.id_alumno = vp.id_alumno
+               LEFT JOIN anio an ON an.id_anio = a.id_anio
+               LEFT JOIN division d ON d.id_division = a.id_division
+              WHERE vp.id_persona = ? LIMIT 1",
+            [$result['id']]
+        );
+        api_success(
+            ['persona' => $person, 'existente' => $result['existente'] ? 1 : 0, 'vinculada_alumno' => $result['alumno'] ? 1 : 0],
+            $result['existente']
+                ? 'Ya existía una persona con ese DNI; se seleccionó sin modificar sus datos.'
+                : ($result['alumno']
+                    ? 'El DNI corresponde a un alumno activo; se registró con su nombre del padrón.'
+                    : 'Persona agregada correctamente.')
+        );
+    }
+
     public static function objetivoPersona(): never
     {
         $db=self::db();

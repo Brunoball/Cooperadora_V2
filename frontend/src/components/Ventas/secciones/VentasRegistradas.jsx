@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheckCircle, faCircleInfo, faEye, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faCheckCircle, faCircleInfo, faClock, faEye, faMoneyBillWave, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
 import GlobalDivTable from "../../Global/GlobalDivTable";
 import GlobalPagination from "../../Global/GlobalPagination";
@@ -76,11 +76,24 @@ const retreatPill = (row) => {
       ? { className: "success", label: "RETIRADO" }
       : { className: "warning", label: "PENDIENTE" };
   }
-  // Sin columna "Pago": una venta no cobrada se indica acá en lugar del retiro.
-  return {
-    className: `state-${row.estado}`,
-    label: row.estado === "pendiente" ? "SIN PAGAR" : stateLabel(row.estado),
-  };
+  // El estado del cobro se muestra en la columna "Pago"; sin pago no hay retiro.
+  return { className: "neutral", label: "—" };
+};
+
+const PAYMENT_OPTIONS = [
+  { value: "aprobada", label: "PAGADA" },
+  { value: "pendiente", label: "PENDIENTE" },
+];
+
+/* Motivo por el cual el estado de pago no se puede cambiar desde la tabla.
+   Las mismas reglas se validan en el backend (ventas_orden_pago). */
+const paymentLockReason = (row, writable) => {
+  if (!writable) return "Sin permisos de edición";
+  if (row.estado_cierre === "cerrada") return "Campaña cerrada";
+  if (!["aprobada", "pendiente"].includes(row.estado)) return stateLabel(row.estado);
+  if (isBotOrder(row)) return "Las ventas de WhatsApp ya están pagadas";
+  if (Number(row.ganancia_objetivo || 0) > 0 || Number(row.cantidad_ganancias || 0) > 0) return "Incluye ganancias cobradas";
+  return "";
 };
 
 const exportRecord = (row) => ({
@@ -116,6 +129,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   const [modal, setModal] = useState({ open: false, id: null });
   const [confirm, setConfirm] = useState(null);
   const [retreatConfirm, setRetreatConfirm] = useState(null);
+  const [paymentConfirm, setPaymentConfirm] = useState(null);
   const [observacionActiva, setObservacionActiva] = useState(null);
 
   const loadCatalogs = useCallback(async () => {
@@ -269,6 +283,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           "Persona",
           "Medio",
           { label: "Total", align: "right" },
+          { label: "Pago", align: "center" },
           { label: "Retiro", align: "center" },
           { label: "Origen", align: "center" },
           { label: "Fecha", align: "center" },
@@ -290,6 +305,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         {rows.map((row) => {
           const summary = orderSummary(row);
           const retreatState = retreatPill(row);
+          const paymentLock = paymentLockReason(row, writable);
+          const paymentEditable = !paymentLock;
           return (
           <div
             className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--orders${row.estado !== "aprobada" ? " is-unpaid" : ""}`}
@@ -306,6 +323,25 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             </div>
             <div className="mov-gridCell">{upper(row.medio_pago, 120)}</div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
+            <div className="mov-gridCell is-center ventas-order-payment">
+              {["aprobada", "pendiente"].includes(row.estado) ? (
+                <select
+                  className={`ventas-payment-select is-${row.estado}`}
+                  aria-label={`Estado de pago de ${row.nombre_apellido || "venta en puerta"}`}
+                  title={paymentLock || "Cambiar el estado de pago"}
+                  value={row.estado}
+                  disabled={!paymentEditable}
+                  onChange={(event) => {
+                    const estado = event.target.value;
+                    if (estado !== row.estado) setPaymentConfirm({ row, estado });
+                  }}
+                >
+                  {PAYMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              ) : (
+                <span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span>
+              )}
+            </div>
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${retreatState.className}`}>{retreatState.label}</span>
             </div>
@@ -459,6 +495,34 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         onClose={() => setRetreatConfirm(null)}
         onConfirm={async () => {
           const result = await ventasApi.retiroOrden({ id_orden: retreatConfirm.id_orden, retirado: !yes(retreatConfirm.retirado) });
+          await load({ silent: true });
+          return { mensaje: result.mensaje };
+        }}
+      />
+      <ModalEliminarGlobal
+        open={Boolean(paymentConfirm)}
+        row={paymentConfirm?.row}
+        operacion="advertencia"
+        showLoadingEffect={false}
+        tone={paymentConfirm?.estado === "aprobada" ? "success" : "warning"}
+        icon={paymentConfirm?.estado === "aprobada" ? faMoneyBillWave : faClock}
+        title={paymentConfirm?.estado === "aprobada" ? "Marcar venta como pagada" : "Marcar venta como pendiente"}
+        message={paymentConfirm?.estado === "aprobada"
+          ? "¿Confirmás que esta venta ya fue cobrada?"
+          : "¿Querés volver esta venta a pendiente de pago?"}
+        warning={paymentConfirm?.estado === "aprobada"
+          ? "Se registrará el ingreso en Contabilidad y se descontará el stock cuando corresponda. La fecha de pago es la cargada en la venta."
+          : "Se quitará su ingreso de Contabilidad, se repondrá el stock cuando corresponda y se borrará el retiro, si estaba marcado."}
+        confirmLabel={paymentConfirm?.estado === "aprobada" ? "Marcar como pagada" : "Marcar como pendiente"}
+        details={paymentConfirm ? [
+          { label: "Venta", value: paymentConfirm.row.campania_nombre },
+          { label: "Persona", value: paymentConfirm.row.nombre_apellido || "Venta en puerta" },
+          { label: "Total", value: money(paymentConfirm.row.total) },
+          { label: "Fecha", value: dateText(paymentConfirm.row.fecha_venta || paymentConfirm.row.creado_en) },
+        ] : []}
+        onClose={() => setPaymentConfirm(null)}
+        onConfirm={async () => {
+          const result = await ventasApi.estadoPagoOrden({ id_orden: paymentConfirm.row.id_orden, estado: paymentConfirm.estado });
           await load({ silent: true });
           return { mensaje: result.mensaje };
         }}

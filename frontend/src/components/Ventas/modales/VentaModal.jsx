@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowLeft, faBagShopping, faClipboardList, faCoins, faReceipt } from "@fortawesome/free-solid-svg-icons";
+import { faArrowLeft, faBagShopping, faClipboardList, faCoins, faReceipt, faUserPlus } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
 import { EntityTabs, EntityTabPane, FloatingField } from "../../Global/Formularios/TabbedForm";
 import ventasApi from "../api/ventasApi";
-import { asId, money, today, upper, yes } from "../ventasUtils";
+import NuevaPersonaModal from "./NuevaPersonaModal";
+import { asId, money, stateLabel, today, upper, yes } from "../ventasUtils";
 
 const emptyOrder = {
   id_orden: "", id_campania: "", id_venta_persona: "", dni: "", nombre_apellido: "",
@@ -31,6 +32,10 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const [loading, setLoading] = useState(false);
   const [people, setPeople] = useState([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
+  // true cuando terminó la última búsqueda: evita mostrar "Agregar nueva
+  // persona" sola durante el debounce, antes de conocer las coincidencias.
+  const [peopleReady, setPeopleReady] = useState(false);
+  const [newPerson, setNewPerson] = useState({ open: false, nombre: "", dni: "" });
   const [objectiveBase, setObjectiveBase] = useState({ loading: false, ready: false });
   const searchTimer = useRef(null);
   const searchSeq = useRef(0);
@@ -59,6 +64,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setActiveSearch(null);
     setPeople([]);
     setPeopleLoading(false);
+    setPeopleReady(false);
+    setNewPerson({ open: false, nombre: "", dni: "" });
     setObjectiveBase({ loading: false, ready: false });
     if (!initialId) {
       setForm({ ...emptyOrder, fecha_venta: today() });
@@ -121,6 +128,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setActiveSearch(field);
     setPeople([]);
     setPeopleLoading(false);
+    setPeopleReady(false);
     if (!query.trim()) return;
     searchTimer.current = setTimeout(async () => {
       setPeopleLoading(true);
@@ -130,7 +138,10 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       } catch (err) {
         if (searchSeq.current === seq) onFeedback("error", err.message);
       } finally {
-        if (searchSeq.current === seq) setPeopleLoading(false);
+        if (searchSeq.current === seq) {
+          setPeopleLoading(false);
+          setPeopleReady(true);
+        }
       }
     }, 260);
   };
@@ -166,14 +177,46 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     setActiveSearch(null);
     setPeople([]);
     setPeopleLoading(false);
+    setPeopleReady(false);
     setForm((current) => ({ ...current,
       id_venta_persona: person.id_persona || "", dni: person.dni || "",
       nombre_apellido: upper(person.nombre_apellido || "", 160),
     }));
   };
 
-  const personOptions = (field) => activeSearch === field && !peopleLoading && people.length > 0 ? (
-    <div className="ventas-search-results" role="listbox" aria-label="Coincidencias de personas">
+  // "Agregar nueva persona" precarga lo que ya se escribió en ambos campos.
+  const openNewPerson = () => {
+    searchSeq.current += 1;
+    clearTimeout(searchTimer.current);
+    setActiveSearch(null);
+    setPeople([]);
+    setPeopleLoading(false);
+    setPeopleReady(false);
+    setNewPerson({ open: true, nombre: form.nombre_apellido || "", dni: form.dni || "" });
+  };
+
+  const personCreated = (person, result) => {
+    setNewPerson({ open: false, nombre: "", dni: "" });
+    selectPerson(person);
+    onFeedback(result?.existente ? "warning" : "success", result?.mensaje || "Persona agregada correctamente.");
+  };
+
+  // Al salir del buscador (sin pasar a una de sus opciones) se oculta la lista.
+  const closePersonOptions = (event) => {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    setActiveSearch((current) => (current ? null : current));
+  };
+  const personQuery = (field) => String(field === "dni" ? form.dni || "" : form.nombre_apellido || "").trim();
+  // onMouseDown mantiene el foco en el campo: el click de una opción no
+  // dispara el blur que cierra la lista.
+  const personOptions = (field) => activeSearch === field && peopleReady && !peopleLoading && !historicalGain && personQuery(field) ? (
+    <div className="ventas-search-results" role="listbox" aria-label="Coincidencias de personas"
+      onMouseDown={(event) => event.preventDefault()}>
+      <button type="button" role="option" aria-selected="false" className="ventas-search-results__add"
+        onClick={openNewPerson}>
+        <strong><FontAwesomeIcon icon={faUserPlus} aria-hidden="true" /> AGREGAR NUEVA PERSONA</strong>
+        <small>{people.length ? "Si no es ninguna de las coincidencias, cargá su nombre y DNI" : "No hay coincidencias: cargá su nombre y DNI"}</small>
+      </button>
       {people.map((person, index) => (
         <button type="button" role="option" aria-selected="false" key={`${person.id_persona || "alumno"}-${person.id_alumno || index}`}
           onClick={() => selectPerson(person)}>
@@ -250,6 +293,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const productTotal = billableItems.reduce((sum, item) => sum + Number(item.cantidad) * Number(item.precio_unitario || 0), 0);
   const allDoor = billableItems.length > 0 && billableItems.every((item) => item.tipo_precio === "puerta");
   const finalSettlement = !editing && endedCampaign && billableItems.length === 0 && gainQuantity > 0;
+  const pendingPayment = form.estado !== "aprobada";
   const gainsValid = editing ? true : gainQuantity === 0 || (objectiveEnabled && objectiveReady && form.estado === "aprobada" && gainQuantity <= availableGains && gainPreview > 0);
   const dateValid = /^\d{4}-\d{2}-\d{2}$/.test(form.fecha_venta || "");
   const canSave = Boolean(form.id_campania && form.id_medio_pago && dateValid && !loading &&
@@ -282,7 +326,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       observacion: upper(form.observacion, 3000),
       id_venta_persona: form.id_venta_persona || null,
       dni, nombre_apellido: upper(form.nombre_apellido, 160),
-      estado: editing ? form.estado : "aprobada",
+      estado: form.estado,
       cantidad_ganancias: editing ? 0 : gainQuantity,
       incluir_ganancia: !editing && gainQuantity > 0 && !finalSettlement,
       liquidar_ganancia: !editing && finalSettlement,
@@ -297,6 +341,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const multiplePrices = priceProduct && Number(priceProduct.precio_anticipada) !== Number(priceProduct.precio_puerta);
 
   return (
+    <>
     <CrudModal open={open} title={editing ? "Editar venta" : "Nueva venta"} subtitle={editing ? "Revisá los datos registrados de la venta." : "Cargá las ventas y las ganancias por separado."}
       onClose={onClose} onSubmit={submit} noValidate saving={saving} loading={loading} showLoadingEffect={false} showSavingEffect={false}
       submitDisabled={!canSave} modalClassName="ventas-modal ventas-order-modal ventas-order-simple" wide>
@@ -310,7 +355,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
       />
       <EntityTabPane active={activeTab === "datos"} disableWhenInactive className="ventas-simple-pane">
         <div className="ventas-simple-form ventas-simple-form--datos">
-          <div className="ventas-simple-top">
+          <div className="ventas-simple-top ventas-simple-top--pago">
             <FloatingField label="Venta / campaña" className="ventas-modal-field">
               <select value={form.id_campania} required disabled={editing || historicalGain} onChange={(e) => chooseCampaign(e.target.value)}>
                 <option value="">SELECCIONAR CAMPAÑA</option>
@@ -323,17 +368,29 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 {payments.map((p) => <option key={p.id_medio_pago} value={p.id_medio_pago}>{upper(p.medio_pago, 120)}</option>)}
               </select>
             </FloatingField>
+            <FloatingField label="Estado de pago" className="ventas-modal-field">
+              <select value={form.estado} disabled={historicalGain || loading || form.origen === "bot_whatsapp"}
+                onChange={(e) => {
+                  const estado = e.target.value;
+                  // Las ganancias solo se registran en ventas pagadas.
+                  setForm((v) => ({ ...v, estado, cantidad_ganancias: estado === "aprobada" ? v.cantidad_ganancias : 0 }));
+                }}>
+                <option value="aprobada">PAGADA</option>
+                <option value="pendiente">PENDIENTE</option>
+                {!["aprobada", "pendiente"].includes(form.estado) ? <option value={form.estado} disabled>{stateLabel(form.estado)}</option> : null}
+              </select>
+            </FloatingField>
           </div>
           <section className="ventas-simple-person" aria-label="Persona de la venta">
             <div className="ventas-simple-person__fields ventas-simple-person__fields--fecha">
-              <div className="ventas-person-search">
+              <div className="ventas-person-search" onBlur={closePersonOptions}>
                 <FloatingField label="Nombre y apellido" className="ventas-modal-field">
                   <input value={form.nombre_apellido || ""} placeholder="Escribí apellido y nombre para buscar o cargar" disabled={historicalGain} autoComplete="off"
                     onChange={(e) => searchPeople(e.target.value)} />
                 </FloatingField>
                 {personOptions("nombre")}
               </div>
-              <div className="ventas-person-search">
+              <div className="ventas-person-search" onBlur={closePersonOptions}>
                 <FloatingField label="DNI" className="ventas-modal-field">
                   <input inputMode="numeric" value={form.dni || ""} placeholder="Escribí el DNI para buscar o cargar" disabled={historicalGain} autoComplete="off"
                     onChange={(e) => searchDni(e.target.value)} />
@@ -346,13 +403,6 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
               </FloatingField>
             </div>
           </section>
-          {editing && form.estado !== "aprobada" && !historicalGain ? (
-            <FloatingField label="Estado de pago" className="ventas-modal-field">
-              <select value={form.estado} disabled={form.origen === "bot_whatsapp"} onChange={(e) => setForm((v) => ({ ...v, estado: e.target.value }))}>
-                <option value="aprobada">PAGADA</option><option value="pendiente">PENDIENTE</option>
-              </select>
-            </FloatingField>
-          ) : null}
           <div className="ventas-simple-extras">
             <FloatingField label="Observaciones" textarea className="ventas-modal-field">
               <textarea rows="2" maxLength="3000" value={form.observacion || ""} placeholder="Observaciones de esta venta (opcional)"
@@ -417,13 +467,14 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 <div className="ventas-detail-card__count">
                   <label htmlFor="ventas-quantity-gains">Unidades a cobrar</label>
                   <input id="ventas-quantity-gains" aria-label="Cantidad de ganancias" type="number" min="0" max={objectiveReady ? availableGains : minimum} step="1"
-                    value={form.cantidad_ganancias ?? 0} disabled={editing || !objectiveEnabled}
+                    value={form.cantidad_ganancias ?? 0} disabled={editing || !objectiveEnabled || pendingPayment}
                     onChange={(e) => setForm((v) => ({ ...v, cantidad_ganancias: e.target.value }))} />
                 </div>
                 <div className="ventas-detail-card__description ventas-detail-card__description--rule">
                   <span>Regla de la campaña</span>
                   <small>{historicalGain ? "Ganancias ya cobradas: no se pueden recalcular al editar."
                     : editing ? "No se pueden agregar ganancias a una venta ya registrada."
+                    : pendingPayment ? "Las ganancias solo se cobran en ventas pagadas. Cambiá el estado de pago a PAGADA."
                     : minimum > 0 ? `${money(perMissing)} por unidad faltante${noSales > 0 ? ` · ${money(noSales)} si no vendió ninguna y paga todo` : ""}`
                     : "Esta campaña no tiene ganancias configuradas"}</small>
                 </div>
@@ -443,10 +494,19 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
             <div className="ventas-detail-total__copy"><span>Total a cobrar</span><small>Importe final de la operación</small></div>
             <strong>{!editing && gainQuantity > 0 && !objectiveReady ? "Elegí a la persona" : money(total)}</strong>
           </div>
-          {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. La carga se registra como pagada.</small> : null}
+          {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. {pendingPayment ? "Se registrará como PENDIENTE: no genera ingreso contable ni descuenta stock hasta marcarla como pagada." : "Se registrará como PAGADA."}</small> : null}
 
         </div>
       </EntityTabPane>
     </CrudModal>
+    {/* Hermano del modal de venta: su formulario no queda anidado en el de la venta. */}
+    <NuevaPersonaModal
+      open={open && newPerson.open}
+      initialName={newPerson.nombre}
+      initialDni={newPerson.dni}
+      onClose={() => setNewPerson({ open: false, nombre: "", dni: "" })}
+      onCreated={personCreated}
+    />
+    </>
   );
 }
