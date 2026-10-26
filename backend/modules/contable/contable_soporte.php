@@ -434,6 +434,9 @@ trait ContableSoporte
         $periods = $db->query(
             'SELECT id_mes AS id_periodo, nombre FROM meses ORDER BY id_mes ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
+        $studentCategories = $db->query(
+            'SELECT id_cat_monto, nombre_categoria AS nombre FROM categoria_monto ORDER BY nombre_categoria ASC'
+        )->fetchAll(PDO::FETCH_ASSOC);
 
         $optionGroups = self::opcionesConfiguracionDatos($db)['opciones'];
         $years = $db->query(
@@ -452,6 +455,10 @@ trait ContableSoporte
                 'id_medio_pago' => (int)$row['id_medio_pago'],
                 'nombre' => (string)$row['nombre'],
             ], $medios),
+            'categorias_alumnos' => array_map(static fn(array $row): array => [
+                'id_cat_monto' => (int)$row['id_cat_monto'],
+                'nombre' => (string)$row['nombre'],
+            ], $studentCategories),
             'periodos' => array_map(static fn(array $row): array => [
                 'id_periodo' => (int)$row['id_periodo'],
                 'nombre' => (string)$row['nombre'],

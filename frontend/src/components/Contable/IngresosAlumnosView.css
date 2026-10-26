@@ -12,8 +12,8 @@
 }
 
 .ct-student-grid {
-  /* Reservar espacio al monto y sus indicadores sin agrandar las filas. */
-  grid-template-columns: 1.55fr .8fr 1.05fr .8fr .85fr 1.5fr;
+  /* Cuatro columnas, sin chips ni detalles debajo del importe. */
+  grid-template-columns: minmax(210px, 1.65fr) minmax(110px, .8fr) minmax(165px, 1.15fr) minmax(125px, .85fr);
 }
 
 
@@ -25,79 +25,18 @@
   gap: 3px;
 }
 
-.ct-student-period small {
-  font-size: 10px;
-  font-weight: 800;
-  color: #64748b;
-}
-
 .ct-student-money {
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 2px;
-  padding-block: 5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .ct-student-money > strong {
-  max-width: 100%;
-  line-height: 18px;
   font-variant-numeric: tabular-nums;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-/* Los chips comparten la segunda línea, sin saltar uno debajo del otro. */
-.ct-student-money-tags {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
-}
-
-.ct-student-amount-tag {
-  --amount-chip-tone: var(--primary-500);
-  min-width: 0;
-  max-width: 100%;
-  min-height: 16px;
-  flex: 0 1 auto;
-  display: block;
-  padding: 1px 5px;
-  border: 1px solid color-mix(in srgb, var(--amount-chip-tone) 28%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--amount-chip-tone) 10%, var(--balto-white));
-  color: color-mix(in srgb, var(--amount-chip-tone) 82%, var(--balto-ink));
-  font-size: 9px;
-  line-height: 14px;
-  font-weight: 750;
-  letter-spacing: .02em;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ct-student-amount-tag.is-family {
-  --amount-chip-tone: var(--success-600);
-}
-
-.ct-student-amount-tag.is-custom {
-  --amount-chip-tone: var(--warning-600);
-}
-
-.ct-student-amount-tag.is-period {
-  --amount-chip-tone: var(--primary-500);
-}
-
-.ct-student-amount-tag.is-collector {
-  --amount-chip-tone: var(--warning-600);
-}
-
-/* Las celdas permanecen centradas verticalmente aunque Monto tenga dos líneas. */
 .ct-student-grid.mov-gridTable--row > .mov-gridCell {
   align-self: stretch;
   align-items: center;
@@ -128,7 +67,7 @@
 
 @media (max-width: 1100px) {
   .ct-student-grid {
-    min-width: 930px;
+    min-width: 640px;
   }
 }
 

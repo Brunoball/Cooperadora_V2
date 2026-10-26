@@ -112,6 +112,7 @@ const emptyCatalogs = {
     CONCEPTO_EGRESO: [],
   },
   medios_pago: [],
+  categorias_alumnos: [],
   periodos: [],
   anios: [CURRENT_YEAR],
 };
@@ -369,7 +370,7 @@ function SummaryView({ summary, loading, mode }) {
               title="Categorías de egresos"
               items={detail.categorias_egresos}
             />
-            <Breakdown title="Medios de cobro" items={detail.medios} />
+            <Breakdown title="Medios de cobro" items={detail.medios} showCount />
           </div>
         </div>
       ) : null}
@@ -409,7 +410,7 @@ function SummaryView({ summary, loading, mode }) {
   );
 }
 
-function Breakdown({ title, items = [] }) {
+function Breakdown({ title, items = [], showCount = false }) {
   return (
     <article className="ct-panel ct-breakdown">
       <header>{title}</header>
@@ -417,7 +418,12 @@ function Breakdown({ title, items = [] }) {
         {items.length ? (
           items.map((item) => (
             <p key={item.nombre}>
-              <span>{item.nombre}</span>
+              <span>
+                {item.nombre}
+                {showCount && item.cantidad != null ? (
+                  <small className="ct-breakdown__count">{item.cantidad} {Number(item.cantidad) === 1 ? "cobro" : "cobros"}</small>
+                ) : null}
+              </span>
               <b>{money(item.total)}</b>
             </p>
           ))
@@ -440,6 +446,7 @@ export default function ContableModule({ view = "summary" }) {
   const [incomeTab, setIncomeTab] = useState("students");
   const isStudentIncomeTab = incomeTab === "students";
   const [feePeriod, setFeePeriod] = useState("");
+  const [studentCategory, setStudentCategory] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
   const [studentPage, setStudentPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -489,6 +496,7 @@ export default function ContableModule({ view = "summary" }) {
     setMean("");
     setSearch("");
     setStudentSearch("");
+    setStudentCategory("");
     setStudentPage(1);
     setPage(1);
     // Evita mostrar datos de la pestaña anterior mientras se carga la nueva.
@@ -504,7 +512,7 @@ export default function ContableModule({ view = "summary" }) {
 
   useEffect(() => {
     setStudentPage(1);
-  }, [year, month, feePeriod, mean, studentSearch]);
+  }, [year, month, feePeriod, mean, studentSearch, studentCategory]);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -534,6 +542,7 @@ export default function ContableModule({ view = "summary" }) {
             periodo: feePeriod,
             medio: mean,
             buscar: studentSearch,
+            categoria: studentCategory,
             pagina: studentPage,
           });
         } else if (view === "income") {
@@ -565,6 +574,7 @@ export default function ContableModule({ view = "summary" }) {
     feePeriod,
     studentSearch,
     studentPage,
+    studentCategory,
     search,
     category,
     mean,
@@ -894,7 +904,6 @@ export default function ContableModule({ view = "summary" }) {
           { label: "Proveedor / Persona", key: "proveedor" },
           { label: "Categoría", key: "categoria" },
           { label: "Concepto", key: "concepto" },
-          { label: "Medio", key: "medio" },
           { label: "Importe", key: "importe" },
         ],
         records: items,
@@ -914,7 +923,6 @@ export default function ContableModule({ view = "summary" }) {
           value: (item) => item.numero_comprobante || "",
         },
         { label: "Concepto", key: "concepto" },
-        { label: "Medio", key: "medio" },
         { label: "Importe", key: "importe" },
       ],
       records: items,
@@ -1068,6 +1076,19 @@ export default function ContableModule({ view = "summary" }) {
                   periodFilters[1],
                   feePeriodFilter,
                   paymentMethodFilter,
+                  {
+                    key: "categoria-alumno",
+                    label: "Categoría del alumno",
+                    type: "select",
+                    className: "contable-filter--category",
+                    placeholder: "TODAS",
+                    value: studentCategory,
+                    onChange: setStudentCategory,
+                    options: (catalogs.categorias_alumnos || []).map((item) => ({
+                      value: String(item.id_cat_monto),
+                      label: item.nombre,
+                    })),
+                  },
                 ]
               : detailFilters),
           ]
@@ -1086,7 +1107,6 @@ export default function ContableModule({ view = "summary" }) {
       ? [
             "Persona / Proveedor",
             "Fecha",
-            "Medio",
             { label: "Descripción / concepto", align: "center" },
             { label: "Importe", align: "right" },
             ...(writable ? ["Acciones"] : []),
@@ -1096,7 +1116,6 @@ export default function ContableModule({ view = "summary" }) {
             "Fecha",
             "N.º comprobante",
             "Descripción",
-            "Medio",
             { label: "Monto", align: "right" },
             "Acciones",
           ];
@@ -1234,7 +1253,6 @@ export default function ContableModule({ view = "summary" }) {
                       <div className="mov-gridCell is-center">
                         {formatDate(item.fecha)}
                       </div>
-                      <div className="mov-gridCell is-center">{item.medio}</div>
                       <div className="mov-gridCell entity-main-cell is-center">
                         <strong>{item.concepto || "—"}</strong>
                         {item.automatico_ventas ? <small>Automático · gestionado desde Ventas</small> : item.detalle ? <small>{item.detalle}</small> : null}
@@ -1300,7 +1318,6 @@ export default function ContableModule({ view = "summary" }) {
                         <strong>{item.concepto || "—"}</strong>
                         {item.detalle ? <small>{item.detalle}</small> : null}
                       </div>
-                      <div className="mov-gridCell is-center">{item.medio}</div>
                       <div className="mov-gridCell is-right is-strong contable-money-cell">
                         {money(item.importe)}
                       </div>

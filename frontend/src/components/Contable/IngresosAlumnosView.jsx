@@ -23,53 +23,10 @@ const dateText = (value) => {
   return year && month && day ? `${day}/${month}/${year}` : String(value);
 };
 
-function amountTone(value) {
-  const type = String(value || "").toUpperCase();
-  if (type === "DESCUENTO_FAMILIAR") return "is-family";
-  if (type === "MONTO_PERSONALIZADO") return "is-custom";
-  return "is-period";
-}
-
 function AmountCell({ item }) {
-  const label = String(item?.etiqueta_monto || "").trim();
-  const collectorLabel = String(item?.etiqueta_cobrador || "").trim();
-  const hasMultipleTags = Boolean(label && collectorLabel);
-
-  // Cuando hay dos indicadores, abreviamos su texto visible sin perder el
-  // detalle original: cada chip conserva su etiqueta íntegra en el tooltip.
-  const amountText = hasMultipleTags
-    ? label.replace(/^monto\s+/i, "")
-    : label;
-  const collectorRate = collectorLabel.match(/\d+(?:[.,]\d+)?\s*%/);
-  const collectorText = hasMultipleTags
-    ? `Cobrador${collectorRate ? ` · ${collectorRate[0]}` : ""}`
-    : collectorLabel;
-
   return (
     <div className="mov-gridCell is-right ct-student-money">
       <strong>{money(item?.monto)}</strong>
-      {label || collectorLabel ? (
-        <div className="ct-student-money-tags">
-          {label ? (
-            <small
-              className={`ct-student-amount-tag ${amountTone(item?.ajuste_monto)}`}
-              title={label}
-              aria-label={label}
-            >
-              {amountText}
-            </small>
-          ) : null}
-          {collectorLabel ? (
-            <small
-              className="ct-student-amount-tag is-collector"
-              title={collectorLabel}
-              aria-label={collectorLabel}
-            >
-              {collectorText}
-            </small>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -103,16 +60,11 @@ export default function IngresosAlumnosView({
         hoja: "Alumnos",
         titulo: "Ingresos de alumnos",
         columnas: [
-          { label: "Alumno", key: "alumno" },
-          { label: "Documento", key: "documento" },
-          { label: "Fecha de cobro", key: "fecha" },
+          // Mismo criterio en pantalla, PDF y Excel: sólo cuatro columnas.
+          { label: "Alumno / DNI", value: (item) => `${item.alumno || "—"} · DNI ${item.documento || "—"}` },
+          { label: "Fecha de cobro", value: (item) => dateText(item.fecha) },
           { label: "Mes / concepto", key: "periodo" },
-          { label: "Categoría", key: "categoria" },
-          { label: "Medio", key: "medio" },
-          { label: "Monto", key: "monto" },
-          { label: "Detalle del monto", key: "etiqueta_monto" },
-          { label: "Cobrador", key: "etiqueta_cobrador" },
-          { label: "Comisión del cobrador", key: "comision_cobrador" },
+          { label: "Monto", value: (item) => money(item.monto) },
         ],
         registros: items,
       },
@@ -129,6 +81,7 @@ export default function IngresosAlumnosView({
       periodo: filters.periodo || "",
       medio: filters.id_medio_pago || "",
       buscar: search,
+      categoria: filters.id_categoria_alumno || "",
     };
     const first = await contableApi.ingresosAlumnos({ ...baseFilters, pagina: 1 });
     records.push(...(first?.items || []));
@@ -138,7 +91,7 @@ export default function IngresosAlumnosView({
       records.push(...(response?.items || []));
     }
     return [{ ...exportSections[0], registros: records }];
-  }, [exportSections, filters?.anio_pago, filters?.mes_pago, filters?.periodo, filters?.id_medio_pago, search]);
+  }, [exportSections, filters?.anio_pago, filters?.mes_pago, filters?.periodo, filters?.id_medio_pago, filters?.id_categoria_alumno, search]);
 
   return (
     <section className="ct-student-income contable-table">
@@ -162,8 +115,6 @@ export default function IngresosAlumnosView({
           "Alumno",
           { label: "Fecha de cobro", align: "center" },
           { label: "Mes / concepto", align: "center" },
-          { label: "Categoría", align: "center" },
-          { label: "Medio", align: "center" },
           { label: "Monto", align: "right" },
         ]}
         loading={loading}
@@ -192,11 +143,8 @@ export default function IngresosAlumnosView({
             </div>
             <div className="mov-gridCell is-center">{dateText(item.fecha)}</div>
             <div className="mov-gridCell is-center ct-student-period">
-              <span className="mov-categoryChip">{item.periodo}</span>
-              {item.es_ingresante ? <small>INGRESANTE</small> : null}
+              <span>{item.periodo}</span>
             </div>
-            <div className="mov-gridCell is-center">{item.categoria || "—"}</div>
-            <div className="mov-gridCell is-center">{item.medio || "—"}</div>
             <AmountCell item={item} />
           </div>
         ))}

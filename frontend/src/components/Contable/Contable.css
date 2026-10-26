@@ -150,64 +150,42 @@
 }
 
 .contable-grid--income {
-  grid-template-columns:
-    1.22fr
-    0.75fr
-    0.92fr
-    1.45fr
-    0.82fr
-    0.58fr;
+  grid-template-columns: minmax(160px, 1.25fr) minmax(100px, .7fr) minmax(200px, 1.55fr) minmax(110px, .9fr) minmax(85px, .65fr);
 }
 
 .contable-grid--income-readonly {
-  grid-template-columns:
-    1.22fr
-    0.75fr
-    0.92fr
-    1.45fr
-    0.82fr;
+  grid-template-columns: minmax(160px, 1.25fr) minmax(100px, .7fr) minmax(200px, 1.55fr) minmax(110px, .9fr);
 }
 
 .contable-grid--expense {
-  min-width: 0;
-  grid-template-columns:
-    1.18fr
-    0.72fr
-    0.9fr
-    1.35fr
-    0.82fr
-    0.82fr
-    0.6fr;
+  grid-template-columns: minmax(160px, 1.25fr) minmax(105px, .7fr) minmax(115px, .95fr) minmax(180px, 1.55fr) minmax(115px, .9fr) minmax(80px, .65fr);
 }
 
 .contable-grid > * {
   min-width: 0;
 }
 
+/* Alineación coherente con el nuevo orden (sin columna Medio). */
 .contable-grid--income > :nth-child(2),
-.contable-grid--income > :nth-child(3),
-.contable-grid--income > :nth-child(6),
+.contable-grid--income > :nth-child(5),
 .contable-grid--income-readonly > :nth-child(2),
-.contable-grid--income-readonly > :nth-child(3),
 .contable-grid--expense > :nth-child(2),
 .contable-grid--expense > :nth-child(3),
-.contable-grid--expense > :nth-child(5),
-.contable-grid--expense > :nth-child(7) {
+.contable-grid--expense > :nth-child(6) {
   justify-content: center;
   text-align: center;
 }
-/* Ingresos (no Alumnos): centrar el título y ambas líneas de
-   Descripción / concepto en vista editable y de solo consulta. */
-.contable-grid--income > :nth-child(4),
-.contable-grid--income-readonly > :nth-child(4) {
+
+.contable-grid--income > :nth-child(3),
+.contable-grid--income-readonly > :nth-child(3) {
   align-items: center;
   justify-content: center;
   text-align: center;
 }
 
-.contable-grid--income > :nth-child(5),
-.contable-grid--income-readonly > :nth-child(5),
-.contable-grid--expense > :nth-child(6) {
+.contable-grid--income > :nth-child(4),
+.contable-grid--income-readonly > :nth-child(4),
+.contable-grid--expense > :nth-child(5) {
   justify-content: flex-end;
   text-align: right;
 }
@@ -216,13 +194,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.contable-grid--income > :nth-child(5),
-.contable-grid--income-readonly > :nth-child(5) {
+.contable-grid--income > :nth-child(4),
+.contable-grid--income-readonly > :nth-child(4) {
   align-self: stretch;
-}
-
-.contable-grid--income > :nth-child(5),
-.contable-grid--income-readonly > :nth-child(5) {
   align-items: center;
 }
 
@@ -1076,4 +1050,20 @@
   min-height: 44px;
   padding-inline: 14px;
   flex: 0 0 auto;
+}
+
+/* Los medios de cobro se desglosan en Resumen, no en cada fila. */
+.ct-breakdown__count {
+  display: block;
+  margin-top: 2px;
+  color: var(--balto-text-muted, #64748b);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* Al agregar filtros de alumnos, se permite pasar a otra línea sin desbordar. */
+@container contable-card (max-width: 1500px) {
+  .module-headFilters.contable-head-filters {
+    flex-wrap: wrap;
+  }
 }

@@ -221,9 +221,9 @@ trait ContableConsultas
         $meansManualSql = $mean !== null ? ' AND i.id_medio_pago = ?' : '';
         $meansIngresanteSql = $mean !== null ? ' AND ing.id_medio_pago = ?' : '';
         $means = $db->prepare(
-            'SELECT nombre, SUM(total) AS total FROM (
+            'SELECT nombre, SUM(total) AS total, SUM(cantidad) AS cantidad FROM (
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre,
-                       SUM(COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END) AS total
+                       SUM(COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END) AS total, COUNT(*) AS cantidad
                 FROM pagos p
                 LEFT JOIN medio_pago mp ON mp.id_medio_pago = p.id_medio_pago
                 LEFT JOIN (
@@ -232,11 +232,11 @@ trait ContableConsultas
                 ) com ON com.id_pago_origen = p.id_pago
                 WHERE p.estado = \'pagado\' AND p.fecha_pago BETWEEN ? AND ?' . $meansPaymentSql . ' GROUP BY 1
                 UNION ALL
-                SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(i.importe) AS total
+                SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(i.importe) AS total, COUNT(*) AS cantidad
                 FROM ingresos i LEFT JOIN medio_pago mp ON mp.id_medio_pago = i.id_medio_pago
                 WHERE i.fecha BETWEEN ? AND ?' . $meansManualSql . ' GROUP BY 1
                 UNION ALL
-                SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(ing.monto_matricula) AS total
+                SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre, SUM(ing.monto_matricula) AS total, COUNT(*) AS cantidad
                 FROM ingresantes ing
                 LEFT JOIN medio_pago mp ON mp.id_medio_pago = ing.id_medio_pago
                 WHERE ing.matricula_pagada = 1
@@ -260,7 +260,7 @@ trait ContableConsultas
         return [
             'categorias_ingresos' => $categoryRows,
             'categorias_egresos' => array_map(static fn(array $row): array => ['nombre'=>(string)$row['nombre'],'total'=>(float)$row['total']], $expense->fetchAll(PDO::FETCH_ASSOC)),
-            'medios' => array_map(static fn(array $row): array => ['nombre'=>(string)$row['nombre'],'total'=>(float)$row['total']], $means->fetchAll(PDO::FETCH_ASSOC)),
+            'medios' => array_map(static fn(array $row): array => ['nombre'=>(string)$row['nombre'],'total'=>(float)$row['total'],'cantidad'=>(int)$row['cantidad']], $means->fetchAll(PDO::FETCH_ASSOC)),
         ];
     }
 

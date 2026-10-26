@@ -39,6 +39,11 @@ trait ContableAlumnos
         $paymentMonth = self::filtroMes($query['mes'] ?? date('n'));
         $periodId = self::filtroPeriodo($query['periodo'] ?? null, false);
         $paymentMethodId = self::idOpcional($query['medio'] ?? null, 'medio de pago');
+        $categoryId = self::idOpcional($query['categoria'] ?? null, 'categoría de alumno');
+        $studentType = strtoupper(trim((string)($query['tipo'] ?? '')));
+        if (!in_array($studentType, ['', 'INTERNO', 'EXTERNO', 'OTRO'], true)) {
+            api_error('El tipo de alumno seleccionado no es válido.', 'FILTRO_INVALIDO', 422);
+        }
         $page = self::filtroPagina($query['pagina'] ?? 1);
         $perPage = 100;
         $search = trim((string)($query['buscar'] ?? ''));
@@ -77,6 +82,17 @@ trait ContableAlumnos
         if ($studentId !== null) {
             $where[] = 'p.id_alumno = ?';
             $params[] = $studentId;
+        }
+        if ($categoryId !== null) {
+            $where[] = 'a.id_cat_monto = ?';
+            $params[] = $categoryId;
+        }
+        // El tipo interno/externo se determina por el nombre real de la categoría.
+        if ($studentType === 'INTERNO' || $studentType === 'EXTERNO') {
+            $where[] = "UPPER(TRIM(COALESCE(cm.nombre_categoria, ''))) = ?";
+            $params[] = $studentType;
+        } elseif ($studentType === 'OTRO') {
+            $where[] = "UPPER(TRIM(COALESCE(cm.nombre_categoria, ''))) NOT IN ('INTERNO', 'EXTERNO')";
         }
 
         $searchTerms = $search !== '' ? search_terms($search, 120, 8) : [];
@@ -138,7 +154,10 @@ SQL;
 
         // Un ingresante sin id_alumno puede aportar solamente MATRÍCULA.
         // Si se filtra por otra cuota/concepto o por un alumno concreto, no corresponde incluirlo.
-        if (($periodId === null || $periodId === self::PERIODO_MATRICULA) && $studentId === null) {
+        if (($periodId === null || $periodId === self::PERIODO_MATRICULA)
+            && $studentId === null
+            && $categoryId === null
+            && ($studentType === '' || $studentType === 'OTRO')) {
             $ingWhere = [
                 'i.matricula_pagada = 1',
                 'i.id_alumno_confirmado IS NULL',
@@ -251,6 +270,8 @@ SQL;
                 'periodo' => $periodId,
                 'periodo_nombre' => $periodName,
                 'id_medio_pago' => $paymentMethodId,
+                'id_categoria_alumno' => $categoryId,
+                'tipo_alumno' => $studentType,
                 'etiqueta_fecha' => $paymentMonthLabel,
                 'desde' => $from,
                 'hasta_exclusiva' => $until,
