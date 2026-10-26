@@ -51,23 +51,27 @@ const conceptList = (row) => {
     .filter(Boolean);
 };
 
-/* Subtítulo de la columna "Venta": en lugar de repetir el nombre del
-   producto ("PAN DULCE + DURAZNO X3"), solo la cantidad. Si hay ganancias se
-   agregan al lado ("Cantidad: 1 · Ganancia: 1"). */
+/* Presentación uniforme de ventas y ganancias. El backend mantiene los
+   nombres originales para trazabilidad (incluidos registros históricos como
+   "GANANCIA POR NO VENDER"); en pantalla mostramos únicamente cantidades.
+   Las ganancias no son productos y nunca se suman a las unidades vendidas. */
 const orderSummary = (row) => {
   const items = conceptList(row);
-  const units = items.filter((item) => item.esProducto).reduce((acc, item) => acc + item.cantidad, 0);
-  const gainUnits = items.filter((item) => !item.esProducto).reduce((acc, item) => acc + item.cantidad, 0);
+  const salesUnits = items.filter((item) => item.esProducto).reduce((acc, item) => acc + item.cantidad, 0);
+  // Las ganancias manuales se guardan en ventas_ordenes.cantidad_ganancias
+  // y pueden no tener una fila en ventas_orden_items. Para esas ventas,
+  // mostrar la cantidad registrada; no sumar ambas fuentes para evitar duplicados.
+  const gainsInConcepts = items.filter((item) => !item.esProducto).reduce((acc, item) => acc + item.cantidad, 0);
+  const recordedGains = Math.max(0, Number(row?.cantidad_ganancias || 0));
+  const gainUnits = recordedGains > 0 ? recordedGains : gainsInConcepts;
   const parts = [];
-  if (units > 0) parts.push(`Cantidad: ${units.toLocaleString("es-AR")}`);
-  if (gainUnits > 0) parts.push(`Ganancia: ${gainUnits.toLocaleString("es-AR")}`);
+  if (salesUnits > 0) parts.push(`VENTAS X${salesUnits.toLocaleString("es-AR")}`);
+  if (gainUnits > 0) parts.push(`GANANCIA X${gainUnits.toLocaleString("es-AR")}`);
   if (!parts.length) {
-    parts.push(Number(row?.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `Conceptos: ${Number(row?.cantidad_items || 0)}`);
+    parts.push(Number(row?.ganancia_objetivo || 0) > 0 ? "GANANCIA POR OBJETIVO" : `CONCEPTOS: ${Number(row?.cantidad_items || 0)}`);
   }
-  return {
-    text: parts.join(" · "),
-    title: row?.detalle_items ? upper(row.detalle_items, 3000) : "",
-  };
+  const text = parts.join(" · ");
+  return { text, title: text };
 };
 
 /* Columna "Retiro" oculta en la tabla: se conserva para reactivarla. El
@@ -112,7 +116,7 @@ const paymentLockReason = (row, writable) => {
 
 const exportRecord = (row) => ({
   campania: upper(row.campania_nombre, 150),
-  detalle: row.detalle_items ? upper(row.detalle_items, 3000) : Number(row.ganancia_objetivo || 0) > 0 ? "GANANCIA POR OBJETIVO" : `${row.cantidad_items || 0} CONCEPTOS`,
+  detalle: orderSummary(row).text,
   persona: row.nombre_apellido ? upper(row.nombre_apellido, 160) : "VENTA EN PUERTA",
   dni: row.dni || "—",
   medio: upper(row.medio_pago, 120),
@@ -527,7 +531,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         confirmLabel={retreatConfirm && yes(retreatConfirm.retirado) ? "Quitar retiro" : "Marcar como retirado"}
         details={retreatConfirm ? [
           { label: "Venta", value: retreatConfirm.campania_nombre },
-          { label: "Detalle", value: retreatConfirm.detalle_items || (Number(retreatConfirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${retreatConfirm.cantidad_items || 0} conceptos`) },
+          { label: "Detalle", value: orderSummary(retreatConfirm).text },
           { label: "Persona", value: retreatConfirm.nombre_apellido || "Venta en puerta" },
         ] : []}
         onClose={() => setRetreatConfirm(null)}
@@ -575,7 +579,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         warning="La eliminación es irreversible. Se revertirán el ingreso contable y el stock, si corresponde. No se reintegran pagos externos automáticamente."
         details={confirm ? [
           { label: "Venta", value: confirm.campania_nombre },
-          { label: "Detalle", value: confirm.detalle_items || (Number(confirm.ganancia_objetivo || 0) > 0 ? "Ganancia por objetivo" : `${confirm.cantidad_items || 0} conceptos`) },
+          { label: "Detalle", value: orderSummary(confirm).text },
           { label: "Persona", value: confirm.nombre_apellido || "Venta en puerta" },
           { label: "Total", value: money(confirm.total) },
         ] : []}
