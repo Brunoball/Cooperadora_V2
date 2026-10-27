@@ -4926,11 +4926,9 @@ body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.mo
 }
 
 /* =========================================================
-   VENTAS REGISTRADAS — tabla compacta (7 columnas)
-   Venta · Persona · Medio · Total · Origen · Fecha · Acciones
-   - Las columnas "Pago" (selector PAGADA / PENDIENTE) y "Retiro" están
-     comentadas en VentasRegistradas.jsx; al reactivarlas, volver a sumar
-     sus columnas (.95fr y .8fr).
+   VENTAS REGISTRADAS — tabla compacta (8 columnas)
+   Venta · Persona · Medio · Total · Pago · Origen · Fecha · Acciones
+   - El pago permite confirmar encargos; el retiro queda en Acciones.
    - El subtítulo de Venta muestra solo "Cantidad: x" (sin repetir nombre).
    - Acciones con ancho fijo para que ningún icono quede cortado
      por el overflow-x: hidden de .entity-table-wrap.
@@ -4942,6 +4940,7 @@ body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.mo
     minmax(0, 1.55fr)
     minmax(0, 1fr)
     minmax(0, .8fr)
+    minmax(95px, .8fr)
     minmax(0, .66fr)
     minmax(0, .74fr)
     176px;
@@ -4994,6 +4993,7 @@ html[data-theme="oscuro"] .ventas-pill.bot {
       minmax(0, 1.4fr)
       minmax(0, .95fr)
       minmax(0, .78fr)
+      minmax(95px, .8fr)
       minmax(0, .66fr)
       minmax(0, .74fr)
       164px;

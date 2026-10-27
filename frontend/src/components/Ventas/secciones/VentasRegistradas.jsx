@@ -65,7 +65,7 @@ const orderSummary = (row) => {
   const recordedGains = Math.max(0, Number(row?.cantidad_ganancias || 0));
   const gainUnits = recordedGains > 0 ? recordedGains : gainsInConcepts;
   const parts = [];
-  if (salesUnits > 0) parts.push(`VENTAS X${salesUnits.toLocaleString("es-AR")}`);
+  if (salesUnits > 0) parts.push(`${row?.estado === "pendiente" ? "ENCARGADAS" : "VENTAS"} X${salesUnits.toLocaleString("es-AR")}`);
   if (gainUnits > 0) parts.push(`GANANCIA X${gainUnits.toLocaleString("es-AR")}`);
   if (!parts.length) {
     parts.push(Number(row?.ganancia_objetivo || 0) > 0 ? "GANANCIA POR OBJETIVO" : `CONCEPTOS: ${Number(row?.cantidad_items || 0)}`);
@@ -94,9 +94,7 @@ const ORIGIN_OPTIONS = [
   { value: "bot_whatsapp", label: "BOT" },
 ];
 
-/* Columna "Pago" comentada temporalmente en la tabla: se conservan sus
-   opciones y reglas para volver a habilitarla sin reescribir código. */
-// eslint-disable-next-line no-unused-vars
+/* Estados editables del pago; el selector confirma el cambio antes de guardar. */
 const PAYMENT_OPTIONS = [
   { value: "aprobada", label: "PAGADA" },
   { value: "pendiente", label: "PENDIENTE" },
@@ -104,7 +102,6 @@ const PAYMENT_OPTIONS = [
 
 /* Motivo por el cual el estado de pago no se puede cambiar desde la tabla.
    Las mismas reglas se validan en el backend (ventas_orden_pago). */
-// eslint-disable-next-line no-unused-vars
 const paymentLockReason = (row, writable) => {
   if (!writable) return "Sin permisos de edición";
   if (row.estado_cierre === "cerrada") return "Campaña cerrada";
@@ -126,12 +123,12 @@ const exportRecord = (row) => ({
   retiro: row.estado === "aprobada" ? (yes(row.retirado) ? "RETIRADO" : "PENDIENTE") : "—",
   origen: originText(row.origen),
   fecha: dateText(row.fecha_venta || row.aprobado_en || row.creado_en),
-  observacion: upper(row.observacion || "", 3000),
+  observacion: [row.estado === "pendiente" ? "ENCARGO · PAGO PENDIENTE" : "", upper(row.observacion || "", 3000)].filter(Boolean).join(" · "),
 });
 
 export default function VentasRegistradas({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
-  const [totals, setTotals] = useState({ cantidades_vendidas: 0, recaudado: 0, ganancias_cobradas: 0 });
+  const [totals, setTotals] = useState({ cantidades_vendidas: 0, cantidades_encargadas: 0, recaudado: 0, ganancias_cobradas: 0 });
   const [catalogs, setCatalogs] = useState({ productos: [], campanias: [], medios_pago: [], meses_ventas: [] });
   const [pagination, setPagination] = useState({ pagina: 1, total_paginas: 1, total: 0 });
   const [page, setPage] = useState(1);
@@ -186,7 +183,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
     try {
       const data = await ventasApi.ordenes({ pagina: page, por_pagina: 20, ...queryFilters });
       setRows(data.items || []);
-      setTotals(data.totales || { cantidades_vendidas: 0, recaudado: 0, ganancias_cobradas: 0 });
+      setTotals(data.totales || { cantidades_vendidas: 0, cantidades_encargadas: 0, recaudado: 0, ganancias_cobradas: 0 });
       setPagination(data.paginacion || {});
     } catch (err) {
       showFeedback("error", err.message);
@@ -331,7 +328,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           "Persona",
           { label: "Medio", align: "center" },
           { label: "Total", align: "right" },
-          // { label: "Pago", align: "center" },
+          { label: "Pago", align: "center" },
           // { label: "Retiro", align: "center" },
           { label: "Origen", align: "center" },
           { label: "Fecha", align: "center" },
@@ -354,9 +351,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           const summary = orderSummary(row);
           // Columna "Retiro" oculta: reactivar junto con su celda.
           // const retreatState = retreatPill(row);
-          // Columna "Pago" comentada: reactivar junto con su celda.
-          // const paymentLock = paymentLockReason(row, writable);
-          // const paymentEditable = !paymentLock;
+          const paymentLock = paymentLockReason(row, writable);
+          const paymentEditable = !paymentLock;
           return (
           <div
             className={`mov-gridTable mov-gridTable--row global-divTable__row entity-table-row ventas-grid ventas-grid--orders${row.estado !== "aprobada" ? " is-unpaid" : ""}`}
@@ -377,7 +373,6 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                 : <span className="ventas-pill neutral">—</span>}
             </div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
-            {/* Columna "Pago" comentada (no eliminada).
             <div className="mov-gridCell is-center ventas-order-payment">
               {["aprobada", "pendiente"].includes(row.estado) ? (
                 <select
@@ -397,7 +392,6 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                 <span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span>
               )}
             </div>
-            */}
             {/* Columna "Retiro" oculta (no eliminada).
             <div className="mov-gridCell is-center">
               <span className={`ventas-pill ${retreatState.className}`}>{retreatState.label}</span>
@@ -488,6 +482,11 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                   key: "unidades",
                   label: "Unidades vendidas",
                   value: loading ? "—" : Number(totals.cantidades_vendidas || 0).toLocaleString("es-AR"),
+                },
+                {
+                  key: "encargos",
+                  label: "Unidades encargadas",
+                  value: loading ? "—" : Number(totals.cantidades_encargadas || 0).toLocaleString("es-AR"),
                 },
                 {
                   key: "recaudado",
@@ -582,8 +581,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
           ? "¿Confirmás que esta venta ya fue cobrada?"
           : "¿Querés volver esta venta a pendiente de pago?"}
         warning={paymentConfirm?.estado === "aprobada"
-          ? "Se registrará el ingreso en Contabilidad y se descontará el stock cuando corresponda. La fecha de pago es la cargada en la venta."
-          : "Se quitará su ingreso de Contabilidad, se repondrá el stock cuando corresponda y se borrará el retiro, si estaba marcado."}
+          ? "Se registrará el ingreso en Contabilidad. Las unidades ya reservadas no se descuentan otra vez."
+          : "Se quitará el ingreso de Contabilidad y el retiro. El stock seguirá reservado por el encargo pendiente."}
         confirmLabel={paymentConfirm?.estado === "aprobada" ? "Marcar como pagada" : "Marcar como pendiente"}
         details={paymentConfirm ? [
           { label: "Venta", value: paymentConfirm.row.campania_nombre },

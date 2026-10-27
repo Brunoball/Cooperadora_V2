@@ -27,6 +27,11 @@ trait VentasCiclos
             }
             // La transacción bloquea la campaña, también usada por guardarOrden().
             $pending=(int)self::fetchOne($db,"SELECT COUNT(*) n FROM ventas_ordenes WHERE id_campania=? AND estado='pendiente'",[$id])['n'];
+            // Una campaña cerrada congela la planilla y ya no permite cobrar ni
+            // cancelar encargos. Bloquear el cierre evita reservas atrapadas.
+            if ($pending > 0) {
+                api_error('No se puede cerrar la campaña: hay ' . $pending . ' venta(s) pendientes de pago. Marcalas como pagadas o eliminá los encargos antes de cerrar.', 'VENTA_CIERRE_ENCARGOS_PENDIENTES', 409);
+            }
             $unretired=(int)self::fetchOne($db,"SELECT COUNT(*) n FROM ventas_ordenes WHERE id_campania=? AND estado='aprobada' AND retirado=0",[$id])['n'];
             $insert=$db->prepare('INSERT INTO ventas_planillas_cerradas(id_campania,tipo,datos) VALUES (?,?,?)');
             // La foto de Terceros requiere la migración del ENUM `tipo`. Sin

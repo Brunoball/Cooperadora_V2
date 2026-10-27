@@ -233,6 +233,67 @@ trait VentasOrdenes
         throw new RuntimeException('No se pudo generar un código único para la venta.');
     }
 
+    /**
+     * El módulo de reservas exige la migración de base (stock_reservado).
+     * Si la aplicación se desplegó antes del SQL, la pantalla de ventas
+     * todavía carga, pero el cobro de un pendiente produciría un error SQL.
+     * Cortar ANTES de iniciar una transacción evita modificar stock o cobros.
+     */
+    private static function assertReservationSchema(PDO $db): void
+    {
+        $column = self::fetchOne($db,
+            "SELECT 1 AS existe FROM information_schema.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'ventas_ordenes'
+                AND COLUMN_NAME = 'stock_reservado'
+              LIMIT 1"
+        );
+        if (!$column) {
+            api_error(
+                'Falta aplicar la migración SQL de reservas de stock de Ventas. '
+                . 'No se cambió el pago ni el stock. Ejecutá primero la migración incluida en el ZIP.',
+                'VENTAS_MIGRACION_RESERVA_FALTANTE',
+                409
+            );
+        }
+        // Una migración parcial también es peligrosa: si el usuario cobra una
+        // pendiente que todavía no está conciliada podría duplicar el débito.
+        // Bloquear las operaciones mutables hasta que TODAS las V2V queden
+        // registradas como reservadas. Las órdenes del bot son independientes.
+        $unreconciled = self::fetchOne($db,
+            "SELECT id_orden FROM ventas_ordenes
+              WHERE codigo_orden LIKE 'V2V-%'
+                AND estado IN ('aprobada', 'pendiente')
+                AND stock_reservado = 0
+              LIMIT 1"
+        );
+        if ($unreconciled) {
+            api_error(
+                'La migración de stock está incompleta: hay al menos una venta sin reserva conciliada '
+                . '(orden ' . (int)$unreconciled['id_orden'] . '). Revisá el SQL del ZIP antes de registrar o cobrar ventas.',
+                'VENTAS_MIGRACION_RESERVA_INCOMPLETA',
+                409
+            );
+        }
+    }
+
+    /**
+     * Una V2V- sin flag es un dato legado de reserva no conciliado.
+     * No debitamos ni devolvemos stock por presunción: podría haber sido
+     * pagada anteriormente y quedar pendiente bajo la versión nueva.
+     */
+    private static function assertOrderReservationReconciled(array $order): void
+    {
+        if (self::isStockManagedOrder($order) && (int)($order['stock_reservado'] ?? 0) !== 1) {
+            api_error(
+                'Esta venta todavía no tiene conciliada su reserva de stock. '
+                . 'No se cambió el pago ni el stock. Revisá la orden en la migración de reservas.',
+                'VENTAS_RESERVA_SIN_CONCILIAR',
+                409
+            );
+        }
+    }
+
     private static function isStockManagedOrder(?array $order): bool
     {
         return $order !== null && str_starts_with((string)($order['codigo_orden'] ?? ''), 'V2V-');
@@ -403,8 +464,10 @@ trait VentasOrdenes
             api_error('La campaña está fuera del período de venta. No admite ventas nuevas.', 'VENTA_FUERA_DE_VIGENCIA', 409);
         }
         if ((int)$campaign['activo'] !== 1 && !$finalSettlement) {
+            // Cobrar un encargo ya reservado no crea otra venta ni consume más stock.
+            $alreadyReserved = $sameHistoricalCampaign && (int)($before['stock_reservado'] ?? 0) === 1;
             $wasApproved = $before !== null && ($before['estado'] ?? '') === 'aprobada';
-            if (!$sameHistoricalCampaign || ($newState === 'aprobada' && !$wasApproved)) {
+            if (!$sameHistoricalCampaign || ($newState === 'aprobada' && !$wasApproved && !$alreadyReserved)) {
                 api_error('La campaña seleccionada está inactiva y no admite ventas nuevas.', 'VENTA_CAMPANIA_INACTIVA', 409);
             }
         }
@@ -435,7 +498,7 @@ trait VentasOrdenes
             if ($productId !== $principalId) {
                 $historical = $sameHistoricalCampaign
                     && (int)($oldQuantities[$productId] ?? 0) >= $quantity
-                    && ($newState !== 'aprobada' || ($before['estado'] ?? '') === 'aprobada');
+                    && ($newState !== 'aprobada' || ($before['estado'] ?? '') === 'aprobada' || (int)($before['stock_reservado'] ?? 0) === 1);
                 if (!$historical) {
                     api_error('El producto seleccionado no pertenece a la campaña.', 'VENTA_PRODUCTO_CAMPANIA_INVALIDO', 409);
                 }
@@ -445,11 +508,12 @@ trait VentasOrdenes
 
             $historicalQuantity = (int)($oldQuantities[$productId] ?? 0);
             $wasApproved = $before !== null && ($before['estado'] ?? '') === 'aprobada';
+            $wasReserved = $before !== null && (int)($before['stock_reservado'] ?? 0) === 1;
             if (
                 $before === null
                 || $historicalQuantity === 0
                 || $quantity > $historicalQuantity
-                || ($newState === 'aprobada' && !$wasApproved)
+                || ($newState === 'aprobada' && !$wasApproved && !$wasReserved)
             ) {
                 api_error(
                     "El producto {$product['nombre']} está inactivo y no puede agregarse a una venta.",
@@ -704,20 +768,19 @@ trait VentasOrdenes
             $count->execute($params);
             $total = (int)$count->fetchColumn();
 
-            // Tarjetas inferiores de Ventas registradas: TODOS los registros
-            // del filtro (no solo la página actual). Solo las aprobadas generan
-            // recaudación y unidades efectivamente vendidas. Agrupar ítems
-            // primero evita duplicar total y ganancia en órdenes multiartículo.
+            // Resumen de todo el filtro: lo encargado se cuenta aparte de lo cobrado.
+            // Agrupar ítems antes de sumar evita multiplicar importes por renglón.
             $stage = 'totales';
             $summary = $db->prepare(
-                'SELECT COALESCE(SUM(COALESCE(unidades.cantidad, 0)), 0) AS cantidades_vendidas,'
-                . ' COALESCE(SUM(o.total), 0) AS recaudado,'
-                . ' COALESCE(SUM(o.ganancia_objetivo), 0) AS ganancias_cobradas'
+                'SELECT COALESCE(SUM(CASE WHEN o.estado=\'aprobada\' THEN COALESCE(unidades.cantidad,0) ELSE 0 END),0) AS cantidades_vendidas,'
+                . ' COALESCE(SUM(CASE WHEN o.estado=\'pendiente\' THEN COALESCE(unidades.cantidad,0) ELSE 0 END),0) AS cantidades_encargadas,'
+                . ' COALESCE(SUM(CASE WHEN o.estado=\'aprobada\' THEN o.total ELSE 0 END),0) AS recaudado,'
+                . ' COALESCE(SUM(CASE WHEN o.estado=\'aprobada\' THEN o.ganancia_objetivo ELSE 0 END),0) AS ganancias_cobradas'
                 . ' FROM ventas_ordenes o'
                 . $searchJoins
                 . ' LEFT JOIN (SELECT id_orden, SUM(CASE WHEN id_producto IS NOT NULL THEN cantidad ELSE 0 END) AS cantidad FROM ventas_orden_items GROUP BY id_orden) unidades'
                 . ' ON unidades.id_orden = o.id_orden'
-                . ' WHERE ' . $whereSql . " AND o.estado = 'aprobada'"
+                . ' WHERE ' . $whereSql . " AND o.estado IN ('aprobada','pendiente')"
             );
             $summary->execute($params);
             $totals = $summary->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -791,6 +854,7 @@ trait VentasOrdenes
                 'items' => $items,
                 'totales' => [
                     'cantidades_vendidas' => (int)($totals['cantidades_vendidas'] ?? 0),
+                    'cantidades_encargadas' => (int)($totals['cantidades_encargadas'] ?? 0),
                     'recaudado' => (float)($totals['recaudado'] ?? 0),
                     'ganancias_cobradas' => (float)($totals['ganancias_cobradas'] ?? 0),
                 ],
@@ -834,6 +898,7 @@ trait VentasOrdenes
 
     public static function guardarOrden(): never
     {
+        self::assertReservationSchema(self::db());
         $db=self::db();$auth=self::auth();$body=request_body();
         $id=self::nullablePositiveId($body['id_orden'] ?? null);
         $campaignId=positive_id($body['id_campania'] ?? null,'campaña');
@@ -871,6 +936,7 @@ trait VentasOrdenes
                 $reference = $before['referencia_pago'];
             }
             if ($before && (int)$before['id_campania'] !== $campaignId) api_error('No se puede mover una venta a otra campaña.', 'VENTA_CAMPANIA_INMUTABLE', 409);
+            if ($before) self::assertOrderReservationReconciled($before);
             // El bot registra ventas únicamente después de confirmar el pago.
             // Una edición manual no puede volver pendiente ese cobro confirmado.
             if ($before && $before['origen'] === 'bot_whatsapp' && $state !== 'aprobada') {
@@ -907,7 +973,12 @@ trait VentasOrdenes
                 api_error('La fecha de liquidación debe ser posterior al último día de venta y no puede ser futura.', 'VENTA_FECHA_LIQUIDACION_INVALIDA', 409);
             }
             self::assertOrderCatalogAvailability($db,$campaign,$items,$before,$oldItems,$state,$finalSettlement);
-            if($before && $before['estado']==='aprobada' && self::isStockManagedOrder($before)) self::adjustStock($db,$oldItems,+1);
+            // Editar una reserva repone primero sus unidades antiguas dentro de
+            // la misma transacción. Después se descuenta el nuevo detalle.
+            // Los registros históricos no administrados nunca se recalculan.
+            if ($before && self::isStockManagedOrder($before) && (int)($before['stock_reservado'] ?? 0) === 1) {
+                self::adjustStock($db, $oldItems, +1);
+            }
             $personId=self::resolvePerson($db,$body);
             if(!$personId && !$allDoor) api_error('Esta venta debe estar asociada a una persona o alumno.','VALIDATION_ERROR');
             if ($personId) {
@@ -957,21 +1028,29 @@ trait VentasOrdenes
             // Las ventas creadas por V2 se distinguen por su código V2V-.
             // Las históricas conservan el comportamiento anterior y no alteran stock retroactivamente.
             $trackStock=$before===null || self::isStockManagedOrder($before);
-            if($nowApproved && $trackStock) self::adjustStock($db,$items,-1);
-            $approvedAt=$nowApproved ? self::approvedTimestampForDate($saleDate, $before['aprobado_en'] ?? null) : null;
+            // Pago y encargo reservan las mismas unidades UNA sola vez.
+            // Al editar, el refund anterior y este débito ocurren atómicamente.
+            if ($trackStock) self::adjustStock($db, $items, -1);
+            $stockReserved = $trackStock ? 1 : 0;
+            // Si se cobra hoy un encargo anterior, la fecha del ingreso es
+            // la del cobro real; fecha_venta conserva el día del encargo.
+            $approvedAt = !$nowApproved ? null :
+                ($before && $before['estado'] === 'pendiente'
+                    ? date('Y-m-d H:i:s')
+                    : self::approvedTimestampForDate($saleDate, $before['aprobado_en'] ?? null));
             $cancelledAt=$state==='cancelada' ? date('Y-m-d H:i:s') : null;
             if($id){
                 $keepRetreat=$nowApproved && $before && $before['estado']==='aprobada';
                 $retired=$keepRetreat ? (int)$before['retirado'] : 0;
                 $retiredAt=$keepRetreat && $retired ? $before['retirado_en'] : null;
-                $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,ganancia_objetivo=?,cantidad_ganancias=?,id_medio_pago=?,referencia_pago=?,observacion=?,fecha_venta=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=? WHERE id_orden=?')
-                    ->execute([$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$retired,$retiredAt,$id]);
+                $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,ganancia_objetivo=?,cantidad_ganancias=?,id_medio_pago=?,referencia_pago=?,observacion=?,fecha_venta=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=?,stock_reservado=? WHERE id_orden=?')
+                    ->execute([$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$retired,$retiredAt,$stockReserved,$id]);
                 $db->prepare('DELETE FROM ventas_orden_items WHERE id_orden=?')->execute([$id]);
                 $orderId=$id;
             }else{
                 $code=self::generateOrderCode($db);
-                $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,cantidad_ganancias,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en) VALUES (?,?,?,?,?,?,?,?,\'manual\',?,?,?,?,?)')
-                    ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt]);
+                $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,cantidad_ganancias,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en,stock_reservado) VALUES (?,?,?,?,?,?,?,?,\'manual\',?,?,?,?,?,?)')
+                    ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$stockReserved]);
                 $orderId=(int)$db->lastInsertId();
                 // Un cobro solo de ganancia no tiene productos para retirar,
                 // incluso cuando se registra antes del cierre de campaña.
@@ -1042,12 +1121,13 @@ trait VentasOrdenes
     /**
      * Cambio rápido Pagada <-> Pendiente desde la tabla de Ventas registradas.
      * No modifica persona, productos, importes ni fecha: sólo el estado y sus
-     * efectos (stock de órdenes V2V-, asiento contable y retiro). Mantiene el
+     * efectos (asiento contable y retiro, sin volver a descontar una reserva). Mantiene el
      * mismo orden de bloqueos que guardarOrden (campaña -> venta -> persona).
      */
     public static function estadoPagoOrden(): never
     {
         $db = self::db();
+        self::assertReservationSchema($db);
         $auth = self::auth();
         $body = request_body();
         $id = positive_id($body['id_orden'] ?? $body['id'] ?? null, 'venta');
@@ -1058,7 +1138,10 @@ trait VentasOrdenes
         }
         $state = $raw;
 
-        $result = transaction($db, function () use ($db, $auth, $id, $state): array {
+        $stage = 'validación';
+        try {
+        $result = transaction($db, function () use ($db, $auth, $id, $state, &$stage): array {
+            $stage = 'bloqueos de campaña y venta';
             $reference = self::fetchOne($db, 'SELECT id_campania FROM ventas_ordenes WHERE id_orden = ?', [$id]);
             if (!$reference) api_error('La venta no existe.', 'VENTA_NO_ENCONTRADA', 404);
             $campaign = self::campaign($db, (int)$reference['id_campania'], true);
@@ -1084,50 +1167,80 @@ trait VentasOrdenes
                 self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona = ? FOR UPDATE', [$personId]);
             }
 
+            $stage = 'verificación de la reserva';
+            self::assertOrderReservationReconciled($before);
             $items = self::orderItems($db, $id);
             $stockManaged = self::isStockManagedOrder($before);
             if ($state === 'aprobada') {
                 // Las mismas reglas de catálogo que al aprobar desde el modal:
                 // campaña inactiva o productos archivados no admiten un cobro nuevo.
+                $stage = 'validación del catálogo';
                 self::assertOrderCatalogAvailability($db, $campaign, $items, $before, $items, 'aprobada');
-                if ($stockManaged) self::adjustStock($db, $items, -1);
+                // El stock ya se reservó al registrar la orden o en la migración.
+                // Si no estaba conciliado, se frenó la operación anteriormente.
+                // Cambiar PENDIENTE -> PAGADA nunca vuelve a descontar stock.
                 $saleDate = (string)($before['fecha_venta'] ?: substr((string)$before['creado_en'], 0, 10));
                 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $saleDate)) $saleDate = date('Y-m-d');
                 $db->prepare("UPDATE ventas_ordenes
                                  SET estado = 'aprobada', aprobado_en = ?, cancelado_en = NULL,
-                                     retirado = 0, retirado_en = NULL
+                                     retirado = 0, retirado_en = NULL,
+                                     stock_reservado = ?
                                WHERE id_orden = ?")
-                   ->execute([self::approvedTimestampForDate($saleDate, null), $id]);
+                   ->execute([date('Y-m-d H:i:s'), $stockManaged ? 1 : (int)($before['stock_reservado'] ?? 0), $id]);
+                $stage = 'registro del ingreso contable';
                 self::syncIncome($db, $id);
             } else {
-                if ($stockManaged) self::adjustStock($db, $items, +1);
+                // El pedido sigue existiendo: el stock queda reservado aunque
+                // el ingreso contable se retire al quedar pendiente.
                 $db->prepare("UPDATE ventas_ordenes
                                  SET estado = 'pendiente', aprobado_en = NULL, cancelado_en = NULL,
                                      retirado = 0, retirado_en = NULL
                                WHERE id_orden = ?")
                    ->execute([$id]);
+                $stage = 'retiro del ingreso contable';
                 self::deleteLinkedIncome($db, self::order($db, $id, true));
             }
+            $stage = 'auditoría';
             $after = self::order($db, $id);
             audit_change($db, $auth, 'VENTAS', 'CAMBIAR_ESTADO_PAGO', 'ventas_ordenes', $id,
                 $state === 'aprobada' ? 'Venta marcada como pagada.' : 'Venta marcada como pendiente de pago.',
                 $before, $after);
             return ['item' => $after, 'cambio' => true];
         });
+        } catch (Throwable $error) {
+            // transaction() ya hizo rollback: ni el stock ni el ingreso quedan a medias.
+            $nativeCode = $error instanceof PDOException ? (int)($error->errorInfo[1] ?? 0) : 0;
+            error_log('[Cooperadora V2][ventas_orden_pago][orden=' . $id
+                . '][etapa=' . $stage . '][mysql=' . $nativeCode . '] ' . $error->__toString());
+            if ($nativeCode === 1054) {
+                api_error(
+                    'Falta actualizar una columna de la base de Ventas. Revisá la migración de reservas; no se cambió el pago ni el stock.',
+                    'VENTAS_ESQUEMA_DESACTUALIZADO', 409
+                );
+            }
+            if (in_array($nativeCode, [1205, 1213], true)) {
+                api_error('Otra operación estaba utilizando esta venta. Reintentá el cambio de pago.', 'VENTAS_CONCURRENCIA', 409);
+            }
+            api_error(
+                'No se pudo cambiar el pago (etapa: ' . $stage . '). No se aplicó el cambio; revisá el registro de errores PHP.',
+                'VENTAS_CAMBIO_PAGO_FALLIDO', 500
+            );
+        }
 
         api_success(
             ['item' => $result['item']],
             !$result['cambio']
                 ? 'La venta ya tenía ese estado de pago.'
                 : ($state === 'aprobada'
-                    ? 'Venta marcada como pagada. Se registró el ingreso contable.'
-                    : 'Venta marcada como pendiente. Se quitó su ingreso contable y el retiro.')
+                    ? 'Venta marcada como pagada. Se registró el ingreso contable sin descontar stock nuevamente.'
+                    : 'Venta marcada como pendiente. Se quitó el ingreso contable y se mantuvo reservado el stock.')
         );
     }
 
     public static function eliminarOrden(): never
     {
         $db = self::db();
+        self::assertReservationSchema($db);
         $body = request_body();
         $id = positive_id($body['id_orden'] ?? $body['id'] ?? null, 'venta');
 
@@ -1147,10 +1260,11 @@ trait VentasOrdenes
                 self::fetchOne($db, 'SELECT id_persona FROM ventas_personas WHERE id_persona = ? FOR UPDATE', [$personId]);
             }
 
+            self::assertOrderReservationReconciled($before);
             $items = self::orderItems($db, $id);
-            if ($before['estado'] === 'aprobada' && self::isStockManagedOrder($before)) {
-                // Las órdenes V2V- descuentan stock cuando se aprueban.
-                // No alterar stock de ventas históricas/importadas o ya canceladas.
+            if (self::isStockManagedOrder($before) && (int)($before['stock_reservado'] ?? 0) === 1) {
+                // Reponer UNA sola vez las unidades de pagos o encargos modernos.
+                // No alterar stock de ventas históricas/importadas.
                 self::adjustStock($db, $items, +1);
             }
 

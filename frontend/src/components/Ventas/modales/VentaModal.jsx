@@ -401,7 +401,7 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
                 </FloatingField>
                 {personOptions("dni")}
               </div>
-              <FloatingField label="Fecha de pago" className="ventas-modal-field">
+              <FloatingField label="Fecha de venta / encargo" className="ventas-modal-field">
                 <input type="date" value={form.fecha_venta || ""} required disabled={historicalGain}
                   onChange={(e) => setForm((v) => ({ ...v, fecha_venta: e.target.value }))} />
               </FloatingField>
@@ -495,10 +495,10 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           {historicalGain ? <div className="ventas-simple-status">Esta venta incluye ganancias cobradas. Para proteger el importe, solo se puede modificar su observación.</div> : null}
           <div className="ventas-simple-bottom ventas-detail-total">
             <span className="ventas-detail-total__icon" aria-hidden="true"><FontAwesomeIcon icon={faReceipt} /></span>
-            <div className="ventas-detail-total__copy"><span>Total a cobrar</span><small>Importe final de la operación</small></div>
+            <div className="ventas-detail-total__copy"><span>{pendingPayment ? "Importe pendiente de cobro" : "Total a cobrar"}</span><small>{pendingPayment ? "El encargo reserva stock, sin generar ingreso contable" : "Importe final de la operación"}</small></div>
             <strong>{!editing && gainQuantity > 0 && !objectiveReady ? "Elegí a la persona" : money(total)}</strong>
           </div>
-          {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. {pendingPayment ? "Se registrará como PENDIENTE: no genera ingreso contable ni descuenta stock hasta marcarla como pagada." : "Se registrará como PAGADA."}</small> : null}
+          {!editing ? <small className="ventas-simple-tip">Dejá 0 en lo que no corresponda. Si solo paga ganancias, no se descuentan productos del stock. {pendingPayment ? "Se registrará como ENCARGO PENDIENTE: descontará stock ahora, aparecerá en observaciones de la planilla y no sumará dinero cobrado." : "Se registrará como PAGADA."}</small> : null}
 
         </div>
       </EntityTabPane>

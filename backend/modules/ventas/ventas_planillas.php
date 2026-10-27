@@ -163,7 +163,7 @@ trait VentasPlanillas
     private static function planillasTotales(array $rows): array
     {
         $totals = [
-            'cantidad_vendida' => 0, 'cantidad_faltante' => 0,
+            'cantidad_vendida' => 0, 'cantidad_encargada' => 0, 'cantidad_faltante' => 0,
             'ganancia_determinada' => 0.0, 'ganancia_cobrada' => 0.0,
             'ganancia_pendiente' => 0.0, 'importe_productos' => 0.0,
             'importe_cobrado' => 0.0, 'ordenes_aprobadas' => 0,
@@ -312,10 +312,11 @@ trait VentasPlanillas
             $thirdPartyIds[(int)$row['id_persona']] = true;
         }
 
-        // Una fila por orden: no sumar o.total sobre un JOIN directo de ítems.
-        // El historial de precios se obtiene sólo de los ítems aprobados.
+        // Una fila por orden: pagadas aportan dinero y unidades vendidas;
+        // pendientes aportan únicamente cantidad encargada y observaciones.
+        // La foto de precios sigue calculándose sólo con cobros confirmados.
         $sql = 'SELECT o.id_orden,o.codigo_orden,o.origen,o.id_venta_persona,
-                       o.total,o.ganancia_objetivo,o.cantidad_ganancias,o.observacion,
+                       o.estado,o.total,o.ganancia_objetivo,o.cantidad_ganancias,o.observacion,
                        vp.id_alumno AS persona_id_alumno,vp.dni AS persona_dni,
                        vp.nombre_apellido AS persona_nombre,
                        COALESCE(oi.cantidad_principal,0) AS cantidad_principal,
@@ -328,10 +329,10 @@ trait VentasPlanillas
                              SUM(oi.subtotal) AS importe_productos
                         FROM ventas_orden_items oi
                         INNER JOIN ventas_ordenes filtered ON filtered.id_orden=oi.id_orden
-                       WHERE filtered.id_campania=? AND filtered.estado=\'aprobada\'
+                       WHERE filtered.id_campania=? AND filtered.estado IN (\'aprobada\',\'pendiente\')
                        GROUP BY oi.id_orden
                   ) oi ON oi.id_orden=o.id_orden
-                 WHERE o.id_campania=? AND o.estado=\'aprobada\'
+                 WHERE o.id_campania=? AND o.estado IN (\'aprobada\',\'pendiente\')
                  ORDER BY o.id_orden';
         $stmt = $db->prepare($sql);
         $stmt->execute([$principalId, $campaignId, $campaignId]);
@@ -348,15 +349,19 @@ trait VentasPlanillas
         $campaignApproved = 0;
 
         foreach ($orders as $order) {
-            $amount = (float)$order['total'];
+            $paid = $order['estado'] === 'aprobada';
             $units = (int)$order['cantidad_principal'];
-            $gain = (float)$order['ganancia_objetivo'];
-            $products = (float)$order['importe_productos'];
+            // Estas cifras jamás incluyen los pedidos pendientes.
+            $amount = $paid ? (float)$order['total'] : 0.0;
+            $gain = $paid ? (float)$order['ganancia_objetivo'] : 0.0;
+            $products = $paid ? (float)$order['importe_productos'] : 0.0;
             $campaignTotal += $amount;
-            $campaignUnits += $units;
-            $campaignGain += $gain;
-            $campaignProducts += $products;
-            ++$campaignApproved;
+            if ($paid) {
+                $campaignUnits += $units;
+                $campaignGain += $gain;
+                $campaignProducts += $products;
+                ++$campaignApproved;
+            }
 
             $studentId = (int)($order['persona_id_alumno'] ?? 0);
             $kind = null;
@@ -403,8 +408,10 @@ trait VentasPlanillas
                     'nombre_persona' => $order['persona_nombre'] ?? '',
                     'dni' => $order['persona_dni'] ?? '',
                     'origen' => $order['origen'],
-                    'motivo' => $reason,
-                    'cantidad_vendida' => $units,
+                    'estado' => $order['estado'],
+                    'motivo' => $paid ? $reason : ($units . ' ENCARGADAS · PAGO PENDIENTE — ' . $reason),
+                    'cantidad_vendida' => $paid ? $units : 0,
+                    'cantidad_encargada' => $paid ? 0 : $units,
                     'importe_cobrado' => round($amount, 2),
                 ];
                 continue;
@@ -415,17 +422,19 @@ trait VentasPlanillas
             else $bucket = &$byTeacher;
             if (!isset($bucket[$ownerId])) {
                 $bucket[$ownerId] = [
-                    'cantidad_vendida' => 0, 'cantidad_ganancias' => 0, 'importe_productos' => 0.0,
+                    'cantidad_vendida' => 0, 'cantidad_encargada' => 0,
+                    'cantidad_ganancias' => 0, 'importe_productos' => 0.0,
                     'ganancia_cobrada' => 0.0, 'importe_cobrado' => 0.0,
                     'ordenes_aprobadas' => 0, 'observaciones' => [],
                 ];
             }
-            $bucket[$ownerId]['cantidad_vendida'] += $units;
-            $bucket[$ownerId]['cantidad_ganancias'] += (int)($order['cantidad_ganancias'] ?? 0);
+            $bucket[$ownerId]['cantidad_vendida'] += $paid ? $units : 0;
+            $bucket[$ownerId]['cantidad_encargada'] += $paid ? 0 : $units;
+            $bucket[$ownerId]['cantidad_ganancias'] += $paid ? (int)($order['cantidad_ganancias'] ?? 0) : 0;
             $bucket[$ownerId]['importe_productos'] += $products;
             $bucket[$ownerId]['ganancia_cobrada'] += $gain;
             $bucket[$ownerId]['importe_cobrado'] += $amount;
-            $bucket[$ownerId]['ordenes_aprobadas']++;
+            if ($paid) $bucket[$ownerId]['ordenes_aprobadas']++;
             // Se conservan notas efectivamente registradas, sin inventar estados.
             $note = trim((string)($order['observacion'] ?? ''));
             if ($note !== '' && count($bucket[$ownerId]['observaciones']) < 3) {
@@ -460,10 +469,17 @@ trait VentasPlanillas
             }
             $determined = (float)$objective['ganancia_pendiente'];
             $collected = (float)($summary['ganancia_cobrada'] ?? 0);
+            $encargadas = (int)($summary['cantidad_encargada'] ?? 0);
+            // La nota del pedido se genera con el estado REAL de cada orden:
+            // al cobrar o borrar desaparece automáticamente. No se escribe en
+            // observacion de la base ni se duplica al refrescar la planilla.
+            $notes = $summary['observaciones'] ?? [];
+            if ($encargadas > 0) array_unshift($notes, $encargadas . ' ENCARGADAS · PAGO PENDIENTE');
             $row = array_merge($row, $objective, [
                 // Compatibilidad con consumers previos.
                 'cantidad_ven' => $sold, 'cantidad_gan' => $paidUnits,
                 'cantidad_vendida' => $sold,
+                'cantidad_encargada' => $encargadas,
                 'ganancia_determinada' => round($determined, 2),
                 'ganancia_cobrada' => round($collected, 2),
                 'ganancia_pendiente' => round(max(0.0, $determined - $collected), 2),
@@ -471,7 +487,7 @@ trait VentasPlanillas
                 'importe_cobrado' => round((float)($summary['importe_cobrado'] ?? 0), 2),
                 'importe_vendido' => round((float)($summary['importe_cobrado'] ?? 0), 2),
                 'ordenes_aprobadas' => (int)($summary['ordenes_aprobadas'] ?? 0),
-                'observaciones' => implode(' | ', $summary['observaciones'] ?? []),
+                'observaciones' => implode(' | ', $notes),
             ]);
             $rows[] = $row;
             if ($type === 'cursos') {

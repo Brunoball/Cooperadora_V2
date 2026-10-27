@@ -383,12 +383,12 @@ export default function Planillas({ writable, showFeedback }) {
     if (unassigned.length) sections.push({
       hoja: "Sin asignar",
       titulo: "Conciliación de ventas sin asignar",
-      subtitulo: "Órdenes aprobadas de la campaña que requieren identificación; no se suman a una persona.",
+      subtitulo: "Órdenes pagadas o encargadas de la campaña sin persona identificada.",
       columnas: [
         { label: "Orden", key: "codigo_orden" }, { label: "Persona registrada", key: "nombre_persona" },
         { label: "DNI", key: "dni" }, { label: "Origen", key: "origen" },
-        { label: "Motivo", key: "motivo" }, { label: "Cantidad", key: "cantidad_vendida" },
-        { label: "Cobrado", key: "importe_cobrado" },
+        { label: "Motivo", key: "motivo" }, { label: "Vendidas", key: "cantidad_vendida" },
+        { label: "Encargadas", key: "cantidad_encargada" }, { label: "Cobrado", key: "importe_cobrado" },
       ],
       registros: unassigned,
     });
@@ -685,7 +685,7 @@ export default function Planillas({ writable, showFeedback }) {
                   </span>
                   <div>
                     <strong>{`TOTAL COBRADO: ${money(totales.importe_cobrado || 0)}`}</strong>
-                    <span>{`${previewItems.length} ${info.plural} · ${Number(totales.cantidad_vendida || 0)} unidades vendidas · ${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""}`}</span>
+                    <span>{`${previewItems.length} ${info.plural} · ${Number(totales.cantidad_vendida || 0)} vendidas · ${Number(totales.cantidad_encargada || 0)} encargadas · ${previewCampaignName}${previewProductName ? ` · ${previewProductName}` : ""}`}</span>
                   </div>
                 </div>
                 {previewData && Number(sinAsignar.cantidad || 0) > 0 && (
@@ -718,7 +718,7 @@ export default function Planillas({ writable, showFeedback }) {
                   <div className="ventas-planillas-conciliacion__head">
                     <strong>{`${sinAsignar.cantidad} venta(s) sin asignar en la campaña · ${money(sinAsignar.importe_cobrado)}`}</strong>
                   </div>
-                  <p>Estas órdenes están aprobadas pero no tienen una vinculación inequívoca con un alumno, docente o tercero. Se incluyen en el total de la campaña, no en el de esta planilla.</p>
+                  <p>Estas órdenes no tienen una vinculación inequívoca con un alumno, docente o tercero. Las pagadas se incluyen en la recaudación general; las pendientes solo indican encargos, sin dinero cobrado.</p>
                   <div className="ventas-planillas-conciliacionScroll">
                     <div className="ventas-planillas-conciliacionGrid" role="table" aria-label="Ventas sin asignar">
                       <div className="ventas-planillas-conciliacionRow is-header" role="row">
