@@ -90,6 +90,9 @@ test.describe("Ventas - cobertura extendida", () => {
     const f = await salesFixture(request, { stock: 10 });
     const pending = await createOrder(request, f, { estado: "pendiente", cantidad: 2 });
     expect(pending.item.estado).toBe("pendiente");
+    expect(Number(pending.item.stock_reservado)).toBe(1);
+    const inventoryAfterReservation = await ok(request, "ventas_productos_listar", { token: f.t, query: { buscar: f.product.nombre } });
+    expect(Number(inventoryAfterReservation.items.find(p => Number(p.id_producto) === Number(f.product.id_producto)).stock)).toBe(8);
 
     const approved = await ok(request, "ventas_orden_guardar", {
       token: f.t,
@@ -116,6 +119,9 @@ test.describe("Ventas - cobertura extendida", () => {
     });
     expect(approved.item.estado).toBe("aprobada");
     expect(Number(approved.item.total)).toBeCloseTo(200, 2);
+    expect(Number(approved.item.stock_reservado)).toBe(1);
+    const inventoryAfterPayment = await ok(request, "ventas_productos_listar", { token: f.t, query: { buscar: f.product.nombre } });
+    expect(Number(inventoryAfterPayment.items.find(p => Number(p.id_producto) === Number(f.product.id_producto)).stock)).toBe(8);
 
     const detail = await ok(request, "ventas_orden_detalle", {
       token: f.t,

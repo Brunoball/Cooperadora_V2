@@ -77,7 +77,7 @@ test("El modal usa recuadro compacto junto a TOTAL OPERACIÓN y actualiza el 15%
   await expect(dialog.locator(".cuotas-v2-footer-collector-box")).toHaveCount(0);
 });
 
-test("Contable → Ingresos de alumnos muestra COBRADOR y el importe BRUTO debajo del monto", async ({ page, request }) => {
+test("Contable → Ingresos de alumnos conserva monto BRUTO y no ensucia la planilla con la comisión", async ({ page, request }) => {
   test.setTimeout(95_000);
   const t = token();
   const catalogs = await baseCatalogs(request, t);
@@ -102,6 +102,8 @@ test("Contable → Ingresos de alumnos muestra COBRADOR y el importe BRUTO debaj
   const row = page.locator(".ct-student-table [role='row']").filter({ hasText: student.num_documento });
   await expect(row).toHaveCount(1, { timeout: 25_000 });
   await expect(row.locator(".ct-student-money strong")).toContainText(/10\.000/);
-  await expect(row.locator(".ct-student-amount-tag.is-collector")).toContainText(/COBRADOR\s*[·-]\s*15%/i);
-  await expect(row.locator(".ct-student-amount-tag.is-collector")).toContainText(/1\.500/);
+  // El 15% se liquida contablemente (probado en 33), no debajo del dinero.
+  await expect(row.locator(".ct-student-amount-tag")).toHaveCount(0);
+  await expect(row.locator(".ct-student-money")).not.toContainText(/COBRADOR|15%|1\.500/i);
+  await expect(page.locator(".ct-student-table [role=columnheader]")).toHaveCount(4);
 });

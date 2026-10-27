@@ -14,7 +14,7 @@ test("Ventas API: modalidades explícitas y preservación de ingresos, stock y g
     "incluir_ganancia", "liquidar_ganancia", "objectiveChargeForOrder", "ganancia_objetivo",
     "VENTA_GANANCIA_SIN_SALDO", "VENTA_GANANCIA_NO_DISPONIBLE",
     "VENTA_GANANCIA_HISTORICA_INMUTABLE", "VENTA_GANANCIA_REQUIERE_COMBOS",
-    "self::adjustStock($db,$items,-1)", "self::syncIncome($db,$orderId)",
+    "self::adjustStock($db, $items, -1)", "self::syncIncome($db,$orderId)",
     "if ($gainOnly)", "retirado=1", "ganancia ya cobrada",
   ]) expect(php).toContain(piece);
   expect(php).toContain("($body['incluir_ganancia'] ?? false)");
@@ -29,6 +29,7 @@ test("Ventas API: Eliminar es DELETE físico, no CANCELAR, restituye stock e ing
   expect(deleteBody).toContain("DELETE FROM ventas_orden_items WHERE id_orden = ?");
   expect(deleteBody).toContain("DELETE FROM ventas_ordenes WHERE id_orden = ?");
   expect(deleteBody).toContain("self::adjustStock($db, $items, +1)");
+  expect(deleteBody).toContain("self::assertOrderReservationReconciled($before)");
   expect(deleteBody).toContain("self::deleteLinkedIncome($db, $before)");
   expect(deleteBody).toContain("DELETE FROM auditoria WHERE modulo = 'VENTAS'");
   expect(deleteBody).not.toContain("UPDATE ventas_ordenes SET estado = 'cancelada'");
@@ -68,12 +69,12 @@ test("Ventas: resumen, planillas y exportaciones descomponen ventas y ganancias 
   const orders = back("ventas_ordenes.php");
   const sheets = back("ventas_planillas.php");
   const registered = front("secciones", "VentasRegistradas.jsx");
-  for (const piece of ["ganancias_cobradas", "recaudado", "cantidades_vendidas", "SUM(o.ganancia_objetivo)", "GROUP BY id_orden"]) {
+  for (const piece of ["ganancias_cobradas", "recaudado", "cantidades_vendidas", "o.ganancia_objetivo ELSE 0 END", "GROUP BY id_orden"]) {
     expect(orders).toContain(piece);
   }
   for (const piece of ["ganancia_cobrada", "ganancia_pendiente", "importe_productos", "importe_cobrado", "ganancia_determinada"]) {
     expect(sheets).toContain(piece);
   }
-  expect(registered).toContain('label: "Ganancia"');
+  expect(registered).toContain('GANANCIA X');
   expect(registered).toContain("BotonExportarGlobal");
 });

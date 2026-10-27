@@ -39,14 +39,16 @@ test("Compatibilidad contable: bruto nuevo y neto histórico no suman dos veces 
   expect(registros).toContain("DELETE FROM egresos WHERE id_pago_origen = ?");
 });
 
-test("Interfaz: etiqueta COBRADOR y recuadro pequeño están conectados a los importes", async () => {
+test("Interfaz: comisión en el cobro, pero planilla contable compacta de importes limpios", async () => {
   const src = path.resolve(process.cwd(), "src", "components");
   const modal = fs.readFileSync(path.join(src, "Cuotas", "modales", "ModalPagoCuota.jsx"), "utf8");
   const view = fs.readFileSync(path.join(src, "Contable", "IngresosAlumnosView.jsx"), "utf8");
   expect(modal).toContain("cuotas-v2-footer-collector-box");
   expect(modal).toContain("money(collectorTotal)");
   expect(modal).toContain("money(operationTotal)");
-  expect(view).toContain("item?.etiqueta_cobrador");
-  expect(view).toContain('className="ct-student-amount-tag is-collector"');
-  expect(view).toContain("item?.monto");
+  expect(view).toContain("money(item?.monto)");
+  expect(view).toContain("DNI {item.documento");
+  expect(view).toContain('{ label: "Monto", align: "right" }');
+  expect(view).not.toContain("ct-student-amount-tag");
+  expect(view).not.toContain("item?.etiqueta_cobrador");
 });

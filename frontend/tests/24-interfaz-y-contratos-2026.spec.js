@@ -95,11 +95,15 @@ test("Ventas registradas: selector único venta (mes/año), origen y exportació
   expect(source).toContain('obtainAllExportSections');
   expect(source).toContain('ganancia_objetivo');
   expect(source).not.toContain('label: "Mes de ventas"');
-  // Tabla compacta: origen "BOT" (no "WHATSAPP"), sin columna "Pago" y con
-  // "Cantidad: x" como subtítulo en lugar de repetir el nombre del producto.
+  // Tabla de Ventas 2026: el medio y el origen son columnas distintas;
+  // los pedidos pendientes figuran como ENCARGADAS Xn sin sumar ganancias a stock.
   expect(source).toContain('bot_whatsapp: "BOT"');
-  expect(source).toContain('Cantidad: ');
-  expect(source).not.toContain('{ label: "Pago", align: "center" }');
+  expect(source).toContain('ENCARGADAS');
+  expect(source).toContain('GANANCIA X');
+  expect(source).toContain('ventas-payment-select');
+  expect(source).toContain('ventasApi.estadoPagoOrden(');
+  expect(source).toContain('{ label: "Pago", align: "center" }');
+  expect(source).toContain('{ label: "Medio", align: "center" }');
   expect(source).not.toContain('label: "WHATSAPP"');
 });
 

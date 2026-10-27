@@ -230,11 +230,12 @@ test("eliminar físicamente una aprobada revierte stock, ingreso y totales, sin 
   expect(Number(balance.vendidas_previas)).toBe(0);
 });
 
-test("eliminar una pendiente también es físico y no altera stock", async ({ request }) => {
+test("eliminar un encargo pendiente devuelve las unidades que ya había reservado", async ({ request }) => {
   const f = await fixture(request);
   const pending = await sell(request, f, { quantity: 2, estado: "pendiente" });
   expect(Number(pending.ganancia_objetivo)).toBe(0);
-  expect(await stock(request, f)).toBe(20);
+  expect(Number(pending.stock_reservado)).toBe(1);
+  expect(await stock(request, f)).toBe(18);
   await ok(request, "ventas_orden_eliminar", { token: f.t, method: "POST", data: { id_orden: pending.id_orden } });
   await expectDeleted(request, f, pending.id_orden);
   expect(await stock(request, f)).toBe(20);
