@@ -4982,9 +4982,9 @@ body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.mo
     minmax(0, 1.6fr)
     minmax(0, 1.55fr)
     minmax(0, .8fr)
-    minmax(95px, .8fr)
-    minmax(0, .74fr)
-    176px;
+    minmax(94px, .66fr)
+    minmax(104px, .60fr)
+    224px;
 }
 
 .ventas-grid--orders .mov-gridCell--actions {
@@ -5033,9 +5033,9 @@ html[data-theme="oscuro"] .ventas-pill.bot {
       minmax(0, 1.46fr)
       minmax(0, 1.4fr)
       minmax(0, .78fr)
-      minmax(95px, .8fr)
-      minmax(0, .74fr)
-      164px;
+      minmax(94px, .66fr)
+      minmax(104px, .60fr)
+      216px;
   }
 
   .ventas-grid--orders .mov-actionsInline {
@@ -5062,7 +5062,17 @@ html[data-theme="oscuro"] .ventas-pill.bot {
 .ventas-payment-select.is-aprobada { border-color: #cbe9d5; color: #217445; background-color: #eef9f2; }
 .ventas-payment-select.is-pendiente { border-color: #f0d99d; color: #8a6500; background-color: #fff8e6; }
 .ventas-payment-select:disabled { cursor: default; opacity: .85; }
-.ventas-payment-select:focus-visible { outline: 2px solid var(--balto-action, #1d428a); outline-offset: 1px; }
+/* El selector de pago no muestra el aro azul al hacer clic.
+   Conserva una referencia visual neutra cuando se navega con teclado. */
+.ventas-page--orders .ventas-payment-select:focus {
+  outline: none;
+  box-shadow: none;
+}
+.ventas-page--orders .ventas-payment-select:focus-visible {
+  outline: 1px solid var(--mov-border, #d9dee7);
+  outline-offset: 1px;
+  box-shadow: none;
+}
 html[data-theme="oscuro"] .ventas-payment-select.is-aprobada {
   border-color: color-mix(in srgb, #4fbf7f 45%, transparent);
   color: #9fe0b8;

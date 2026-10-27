@@ -107,6 +107,8 @@ const paymentLockReason = (row, writable) => {
   if (row.estado_cierre === "cerrada") return "Campaña cerrada";
   if (!["aprobada", "pendiente"].includes(row.estado)) return stateLabel(row.estado);
   if (isBotOrder(row)) return "Las ventas de WhatsApp ya están pagadas";
+  if (row.origen !== "manual") return "Solo se pueden cambiar pagos de ventas manuales";
+  if (yes(row.retirado)) return "No se puede cambiar el pago de una venta retirada";
   if (Number(row.ganancia_objetivo || 0) > 0 || Number(row.cantidad_ganancias || 0) > 0) return "Incluye ganancias cobradas";
   return "";
 };
@@ -367,13 +369,12 @@ export default function VentasRegistradas({ writable, showFeedback }) {
             </div>
             <div className="mov-gridCell is-right is-strong ventas-money">{money(row.total)}</div>
             <div className="mov-gridCell is-center ventas-order-payment">
-              {["aprobada", "pendiente"].includes(row.estado) ? (
+              {paymentEditable ? (
                 <select
                   className={`ventas-payment-select is-${row.estado}`}
                   aria-label={`Estado de pago de ${row.nombre_apellido || "venta en puerta"}`}
                   title={paymentLock || "Cambiar el estado de pago"}
                   value={row.estado}
-                  disabled={!paymentEditable}
                   onChange={(event) => {
                     const estado = event.target.value;
                     if (estado !== row.estado) setPaymentConfirm({ row, estado });
@@ -382,7 +383,9 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                   {PAYMENT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               ) : (
-                <span className={`ventas-pill state-${row.estado}`}>{stateLabel(row.estado)}</span>
+                <span className={`ventas-pill state-${row.estado}`} title={paymentLock || undefined}>
+                  {PAYMENT_OPTIONS.find((option) => option.value === row.estado)?.label || stateLabel(row.estado)}
+                </span>
               )}
             </div>
             {/* Columna "Retiro" oculta (no eliminada).
