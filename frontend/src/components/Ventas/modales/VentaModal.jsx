@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faArrowLeft, faBagShopping, faClipboardList, faCoins, faReceipt, faUserPlus } from "@fortawesome/free-solid-svg-icons";
 import CrudModal from "../../Global/Modales/CrudModal";
@@ -41,6 +42,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const searchSeq = useRef(0);
   const selectedPerson = useRef(false);
   const [activeSearch, setActiveSearch] = useState(null);
+  const personSearchAnchors = useRef({});
+  const [resultsPosition, setResultsPosition] = useState(null);
   const products = useMemo(() => catalogs?.productos || [], [catalogs]);
   const campaigns = useMemo(() => catalogs?.campanias || [], [catalogs]);
   const payments = (catalogs?.medios_pago || []).filter(
@@ -203,16 +206,61 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
     onFeedback(result?.existente ? "warning" : "success", result?.mensaje || "Persona agregada correctamente.");
   };
 
+  // Renderizar las coincidencias fuera del contenedor con scroll del modal.
+  // La posición sigue al input aunque el usuario despliegue o desplace el formulario;
+  // no agrega altura al contenido ni queda cortada por overflow: hidden/auto.
+  useLayoutEffect(() => {
+    if (!open || activeTab !== "datos" || !activeSearch || !peopleReady || peopleLoading || historicalGain || newPerson.open) {
+      setResultsPosition(null);
+      return undefined;
+    }
+    const anchor = personSearchAnchors.current[activeSearch];
+    if (!anchor) return undefined;
+
+    const positionResults = () => {
+      if (!anchor.isConnected) return;
+      const rect = anchor.getBoundingClientRect();
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight;
+      const gap = 5;
+      const below = viewportHeight - rect.bottom - gap - 8;
+      const above = rect.top - gap - 8;
+      const openUpward = below < 220 && above > below;
+      const availableHeight = openUpward ? above : below;
+      const width = Math.min(rect.width, Math.max(0, viewportWidth - 16));
+      const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
+      setResultsPosition({
+        left,
+        width,
+        maxHeight: Math.max(40, Math.min(260, availableHeight)),
+        ...(openUpward
+          ? { bottom: viewportHeight - rect.top + gap, top: "auto" }
+          : { top: rect.bottom + gap, bottom: "auto" }),
+      });
+    };
+    positionResults();
+    // Captura también el scroll interno del modal.
+    window.addEventListener("scroll", positionResults, true);
+    window.addEventListener("resize", positionResults);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(positionResults) : null;
+    observer?.observe(anchor);
+    return () => {
+      window.removeEventListener("scroll", positionResults, true);
+      window.removeEventListener("resize", positionResults);
+      observer?.disconnect();
+    };
+  }, [open, activeTab, activeSearch, peopleReady, peopleLoading, historicalGain, newPerson.open]);
+
   // Al salir del buscador (sin pasar a una de sus opciones) se oculta la lista.
   const closePersonOptions = (event) => {
-    if (event.currentTarget.contains(event.relatedTarget)) return;
+    if (event.currentTarget.contains(event.relatedTarget) || event.relatedTarget?.closest?.(".ventas-search-results--portal")) return;
     setActiveSearch((current) => (current ? null : current));
   };
   const personQuery = (field) => String(field === "dni" ? form.dni || "" : form.nombre_apellido || "").trim();
   // onMouseDown mantiene el foco en el campo: el click de una opción no
   // dispara el blur que cierra la lista.
-  const personOptions = (field) => activeSearch === field && peopleReady && !peopleLoading && !historicalGain && personQuery(field) ? (
-    <div className="ventas-search-results" role="listbox" aria-label="Coincidencias de personas"
+  const personOptions = (field) => open && activeTab === "datos" && !newPerson.open && activeSearch === field && peopleReady && !peopleLoading && !historicalGain && personQuery(field) && resultsPosition ? createPortal(
+    <div className="ventas-search-results ventas-search-results--portal" role="listbox" aria-label="Coincidencias de personas" style={resultsPosition}
       onMouseDown={(event) => event.preventDefault()}>
       <button type="button" role="option" aria-selected="false" className="ventas-search-results__add"
         onClick={openNewPerson}>
@@ -226,7 +274,8 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           <small>{field === "dni" ? upper(person.nombre_apellido || "", 160) : `DNI ${person.dni}`}{person.nombre_anio ? ` · ${person.nombre_anio} ${person.nombre_division || ""}` : ""}</small>
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   ) : null;
 
   const editItem = (index, patch) => setForm((current) => ({
@@ -387,14 +436,14 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
           </div>
           <section className="ventas-simple-person" aria-label="Persona de la venta">
             <div className="ventas-simple-person__fields ventas-simple-person__fields--fecha">
-              <div className="ventas-person-search" onBlur={closePersonOptions}>
+              <div className="ventas-person-search" ref={(node) => { personSearchAnchors.current.nombre = node; }} onBlur={closePersonOptions}>
                 <FloatingField label="Nombre y apellido" className="ventas-modal-field">
                   <input value={form.nombre_apellido || ""} placeholder="Escribí apellido y nombre para buscar o cargar" disabled={historicalGain} autoComplete="off"
                     onChange={(e) => searchPeople(e.target.value)} />
                 </FloatingField>
                 {personOptions("nombre")}
               </div>
-              <div className="ventas-person-search" onBlur={closePersonOptions}>
+              <div className="ventas-person-search" ref={(node) => { personSearchAnchors.current.dni = node; }} onBlur={closePersonOptions}>
                 <FloatingField label="DNI" className="ventas-modal-field">
                   <input inputMode="numeric" value={form.dni || ""} placeholder="Escribí el DNI para buscar o cargar" disabled={historicalGain} autoComplete="off"
                     onChange={(e) => searchDni(e.target.value)} />

@@ -4306,7 +4306,6 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 .ventas-page--orders .ventas-tableFooter .global-pagination__left {
   min-width: 0;
   gap: 8px;
-  flex-wrap: wrap;
   align-items: center;
 }
 
@@ -4317,8 +4316,8 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 .ventas-page--orders .ventas-orders-summary.global-summaryCards--footer {
   display: block;
-  flex: 1 1 570px;
-  min-width: min(100%, 480px);
+  flex: 1 1 700px;
+  min-width: min(100%, 560px);
   max-width: 100%;
   margin: 0;
   padding: 0;
@@ -4329,7 +4328,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -4398,6 +4397,15 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   background: #8967d8;
 }
 
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(5) {
+  border-color: rgba(14, 129, 151, 0.2);
+  background: linear-gradient(180deg, rgba(239, 252, 254, 0.98) 0%, rgba(225, 246, 250, 0.98) 100%);
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(5)::before {
+  background: #13869e;
+}
+
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
   min-width: 0;
   max-width: 100%;
@@ -4446,6 +4454,10 @@ html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-su
   background: linear-gradient(180deg, rgba(46, 34, 72, 0.98) 0%, rgba(37, 28, 58, 0.98) 100%);
 }
 
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(5) {
+  background: linear-gradient(180deg, rgba(17, 55, 64, 0.98) 0%, rgba(14, 44, 52, 0.98) 100%);
+}
+
 html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
   color: rgba(233, 239, 251, 0.88);
 }
@@ -4474,7 +4486,21 @@ html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-su
 
   .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
     min-width: 0;
-    flex-basis: 480px;
+    flex-basis: 700px;
+  }
+}
+
+/* Las cinco métricas siempre comparten UNA fila. En anchos reducidos
+   se desplaza solo el resumen, nunca se apilan las tarjetas. */
+@container (max-width: 780px) {
+  .ventas-page--orders .ventas-orders-summary.global-summaryCards--footer {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
+    min-width: 690px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -4488,7 +4514,7 @@ html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-su
   }
 
   .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
@@ -4747,10 +4773,29 @@ body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.mo
 .ventas-order-simple .ventas-simple-form--datos .ventas-simple-person__fields { margin: 0; }
 /* Identificación y fecha en una misma línea; sin alterar los estilos de los campos globales. */
 .ventas-order-simple .ventas-simple-form--datos .ventas-simple-person__fields--fecha {
-  grid-template-columns: minmax(0, 1.6fr) minmax(0, .85fr) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
 }
-.ventas-order-simple .ventas-simple-form--datos .ventas-simple-person__fields--fecha > * { min-width: 0; }
+/* Dos filas de tres columnas idénticas: select, nombre, DNI y fecha
+   usan el mismo ancho, alto y margen de sus controles flotantes. */
+.ventas-order-simple .ventas-simple-form--datos :is(.ventas-simple-top--pago, .ventas-simple-person__fields--fecha) {
+  column-gap: 14px;
+}
+.ventas-order-simple .ventas-simple-form--datos .ventas-simple-person__fields--fecha > *,
+.ventas-order-simple .ventas-simple-form--datos .ventas-person-search,
+.ventas-order-simple .ventas-simple-form--datos .ventas-modal-field {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.ventas-order-simple .ventas-simple-form--datos .ventas-modal-field > :is(input, select) {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
+}
+
 .ventas-order-simple .ventas-simple-form--datos .ventas-simple-extras {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -5063,6 +5108,43 @@ html[data-theme="oscuro"] .ventas-payment-select.is-pendiente {
   color: var(--balto-action, #1d428a);
 }
 html[data-theme="oscuro"] .ventas-search-results__add strong { color: #a9c8f3; }
+
+/* Listado flotante de personas: es un portal hermano del modal y no
+   participa del scroll interno ni altera su altura. */
+.ventas-search-results.ventas-search-results--portal {
+  position: fixed;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 1000001;
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: var(--entity-modal-ink, #0f172a);
+  border-color: var(--entity-modal-border, #dbe3ec);
+  background: var(--surface-color, #fff);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, .22);
+}
+.ventas-search-results--portal > button {
+  color: inherit;
+  background: transparent;
+  font-family: inherit;
+}
+.ventas-search-results--portal > button:hover,
+.ventas-search-results--portal > button:focus-visible {
+  background: color-mix(in srgb, var(--entity-modal-action, #2456a4) 9%, var(--surface-color, #fff));
+}
+html[data-theme="oscuro"] .ventas-search-results--portal {
+  color: #f0f3f8;
+  border-color: #3a4b61;
+  background: #1d2a3b;
+}
+html[data-theme="oscuro"] .ventas-search-results--portal > button:hover,
+html[data-theme="oscuro"] .ventas-search-results--portal > button:focus-visible {
+  background: #2b415e;
+}
 
 /* Modal pequeño de alta de persona. */
 .ventas-persona-modal__fields { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 14px; padding: 4px 2px 8px; }
