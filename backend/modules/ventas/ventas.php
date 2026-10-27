@@ -89,6 +89,29 @@ final class Ventas
         }
     }
 
+    // En Ventas, BOT identifica el origen de la operación, no un medio de pago.
+    // Los registros heredados pueden seguir apuntando a ese medio sin modificar
+    // datos contables históricos de otros módulos.
+    private static function transferenciaPaymentId(PDO $db): ?int
+    {
+        $row = self::fetchOne(
+            $db,
+            "SELECT id_medio_pago FROM medio_pago
+               WHERE UPPER(TRIM(medio_pago)) IN ('TRANSFERENCIA', 'TRANSFERENCIA BANCARIA')
+               ORDER BY CASE WHEN UPPER(TRIM(medio_pago)) = 'TRANSFERENCIA' THEN 0 ELSE 1 END,
+                        id_medio_pago
+               LIMIT 1"
+        );
+        return $row ? (int)$row['id_medio_pago'] : null;
+    }
+
+    private static function botPaymentIds(PDO $db): array
+    {
+        return array_map('intval', $db->query(
+            "SELECT id_medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) = 'BOT'"
+        )->fetchAll(PDO::FETCH_COLUMN) ?: []);
+    }
+
     private static function normalizeState(mixed $value, string $default = 'aprobada'): string
     {
         $state = strtolower(trim((string)$value));

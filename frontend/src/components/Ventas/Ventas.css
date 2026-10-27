@@ -4295,9 +4295,8 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   .ventas-campaign-modal .ventas-objective-tabs .entity-form-tab { gap: 6px; padding: 0 2px; }
 }
 
-/* VENTAS REGISTRADAS · Pie de tabla integrado.
-   Usa el mismo SummaryCards (variante footer) que Contabilidad → Resumen.
-   Totales y paginación conviven dentro del pie; no hay una fila extra de tarjetas. */
+/* VENTAS REGISTRADAS · Resumen minimalista en el mismo pie que las acciones
+   y la paginación. Solo títulos explícitos y valores, sin subtítulos. */
 .ventas-page--orders .ventas-tableFooter {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px 12px;
@@ -4318,8 +4317,8 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 .ventas-page--orders .ventas-orders-summary.global-summaryCards--footer {
   display: block;
-  flex: 1 1 0%;
-  min-width: 340px;
+  flex: 1 1 570px;
+  min-width: min(100%, 480px);
   max-width: 100%;
   margin: 0;
   padding: 0;
@@ -4330,24 +4329,133 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
   min-width: 0;
-  padding: 8px 10px;
+  min-height: 0;
+  height: 44px;
+  max-height: 44px;
+  box-sizing: border-box;
+  padding: 4px 10px;
+  border: 1px solid rgba(79, 114, 205, 0.16);
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(243, 247, 255, 0.98) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  overflow: hidden;
 }
 
-.ventas-page--orders .ventas-orders-summary .global-summaryCards__label,
-.ventas-page--orders .ventas-orders-summary .global-summaryCards__detail,
-.ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 9px 0 0 9px;
+  background: #6c8ee8;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(1) {
+  border-color: rgba(86, 124, 232, 0.18);
+  background: linear-gradient(180deg, rgba(242, 247, 255, 0.98) 0%, rgba(234, 241, 255, 0.98) 100%);
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(1)::before {
+  background: #5d7fe1;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(2) {
+  border-color: rgba(25, 135, 84, 0.18);
+  background: linear-gradient(180deg, rgba(242, 251, 246, 0.98) 0%, rgba(232, 246, 238, 0.98) 100%);
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(2)::before {
+  background: #1f9c65;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(3) {
+  border-color: rgba(217, 119, 6, 0.2);
+  background: linear-gradient(180deg, rgba(255, 248, 238, 0.98) 0%, rgba(252, 241, 223, 0.98) 100%);
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(3)::before {
+  background: #de8a11;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(4) {
+  border-color: rgba(125, 86, 214, 0.18);
+  background: linear-gradient(180deg, rgba(248, 244, 255, 0.98) 0%, rgba(239, 233, 252, 0.98) 100%);
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(4)::before {
+  background: #8967d8;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--balto-text);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+  max-width: 100%;
+  min-width: 0;
+  color: var(--balto-ink);
+  font-size: 15px;
+  font-weight: 720;
+  line-height: 1.1;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* El ancho disponible se mide en la tarjeta, incluso con el sidebar abierto. */
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
+  border-color: rgba(123, 156, 245, 0.22);
+  background: linear-gradient(180deg, rgba(28, 39, 58, 0.98) 0%, rgba(24, 34, 51, 0.98) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(1) {
+  background: linear-gradient(180deg, rgba(28, 44, 72, 0.98) 0%, rgba(23, 36, 58, 0.98) 100%);
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(2) {
+  background: linear-gradient(180deg, rgba(22, 53, 45, 0.98) 0%, rgba(18, 43, 37, 0.98) 100%);
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(3) {
+  background: linear-gradient(180deg, rgba(66, 45, 16, 0.98) 0%, rgba(53, 36, 13, 0.98) 100%);
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(4) {
+  background: linear-gradient(180deg, rgba(46, 34, 72, 0.98) 0%, rgba(37, 28, 58, 0.98) 100%);
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
+  color: rgba(233, 239, 251, 0.88);
+}
+
+html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+  color: #f5f8ff;
+}
+
+/* Si no entran paginación y tarjetas en la misma línea, usar el ancho
+   completo sin provocar scroll horizontal. */
 @container (max-width: 1060px) {
   .ventas-page--orders .ventas-tableFooter {
     grid-template-columns: minmax(0, 1fr);
@@ -4366,7 +4474,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
   .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
     min-width: 0;
-    flex-basis: 390px;
+    flex-basis: 480px;
   }
 }
 
@@ -4380,26 +4488,15 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   }
 
   .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 5px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
-    padding: 7px;
+    padding: 4px 9px;
   }
 
   .ventas-page--orders .ventas-tableFooter .global-pagination__summary {
     flex: 1 1 100%;
-  }
-}
-
-@container (max-width: 450px) {
-  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:last-child {
-    grid-column: 1 / -1;
   }
 }
 
@@ -4973,3 +5070,25 @@ html[data-theme="oscuro"] .ventas-search-results__add strong { color: #a9c8f3; }
 @media (max-width: 560px) {
   .ventas-persona-modal__fields { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* VENTAS REGISTRADAS — ancho estable del select Venta (mes y año).
+   Se usa la mayor opción medida por selectSizing, en cualquier resolución.
+   La opción seleccionada no modifica su ancho; solo cambia al actualizar
+   el catálogo. No altera los selectores dentro de modales ni Planillas. */
+body .ventas-page.ventas-page--orders .module-headFilters > .module-filter.module-filter--select.ventas-orders-filter--campaign {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 min(var(--global-select-option-width, 280px), calc(100cqw - 40px)) !important;
+  width: min(var(--global-select-option-width, 280px), calc(100cqw - 40px)) !important;
+  min-width: min(var(--global-select-option-width, 280px), calc(100cqw - 40px)) !important;
+  max-width: 100% !important;
+}
+body .ventas-page.ventas-page--orders .module-headFilters > .module-filter.module-filter--select.ventas-orders-filter--campaign > select.module-filterControl {
+  box-sizing: border-box;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+/* Mantener cada filtro entero cuando la columna disponible sea estrecha. */
+

@@ -35,7 +35,7 @@ trait VentasPlanillas
     public static function mediosPago(): never
     {
         $db = self::db();
-        $items = $db->query('SELECT id_medio_pago, medio_pago FROM medio_pago ORDER BY medio_pago')->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $items = $db->query("SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) <> 'BOT' ORDER BY medio_pago")->fetchAll(PDO::FETCH_ASSOC) ?: [];
         api_success(['items' => $items], 'Medios de pago cargados.');
     }
 
@@ -52,7 +52,7 @@ trait VentasPlanillas
                                  FROM ventas_campanias c
                                  LEFT JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
                                 ORDER BY c.activo DESC,c.id_campania DESC")->fetchAll(PDO::FETCH_ASSOC)?:[];
-        $payment=$db->query('SELECT id_medio_pago,medio_pago FROM medio_pago ORDER BY medio_pago')->fetchAll(PDO::FETCH_ASSOC)?:[];
+        $payment=$db->query("SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) <> 'BOT' ORDER BY medio_pago")->fetchAll(PDO::FETCH_ASSOC)?:[];
         $months=$db->query("SELECT DISTINCT DATE_FORMAT(COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en),'%Y-%m') AS mes
                               FROM ventas_ordenes o
                              WHERE COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en) IS NOT NULL

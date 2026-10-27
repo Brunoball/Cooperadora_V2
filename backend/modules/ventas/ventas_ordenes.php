@@ -644,8 +644,19 @@ trait VentasOrdenes
                 if ($paymentMethod === null) {
                     api_error('Filtro de medio de pago inválido.', 'VALIDATION_ERROR');
                 }
-                $where[] = 'o.id_medio_pago = ?';
-                $params[] = $paymentMethod;
+                // Transferencia incluye las órdenes históricas cuyo medio se
+                // había registrado como BOT; no afecta al filtro de Origen.
+                $legacyBotIds = $paymentMethod === self::transferenciaPaymentId($db)
+                    ? self::botPaymentIds($db) : [];
+                if ($legacyBotIds !== []) {
+                    $placeholders = implode(',', array_fill(0, count($legacyBotIds), '?'));
+                    $where[] = "o.id_medio_pago IN (?,{$placeholders})";
+                    $params[] = $paymentMethod;
+                    $params = array_merge($params, $legacyBotIds);
+                } else {
+                    $where[] = 'o.id_medio_pago = ?';
+                    $params[] = $paymentMethod;
+                }
             }
             if ($calendarYear !== '') {
                 if (!preg_match('/^\d{4}$/',$calendarYear)) api_error('Año inválido.','VALIDATION_ERROR');
@@ -728,6 +739,17 @@ trait VentasOrdenes
             $statement->execute($params);
             $items = $statement->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
+            // El origen BOT se mantiene, pero el medio de cobro se muestra
+            // como Transferencia cuando ese medio existe en el catálogo.
+            if (self::transferenciaPaymentId($db) !== null) {
+                foreach ($items as &$item) {
+                    if (strtoupper(trim((string)($item['medio_pago'] ?? ''))) === 'BOT') {
+                        $item['medio_pago'] = 'TRANSFERENCIA';
+                    }
+                }
+                unset($item);
+            }
+
             if ($items !== []) {
                 $stage = 'conceptos';
                 $ids = array_map(static fn(array $row): int => (int)$row['id_orden'], $items);
@@ -799,6 +821,13 @@ trait VentasOrdenes
                    COALESCE(o.fecha_venta,DATE(o.aprobado_en),DATE(o.creado_en)) AS fecha_venta
             FROM ventas_ordenes o INNER JOIN ventas_campanias c ON c.id_campania=o.id_campania LEFT JOIN ventas_personas vp ON vp.id_persona=o.id_venta_persona LEFT JOIN alumnos a ON a.id_alumno=vp.id_alumno INNER JOIN medio_pago mp ON mp.id_medio_pago=o.id_medio_pago WHERE o.id_orden=? LIMIT 1",[$id]);
         if(!$row)api_error('La venta no existe.','VENTA_NO_ENCONTRADA',404);
+        if (strtoupper(trim((string)($row['medio_pago'] ?? ''))) === 'BOT') {
+            $transferenciaId = self::transferenciaPaymentId($db);
+            if ($transferenciaId !== null) {
+                $row['id_medio_pago'] = $transferenciaId;
+                $row['medio_pago'] = 'TRANSFERENCIA';
+            }
+        }
         $row['items']=self::orderItems($db,$id);
         api_success(['item'=>$row]);
     }
@@ -830,8 +859,11 @@ trait VentasOrdenes
             if (($campaign['estado_cierre'] ?? 'abierta') === 'cerrada') {
                 api_error('La campaña está cerrada. Consultá el historial; no se admiten cambios.', 'VENTA_CAMPANIA_CERRADA', 409);
             }
-            $payment=self::fetchOne($db,'SELECT id_medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
+            $payment=self::fetchOne($db,'SELECT id_medio_pago, medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
+            if (strtoupper(trim((string)$payment['medio_pago'])) === 'BOT') {
+                api_error('Seleccioná Transferencia u otro medio de pago válido.', 'VALIDATION_ERROR');
+            }
             $before=$id?self::order($db,$id,true):null;
             // La referencia del cobro (bot/transferencia) es interna. El formulario
             // manual ya no la edita; conservarla al corregir una venta histórica.

@@ -43,7 +43,9 @@ export default function VentaModal({ open, initialId, catalogs, saving, onClose,
   const [activeSearch, setActiveSearch] = useState(null);
   const products = useMemo(() => catalogs?.productos || [], [catalogs]);
   const campaigns = useMemo(() => catalogs?.campanias || [], [catalogs]);
-  const payments = catalogs?.medios_pago || [];
+  const payments = (catalogs?.medios_pago || []).filter(
+    (medio) => upper(medio.medio_pago, 120).trim() !== "BOT"
+  );
   const editing = Boolean(initialId);
   // No recalcular ni reescribir los importes de ganancias históricas: el backend los protege.
   const historicalGain = editing && Number(form.ganancia_objetivo || 0) > 0;

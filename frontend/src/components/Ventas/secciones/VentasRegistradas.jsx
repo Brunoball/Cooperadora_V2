@@ -154,7 +154,10 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   const loadCatalogs = useCallback(async () => {
     try {
       const data = await ventasApi.catalogos();
-      setCatalogs(data);
+      // BOT sigue siendo un origen, pero ya no se ofrece como medio de pago.
+      setCatalogs({ ...data, medios_pago: (data.medios_pago || []).filter(
+        (medio) => upper(medio.medio_pago, 120).trim() !== "BOT"
+      ) });
       if (!catalogInitialized) {
         const sorted = ordenarCampanias(data.campanias || []);
         const current = sorted.find((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today()));
@@ -228,6 +231,26 @@ export default function VentasRegistradas({ writable, showFeedback }) {
 
   const paymentMethodOptions = useMemo(() => (catalogs.medios_pago || [])
     .map((item) => ({ value: String(item.id_medio_pago), label: upper(item.medio_pago, 120) })), [catalogs.medios_pago]);
+
+  // El stock es una existencia actual del producto principal de la campaña,
+  // no un total de ventas ni una cifra afectada por los demás filtros.
+  // Usar el catálogo ya cargado evita consultas extra y muestra el mismo
+  // valor que Productos de ventas (null = producto sin control de stock).
+  const principalProduct = useMemo(() => {
+    const selectedCampaign = (catalogs.campanias || []).find(
+      (item) => String(item.id_campania) === String(campaign)
+    );
+    if (!selectedCampaign?.id_producto_principal) return null;
+    return (catalogs.productos || []).find(
+      (item) => String(item.id_producto) === String(selectedCampaign.id_producto_principal)
+    ) || null;
+  }, [catalogs.campanias, catalogs.productos, campaign]);
+
+  const stockActual = !principalProduct
+    ? "—"
+    : principalProduct.stock == null || principalProduct.stock === ""
+      ? "Sin control"
+      : Number(principalProduct.stock).toLocaleString("es-AR");
 
   const filters = [
     { key: "buscar", type: "search", label: "Buscar venta", placeholder: "Alumno, DNI u observación...", value: search, onChange: (v) => { setPage(1); setSearch(v); } },
@@ -463,21 +486,23 @@ export default function VentasRegistradas({ writable, showFeedback }) {
               items={[
                 {
                   key: "unidades",
-                  label: "Cantidades vendidas",
-                  detail: "Unidades de productos cobrados",
+                  label: "Unidades vendidas",
                   value: loading ? "—" : Number(totals.cantidades_vendidas || 0).toLocaleString("es-AR"),
                 },
                 {
                   key: "recaudado",
-                  label: "Recaudado",
-                  detail: "Total cobrado, incluidas las ganancias",
+                  label: "Total cobrado",
                   value: loading ? "—" : money(totals.recaudado),
                 },
                 {
                   key: "ganancias",
                   label: "Ganancias cobradas",
-                  detail: "Incluidas en el total recaudado",
                   value: loading ? "—" : money(totals.ganancias_cobradas),
+                },
+                {
+                  key: "stock",
+                  label: "Stock actual",
+                  value: loading ? "—" : stockActual,
                 },
               ]}
             />
@@ -569,7 +594,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         onClose={() => setPaymentConfirm(null)}
         onConfirm={async () => {
           const result = await ventasApi.estadoPagoOrden({ id_orden: paymentConfirm.row.id_orden, estado: paymentConfirm.estado });
-          await load({ silent: true });
+          await Promise.all([load({ silent: true }), loadCatalogs()]);
           return { mensaje: result.mensaje };
         }}
       />
@@ -590,8 +615,12 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
           const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden });
-          if (rows.length === 1 && page > 1) setPage((previous) => Math.max(1, previous - 1));
-          else await load({ silent: true });
+          if (rows.length === 1 && page > 1) {
+            setPage((previous) => Math.max(1, previous - 1));
+            await loadCatalogs();
+          } else {
+            await Promise.all([load({ silent: true }), loadCatalogs()]);
+          }
           return { mensaje: result.mensaje };
         }}
       />
