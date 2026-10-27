@@ -126,10 +126,8 @@
   grid-template-columns:
     1.28fr
     1.18fr
-    .82fr
     .72fr
     .68fr
-    .72fr
     .82fr;
 }
 
@@ -1173,10 +1171,8 @@
     grid-template-columns:
       1.18fr
       1.05fr
-      .74fr
       .66fr
       .62fr
-      .66fr
       .78fr;
   }
 
@@ -4971,8 +4967,10 @@ body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.mo
 }
 
 /* =========================================================
-   VENTAS REGISTRADAS — tabla compacta (8 columnas)
-   Venta · Persona · Medio · Total · Pago · Origen · Fecha · Acciones
+   VENTAS REGISTRADAS — tabla compacta (6 columnas)
+   Venta · Persona · Total · Pago · Fecha · Acciones
+   - Medio y Origen se quitaron de la tabla: se consultan con los filtros
+     superiores (siguen incluidos en la exportación).
    - El pago permite confirmar encargos; el retiro queda en Acciones.
    - El subtítulo de Venta muestra solo "Cantidad: x" (sin repetir nombre).
    - Acciones con ancho fijo para que ningún icono quede cortado
@@ -4983,10 +4981,8 @@ body .ventas-page.ventas-page--planillas .module-headFilters > .module-filter.mo
   grid-template-columns:
     minmax(0, 1.6fr)
     minmax(0, 1.55fr)
-    minmax(0, 1fr)
     minmax(0, .8fr)
     minmax(95px, .8fr)
-    minmax(0, .66fr)
     minmax(0, .74fr)
     176px;
 }
@@ -5036,10 +5032,8 @@ html[data-theme="oscuro"] .ventas-pill.bot {
     grid-template-columns:
       minmax(0, 1.46fr)
       minmax(0, 1.4fr)
-      minmax(0, .95fr)
       minmax(0, .78fr)
       minmax(95px, .8fr)
-      minmax(0, .66fr)
       minmax(0, .74fr)
       164px;
   }
