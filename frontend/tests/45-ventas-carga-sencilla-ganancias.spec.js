@@ -18,6 +18,9 @@ async function fixture(request) {
   const campaign = await createSalesCampaign(request, t, product, marker, {
     cantidad_minima_persona: 3, ganancia_unidad_faltante: 3000,
     ganancia_total_sin_ventas: 10000,
+    // DNI sintético: corresponde a la categoría terceros, sin objetivo por defecto.
+    cantidad_minima_terceros: 3, ganancia_unidad_terceros: 3000,
+    ganancia_sin_ventas_terceros: 10000,
   });
   const catalog = await ok(request, "ventas_catalogos", { token: t });
   return { t, marker, product, campaign, dni: testDni(), payment: catalog.medios_pago[0] };
@@ -126,6 +129,7 @@ test("interfaz: campos independientes por defecto 0, cálculo mixto y guardado",
   await expect(products).toHaveValue("0");
   await expect(gains).toHaveValue("0");
   await products.fill("2");
+  await expect(gains).toBeEnabled({ timeout: 20_000 });
   await gains.fill("1");
   await expect(ventaTotal(modal)).toContainText("3.200", { timeout: 20_000 });
   await modal.getByRole("button", { name: /^guardar$/i }).click();
@@ -144,7 +148,7 @@ test("interfaz: mismo campo para nombre y buscador; fecha y observación visible
   await expect(modal.getByRole("textbox", { name: /buscar alumno|buscar por dni/i })).toHaveCount(0);
   await expect(modal.getByText(/a quién le estás cargando/i)).toHaveCount(0);
   await expect(modal.getByText(/referencia de pago|fecha y datos opcionales/i)).toHaveCount(0);
-  await expect(modal.getByLabel("Fecha de pago")).toBeVisible();
+  await expect(modal.getByLabel("Fecha de venta / encargo")).toBeVisible();
   await expect(modal.getByRole("textbox", { name: "Observaciones" })).toBeVisible();
 });
 

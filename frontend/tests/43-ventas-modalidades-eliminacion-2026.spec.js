@@ -25,7 +25,10 @@ async function fixture(request, extraCampaign = {}) {
   });
   const campaign = await createSalesCampaign(request, t, product, marker, {
     cantidad_minima_persona: 3, ganancia_unidad_faltante: 3000,
-    ganancia_total_sin_ventas: 10000, ...extraCampaign,
+    ganancia_total_sin_ventas: 10000,
+    // Los compradores sintéticos no están en alumnos ni docentes.
+    cantidad_minima_terceros: 3, ganancia_unidad_terceros: 3000,
+    ganancia_sin_ventas_terceros: 10000, ...extraCampaign,
   });
   const catalogs = await ok(request, "ventas_catalogos", { token: t });
   const id_medio_pago = Number(catalogs.medios_pago?.[0]?.id_medio_pago);

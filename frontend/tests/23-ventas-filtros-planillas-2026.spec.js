@@ -16,6 +16,8 @@ async function fixture(request) {
   const product = await createSalesProduct(request, t, marker, { stock: 30, precio_anticipada: 100 });
   const campaign = await createSalesCampaign(request, t, product, marker, {
     cantidad_minima_persona: 3, ganancia_unidad_faltante: 3000, ganancia_total_sin_ventas: 10000,
+    // Las ventas creadas con el DNI nuevo son de terceros, salvo la que vincula un alumno.
+    cantidad_minima_terceros: 3, ganancia_unidad_terceros: 3000, ganancia_sin_ventas_terceros: 10000,
   });
   const catalog = await ok(request, 'ventas_catalogos', { token: t });
   const payment = catalog.medios_pago?.[0];

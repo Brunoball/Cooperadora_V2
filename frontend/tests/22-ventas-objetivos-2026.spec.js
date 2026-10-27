@@ -23,6 +23,10 @@ async function fixture(request, extra = {}) {
     cantidad_minima_persona: 3,
     ganancia_unidad_faltante: 3000,
     ganancia_total_sin_ventas: 10000,
+    // El DNI del fixture no pertenece al padrón: el backend aplica la regla de TERCEROS.
+    cantidad_minima_terceros: 3,
+    ganancia_unidad_terceros: 3000,
+    ganancia_sin_ventas_terceros: 10000,
     ...extra,
   });
   const catalogs = await ok(request, 'ventas_catalogos', { token: t });
@@ -122,7 +126,9 @@ test('interfaz: permite registrar 0 unidades y cobrar solamente la ganancia del 
   await openVentaTab(modal, 'productos');
   const quantity = modal.getByRole('spinbutton', { name: 'Cantidad de productos vendidos' });
   await expect(quantity).toHaveValue('0');
-  await modal.getByRole('spinbutton', { name: 'Cantidad de ganancias' }).fill('3');
+  const gains = modal.getByRole('spinbutton', { name: 'Cantidad de ganancias' });
+  await expect(gains).toBeEnabled({ timeout: 20_000 });
+  await gains.fill('3');
   await expect(ventaTotal(modal)).toContainText('10.000', { timeout: 20_000 });
   const save = modal.getByRole('button', { name: /^guardar$/i });
   await expect(save).toBeEnabled();
@@ -186,7 +192,7 @@ test('objetivo: pago de ganancia sin productos no descuenta stock y eliminarlo b
   expect(Number((await objective(request, f)).ganancia_cobrada_previa)).toBe(0);
 });
 
-test('configuración: no acepta objetivo incompleto y conserva reglas de campañas con ventas', async ({ request }) => {
+test('configuración: valida reglas y permite editar objetivos sin alterar el histórico de ventas', async ({ request }) => {
   const t = token();
   const marker = suffix();
   const product = await createSalesProduct(request, t, marker);
@@ -206,19 +212,47 @@ test('configuración: no acepta objetivo incompleto y conserva reglas de campañ
   const f = await fixture(request);
   const sale = (await order(request, f, 2)).item;
   expect(Number(sale.total)).toBe(3200);
-  const mutation = await apiFetch(request, 'ventas_campania_guardar', {
+  const mutation = await ok(request, 'ventas_campania_guardar', {
     token: f.t, method: 'POST', data: {
       id_campania: f.campaign.id_campania,
       nombre: f.campaign.nombre,
       id_producto_principal: f.product.id_producto,
+      // Las tres categorías admiten ajustes; la venta anterior conserva su importe.
       cantidad_minima_persona: 4,
       ganancia_unidad_faltante: 3000,
       ganancia_total_sin_ventas: 10000,
+      cantidad_minima_terceros: 4,
+      ganancia_unidad_terceros: 3000,
+      ganancia_sin_ventas_terceros: 10000,
       visible_menu: false,
     },
   });
-  expect(mutation.status).toBe(409);
-  expect(mutation.body.codigo).toBe('VENTA_CAMPANIA_REGLA_HISTORICA');
+  expect(Number(mutation.item.cantidad_minima_persona)).toBe(4);
+  expect(Number(mutation.item.cantidad_minima_terceros)).toBe(4);
+  const persisted = await ok(request, 'ventas_orden_detalle', {
+    token: f.t, query: { id_orden: sale.id_orden },
+  });
+  expect(Number(persisted.item.total)).toBe(3200);
+  expect(Number(persisted.item.ganancia_objetivo)).toBe(3000);
+  const changedObjective = await objective(request, f);
+  expect(changedObjective.categoria_persona).toBe('terceros');
+  expect(Number(changedObjective.objetivo.cantidad_objetivo)).toBe(4);
+  const invalidDates = await apiFetch(request, 'ventas_campania_guardar', {
+    token: f.t, method: 'POST', data: {
+      id_campania: f.campaign.id_campania,
+      nombre: f.campaign.nombre,
+      id_producto_principal: f.product.id_producto,
+      fecha_inicio: today(), // No se permite cambiar la vigencia con ventas existentes.
+      cantidad_minima_persona: 4,
+      ganancia_unidad_faltante: 3000,
+      ganancia_total_sin_ventas: 10000,
+      cantidad_minima_terceros: 4,
+      ganancia_unidad_terceros: 3000,
+      ganancia_sin_ventas_terceros: 10000,
+    },
+  });
+  expect(invalidDates.status).toBe(409);
+  expect(invalidDates.body.codigo).toBe('VENTA_CAMPANIA_REGLA_HISTORICA');
 });
 
 test('campañas y menú WhatsApp: exponen objetivo y tipo comprador desde configuración', async ({ request }) => {

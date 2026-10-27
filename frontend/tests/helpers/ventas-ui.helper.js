@@ -47,10 +47,9 @@ module.exports = { openVentaTab, ventaTotal };
  */
 async function expectVentaObservation(page, row, note, { timeout = 30_000 } = {}) {
   const button = row.getByRole("button", { name: /^ver observación/i });
-  if ((await button.count()) === 0) {
-    await expect(row.getByText(`OBS.: ${note}`)).toBeVisible({ timeout });
-    return;
-  }
+  // Tras guardar se vuelve a consultar la lista: durante ese intervalo puede
+  // faltar la fila o el botón, sin que se haya perdido la observación.
+  await expect(button).toBeVisible({ timeout });
   const dialog = page.getByRole("dialog", { name: "Observación de la venta" });
   // Después de guardar, la pantalla cierra el modal ANTES de recargar la lista
   // (primero recarga catálogos). Si se abre la observación en ese intervalo,

@@ -222,7 +222,7 @@ test("campaña: rechaza rangos superpuestos y variables desconocidas", async ({ 
   expect(badToken.status).toBe(422);
 });
 
-test("una campaña con ventas deja editar entrega y textos, pero mantiene bloqueado su objetivo", async ({ request }) => {
+test("una campaña con ventas deja editar entrega y objetivos, pero protege la vigencia", async ({ request }) => {
   test.skip(!env.isLocal && !env.allowRemoteWrites, "Requiere entorno E2E aislado autorizado.");
   const { argentinaDate, testDni } = require("./helpers/data.helper");
   const t = token(), marker = suffix();
@@ -253,8 +253,12 @@ test("una campaña con ventas deja editar entrega y textos, pero mantiene bloque
   const editado = await ok(request, "ventas_campania_guardar", { token: t, method: "POST", data: cambio });
   expect(editado.item.fecha_entrega).toBe(argentinaDate(2));
   expect(JSON.parse(editado.item.horarios_entrega)).toEqual([{ desde: "16:00", hasta: "19:00" }]);
-  const invalido = await apiFetch(request, "ventas_campania_guardar", { token: t, method: "POST", data: {
+  const cambioObjetivo = await ok(request, "ventas_campania_guardar", { token: t, method: "POST", data: {
     ...cambio, cantidad_minima_persona: 4,
+  } });
+  expect(Number(cambioObjetivo.item.cantidad_minima_persona)).toBe(4);
+  const invalido = await apiFetch(request, "ventas_campania_guardar", { token: t, method: "POST", data: {
+    ...cambio, cantidad_minima_persona: 4, fecha_fin: tomorrow(),
   } });
   expect(invalido.status).toBe(409);
   expect(invalido.body.codigo).toBe("VENTA_CAMPANIA_REGLA_HISTORICA");
