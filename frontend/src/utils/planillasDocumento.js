@@ -31,6 +31,45 @@ const separarEnHojas = (rows, cantidad) => {
 const cursoSinSimbolo = (value) => String(value || "").replace(/[°º]/g, "").trim();
 const nombreAlumno = (row) => `${row.apellido || ""}${row.apellido && row.nombre ? ", " : ""}${row.nombre || ""}`;
 
+/**
+ * La observación extensa sigue almacenada en la venta original.
+ * La planilla (pantalla, Excel, impresión y PDF), incluso si la campaña
+ * ya está cerrada, muestra solamente una síntesis legible.
+ */
+export function resumirObservacionesPlanilla(valor) {
+  const textos = String(valor ?? "").split(/\s+\|\s+/);
+  const notas = [];
+  const vistos = new Set();
+
+  for (const texto of textos) {
+    let nota = texto.replace(/\s+/g, " ").trim();
+    if (!nota) continue;
+
+    // Mensajes automáticos del bot: la ganancia y el cobro ya están en
+    // sus columnas. No se modifica ningún dato ni comentario del pedido.
+    if (/^Venta aprobada por Mercado Pago desde bot WhatsApp\.?(?:\s+Ganancia por objetivo:\s*[\d.,]+\.?)?$/i.test(nota)) {
+      nota = "Bot (Mercado Pago)";
+    } else if (/^Venta aprobada manualmente desde panel interno por comprobante de transferencia con Google Vision OCR\.?$/i.test(nota)) {
+      nota = "Bot (transferencia validada)";
+    } else if (/^Venta registrada desde bot por comprobante de transferencia con Google Vision OCR\.?$/i.test(nota)) {
+      nota = "Bot (transferencia)";
+    } else if (/^Venta registrada automáticamente luego de pago aprobado\.?(?:\s+Lote familiar\.?)?$/i.test(nota)) {
+      nota = /lote familiar/i.test(nota) ? "Bot (pago aprobado) · Lote familiar" : "Bot (pago aprobado)";
+    }
+
+    // Una misma persona puede tener varias ventas idénticas: no repetir.
+    const clave = nota.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    notas.push(nota);
+  }
+
+  const texto = notas.join(" · ");
+  const maximo = 95; // Evita que la columna o la impresión se vuelvan un chorizo.
+  if (texto.length <= maximo) return texto;
+  return `${texto.slice(0, maximo - 1).trimEnd()}…`;
+}
+
 // Las tres salidas (pantalla, impresión y Excel) usan estas proyecciones.
 // El cálculo de las cifras corresponde exclusivamente al backend.
 export function filaPlanilla(row, tipo, indice = 0) {
@@ -41,7 +80,7 @@ export function filaPlanilla(row, tipo, indice = 0) {
     gananciaCobrada: Number(row.ganancia_cobrada || 0),
     cobrado: Number(row.importe_cobrado || 0),
     productos: Number(row.importe_productos || 0),
-    observaciones: String(row.observaciones || ""),
+    observaciones: resumirObservacionesPlanilla(row.observaciones),
   };
   // Docentes y terceros: el backend envía nombre_completo y dni.
   if (tipo === "docentes" || tipo === "terceros") return {

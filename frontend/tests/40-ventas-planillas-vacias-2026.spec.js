@@ -12,8 +12,8 @@ const code = fs.readFileSync(path.resolve(__dirname, "../src/utils/planillasDocu
 const htmlEscape = (value) => String(value ?? "")
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
   .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-const { crearDocumentoPlanillas, prepararSeccionesPlanilla } = vm.runInNewContext(
-  `${code}\n({ crearDocumentoPlanillas, prepararSeccionesPlanilla })`,
+const { crearDocumentoPlanillas, prepararSeccionesPlanilla, resumirObservacionesPlanilla, filaPlanilla } = vm.runInNewContext(
+  `${code}\n({ crearDocumentoPlanillas, prepararSeccionesPlanilla, resumirObservacionesPlanilla, filaPlanilla })`,
   { escapeHtml: htmlEscape, money: (n) => `$ ${Number(n).toFixed(2)}` },
 );
 const alumno = {
@@ -79,4 +79,29 @@ test("Excel: planilla vacía deja cobros sin asignar fuera y no modifica los dat
   expect(secciones[0].registros[0].ganancia).toBe(9000);
   expect(secciones[0].registros[0].docenteResponsable).toBe("RESPONSABLE");
   expect(prepararSeccionesPlanilla(secciones, "datos")).toBe(secciones);
+});
+
+
+test("Observaciones de planillas: resume el texto repetido del bot sin tocar la venta", () => {
+  const original = "Venta aprobada por Mercado Pago desde bot WhatsApp. Ganancia por objetivo: 0 | Venta aprobada por Mercado Pago desde bot WhatsApp. Ganancia por objetivo: 0 | NO ABONO";
+  const f = filaPlanilla({ ...docente, observaciones: original }, "terceros");
+  expect(f.observaciones).toBe("Bot (Mercado Pago) · NO ABONO");
+  expect(original).toContain("Ganancia por objetivo: 0");
+  expect(resumirObservacionesPlanilla(original)).toBe(f.observaciones);
+  const html = crearDocumentoPlanillas({ ...datos("terceros"), items: [{ ...docente, observaciones: original }] }, "terceros", { modo: "datos" }).paginas.join(" ");
+  expect(html).toContain("Bot (Mercado Pago) · NO ABONO");
+  expect(html).not.toContain("Ganancia por objetivo: 0");
+});
+
+test("Observaciones de planillas: mantiene estados pendientes y comentarios relevantes", () => {
+  expect(resumirObservacionesPlanilla("2 ENCARGADAS · PAGO PENDIENTE | NO ABONO"))
+    .toBe("2 ENCARGADAS · PAGO PENDIENTE · NO ABONO");
+  expect(resumirObservacionesPlanilla("Venta aprobada manualmente desde panel interno por comprobante de transferencia con Google Vision OCR. | Venta aprobada manualmente desde panel interno por comprobante de transferencia con Google Vision OCR."))
+    .toBe("Bot (transferencia validada)");
+  expect(resumirObservacionesPlanilla("Venta registrada automáticamente luego de pago aprobado. Lote familiar."))
+    .toBe("Bot (pago aprobado) · Lote familiar");
+  expect(resumirObservacionesPlanilla("Observación manual importante"))
+    .toBe("Observación manual importante");
+  expect(resumirObservacionesPlanilla("Una observación particularmente extensa ".repeat(10)).length)
+    .toBeLessThanOrEqual(95);
 });
