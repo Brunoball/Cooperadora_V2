@@ -77,7 +77,8 @@ test("ganancias parciales 1 + 2 sin combos: completa $10.000 sin descontar stock
   const second = await sale(request, f, 0, 2);
   expect(Number(second.ganancia_objetivo)).toBe(7000);
   expect(Number(second.total)).toBe(7000);
-  expect(Number(second.retirado)).toBe(1);
+  // Solo cobró ganancias, no hay mercadería a retirar.
+  expect(Number(second.retirado)).toBe(0);
   expect(await stocked(request, f)).toBe(30);
   const after = await balance(request, f);
   expect(Number(after.ganancias_unidades_previas)).toBe(3);
@@ -220,7 +221,10 @@ test("interfaz: escribir apellido y nombre busca en el mismo campo y seleccionar
   const modal = page.getByRole("dialog", { name: "Nueva venta" });
   const nombreField = modal.getByRole("textbox", { name: "Nombre y apellido" });
   await nombreField.fill(nombre);
-  await modal.getByRole("option", { name: new RegExp(marker) }).click();
+  // El desplegable se monta mediante createPortal(document.body), fuera del
+  // árbol DOM del dialog para que el scroll no recorte las sugerencias.
+  const coincidenciasNombre = page.getByRole("listbox", { name: "Coincidencias de personas" });
+  await coincidenciasNombre.getByRole("option", { name: new RegExp(marker) }).click();
   await expect(nombreField).toHaveValue(nombre);
   await expect(modal.getByRole("textbox", { name: "DNI", exact: true })).toHaveValue(dniPersona);
   await nombreField.fill(`${nombre} CAMBIADO`);
@@ -241,20 +245,21 @@ test("interfaz: buscar DNI muestra coincidencias y completa el nombre en nueva v
   const nameField = newSale.getByRole("textbox", { name: "Nombre y apellido" });
   // Con solo una parte del número deben aparecer los DNI coincidentes.
   await dniField.fill(f.dni.slice(0, 6));
-  const option = newSale.getByRole("listbox", { name: "Coincidencias de personas" })
-    .getByRole("option", { name: new RegExp(`DNI\\s+${f.dni}`) });
+  // Las opciones viven en un portal de document.body, no dentro de newSale.
+  const coincidenciasDni = page.getByRole("listbox", { name: "Coincidencias de personas" });
+  const option = coincidenciasDni.getByRole("option", { name: new RegExp(`DNI\\s+${f.dni}`) });
   await expect(option).toBeVisible({ timeout: 15_000 });
   await option.click();
   await expect(dniField).toHaveValue(f.dni);
   await expect(nameField).toHaveValue(name);
   // Solo debe desaparecer el selector de coincidencias: los <option> de
   // campaña y medio de pago siguen presentes en el formulario.
-  await expect(newSale.getByRole("listbox", { name: "Coincidencias de personas" })).toHaveCount(0);
+  await expect(coincidenciasDni).toHaveCount(0);
 
   // Cambiar el DNI de una persona seleccionada no debe conservar su nombre.
   await dniField.fill(f.dni.slice(0, 6));
   await expect(nameField).toHaveValue("");
-  await expect(newSale.getByRole("listbox", { name: "Coincidencias de personas" })
+  await expect(coincidenciasDni
     .getByRole("option", { name: new RegExp(`DNI\\s+${f.dni}`) })).toBeVisible();
 
   // El modal de edición comparte el mismo buscador de DNI y el mismo selector.
@@ -274,7 +279,7 @@ test("interfaz: buscar DNI muestra coincidencias y completa el nombre en nueva v
   await expect(editName).toHaveValue(name, { timeout: 15_000 });
   await editDni.fill(f.dni.slice(0, 6));
   await expect(editDni).toHaveValue(f.dni.slice(0, 6));
-  const editOption = edit.getByRole("listbox", { name: "Coincidencias de personas" })
+  const editOption = coincidenciasDni
     .getByRole("option", { name: new RegExp(`DNI\\s+${f.dni}`) });
   await expect(editOption).toBeVisible({ timeout: 15_000 });
   await editOption.click();

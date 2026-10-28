@@ -32,7 +32,7 @@ trait VentasCiclos
             if ($pending > 0) {
                 api_error('No se puede cerrar la campaña: hay ' . $pending . ' venta(s) pendientes de pago. Marcalas como pagadas o eliminá los encargos antes de cerrar.', 'VENTA_CIERRE_ENCARGOS_PENDIENTES', 409);
             }
-            $unretired=(int)self::fetchOne($db,"SELECT COUNT(*) n FROM ventas_ordenes WHERE id_campania=? AND estado='aprobada' AND retirado=0",[$id])['n'];
+            $unretired=(int)self::fetchOne($db,"SELECT COUNT(*) n FROM ventas_ordenes o WHERE o.id_campania=? AND o.estado='aprobada' AND o.retirado=0 AND EXISTS (SELECT 1 FROM ventas_orden_items ri WHERE ri.id_orden=o.id_orden AND (ri.id_producto IS NOT NULL OR UPPER(TRIM(ri.producto_nombre)) NOT LIKE 'GANANCIA%'))",[$id])['n'];
             $insert=$db->prepare('INSERT INTO ventas_planillas_cerradas(id_campania,tipo,datos) VALUES (?,?,?)');
             // La foto de Terceros requiere la migración del ENUM `tipo`. Sin
             // ella, el cierre conserva el comportamiento anterior y no falla.

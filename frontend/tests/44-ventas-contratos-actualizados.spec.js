@@ -15,7 +15,7 @@ test("Ventas API: modalidades explícitas y preservación de ingresos, stock y g
     "VENTA_GANANCIA_SIN_SALDO", "VENTA_GANANCIA_NO_DISPONIBLE",
     "VENTA_GANANCIA_HISTORICA_INMUTABLE", "VENTA_GANANCIA_REQUIERE_COMBOS",
     "self::adjustStock($db, $items, -1)", "self::syncIncome($db,$orderId)",
-    "if ($gainOnly)", "retirado=1", "ganancia ya cobrada",
+    "if ($items === [] && !$gainOnly)", "Los pagos de ganancias sin productos no tienen retiro", "ganancia ya cobrada",
   ]) expect(php).toContain(piece);
   expect(php).toContain("($body['incluir_ganancia'] ?? false)");
   expect(php).toContain('objectiveChargeForQuantities');

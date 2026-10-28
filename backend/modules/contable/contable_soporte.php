@@ -120,6 +120,17 @@ trait ContableSoporte
         ];
     }
 
+    /** Origen de registro: filtro de lectura, nunca aceptado como autoría de un formulario manual. */
+    protected static function filtroOrigen(mixed $value): ?string
+    {
+        $origen = trim((string)($value ?? ''));
+        if ($origen === '') return null;
+        if (!in_array($origen, ['manual', 'bot_whatsapp'], true)) {
+            api_error('El origen seleccionado no es válido.', 'FILTRO_INVALIDO', 422);
+        }
+        return $origen;
+    }
+
     protected static function medioPago(PDO $db, int $id): array
     {
         $statement = $db->prepare(
@@ -127,7 +138,7 @@ trait ContableSoporte
         );
         $statement->execute([$id]);
         $row = $statement->fetch(PDO::FETCH_ASSOC);
-        if (!$row) api_error('El medio de pago seleccionado no existe.', 'MEDIO_PAGO_INVALIDO', 409);
+        if (!$row || in_array(strtoupper(trim((string)($row['medio_pago'] ?? ''))), ['BOT', 'MERCADO PAGO', 'MERCADO LIBRE'], true)) api_error('Seleccioná Transferencia u otro medio de pago disponible.', 'MEDIO_PAGO_INVALIDO', 409);
         return [
             'id_medio_pago' => (int)$row['id_medio_pago'],
             'nombre' => (string)$row['medio_pago'],
@@ -429,7 +440,7 @@ trait ContableSoporte
     protected static function catalogosBase(PDO $db): array
     {
         $medios = $db->query(
-            'SELECT id_medio_pago, medio_pago AS nombre FROM medio_pago ORDER BY medio_pago ASC'
+            'SELECT id_medio_pago, medio_pago AS nombre FROM medio_pago WHERE UPPER(TRIM(medio_pago)) NOT IN (\'BOT\',\'MERCADO PAGO\',\'MERCADO LIBRE\') ORDER BY medio_pago ASC'
         )->fetchAll(PDO::FETCH_ASSOC);
         $periods = $db->query(
             'SELECT id_mes AS id_periodo, nombre FROM meses ORDER BY id_mes ASC'

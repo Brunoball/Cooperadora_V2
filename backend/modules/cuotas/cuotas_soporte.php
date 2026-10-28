@@ -761,8 +761,8 @@ abstract class CuotasSoporte
             'INSERT INTO egresos
              (fecha, id_cont_categoria, id_cont_proveedor, comprobante,
               id_cont_descripcion, id_medio_pago, importe, comprobante_url,
-              id_pago_origen, id_alumno_origen)
-             VALUES (?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?)'
+              id_pago_origen, id_alumno_origen, origen)
+             VALUES (?, NULL, NULL, ?, ?, ?, ?, NULL, ?, ?, (SELECT origen FROM pagos WHERE id_pago = ?))'
         );
         $statement->execute([
             $date,
@@ -772,6 +772,7 @@ abstract class CuotasSoporte
             number_format($commission, 2, '.', ''),
             $paymentId,
             $studentId,
+            $paymentId,
         ]);
     }
 

@@ -11,15 +11,17 @@ trait ContableConsultas
     abstract protected static function aCentavos(mixed $value): int;
     abstract protected static function filtroAnio(mixed $value): int;
     abstract protected static function filtroMes(mixed $value, bool $required = true): ?int;
+    abstract protected static function filtroOrigen(mixed $value): ?string;
     abstract protected static function idOpcional(mixed $value, string $label): ?int;
     abstract protected static function importeDesdeCentavos(int $cents): float;
     abstract protected static function nombreArchivoDesdeUrl(?string $url): string;
     abstract protected static function nombreMes(int $month): string;
 
-    protected static function resumenDatos(PDO $db, int $year, int $month, ?int $mean = null): array
+    protected static function resumenDatos(PDO $db, int $year, int $month, ?int $mean = null, ?string $origin = null): array
     {
         $payments = array_fill(1, 12, ['cuotas' => 0, 'matriculas' => 0]);
         $paymentMeanSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
+        $paymentMeanSql .= $origin !== null ? ' AND p.origen = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(p.fecha_pago) AS mes,
                     SUM(CASE WHEN p.id_mes = ? THEN COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END ELSE 0 END) AS matriculas,
@@ -36,6 +38,7 @@ trait ContableConsultas
         /** @disregard P1012 */
         $paymentParams = [self::MES_MATRICULA, self::MES_MATRICULA, $year];
         if ($mean !== null) $paymentParams[] = $mean;
+        if ($origin !== null) $paymentParams[] = $origin;
         $statement->execute($paymentParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
@@ -51,6 +54,7 @@ trait ContableConsultas
         // ingresantes. Cuando pasan a Alumnos se crea pagos.id_mes=14 y esta fila
         // deja de entrar aquí gracias a id_alumno_confirmado, evitando duplicados.
         $ingresanteMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
+        $ingresanteMeanSql .= $origin !== null ? ' AND origen = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(COALESCE(fecha_pago_matricula, fecha_inscripcion)) AS mes,
                     SUM(monto_matricula) AS total
@@ -62,6 +66,7 @@ trait ContableConsultas
         );
         $ingresanteParams = [$year];
         if ($mean !== null) $ingresanteParams[] = $mean;
+        if ($origin !== null) $ingresanteParams[] = $origin;
         $statement->execute($ingresanteParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
@@ -71,12 +76,14 @@ trait ContableConsultas
 
         $manual = array_fill(1, 12, 0);
         $manualMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
+        $manualMeanSql .= $origin !== null ? ' AND origen = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(fecha) AS mes, SUM(importe) AS total
              FROM ingresos WHERE YEAR(fecha) = ?' . $manualMeanSql . ' GROUP BY MONTH(fecha)'
         );
         $manualParams = [$year];
         if ($mean !== null) $manualParams[] = $mean;
+        if ($origin !== null) $manualParams[] = $origin;
         $statement->execute($manualParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
@@ -85,12 +92,14 @@ trait ContableConsultas
 
         $expenses = array_fill(1, 12, 0);
         $expenseMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
+        $expenseMeanSql .= $origin !== null ? ' AND origen = ?' : '';
         $statement = $db->prepare(
             'SELECT MONTH(fecha) AS mes, SUM(importe) AS total
              FROM egresos WHERE YEAR(fecha) = ?' . $expenseMeanSql . ' GROUP BY MONTH(fecha)'
         );
         $expenseParams = [$year];
         if ($mean !== null) $expenseParams[] = $mean;
+        if ($origin !== null) $expenseParams[] = $origin;
         $statement->execute($expenseParams);
         foreach ($statement->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $m = (int)$row['mes'];
@@ -132,7 +141,7 @@ trait ContableConsultas
             'meses' => $months,
             'totales' => self::convertirResumenCentavos($annual),
             'totales_mes' => $selected,
-            'detalle_mes' => self::detalleResumenMes($db, $year, $month, $mean),
+            'detalle_mes' => self::detalleResumenMes($db, $year, $month, $mean, $origin),
         ];
     }
 
@@ -145,13 +154,14 @@ trait ContableConsultas
         return $result;
     }
 
-    protected static function detalleResumenMes(PDO $db, int $year, int $month, ?int $mean = null): array
+    protected static function detalleResumenMes(PDO $db, int $year, int $month, ?int $mean = null, ?string $origin = null): array
     {
         $from = sprintf('%04d-%02d-01', $year, $month);
         $to = (new DateTimeImmutable($from))->modify('last day of this month')->format('Y-m-d');
 
         $incomeCategories = [];
         $paymentMeanSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
+        $paymentMeanSql .= $origin !== null ? ' AND p.origen = ?' : '';
         $payment = $db->prepare(
             'SELECT CASE WHEN p.id_mes = ? THEN \'MATRÍCULA\' ELSE COALESCE(cm.nombre_categoria, \'CUOTAS\') END AS nombre,
                     SUM(COALESCE(p.monto_pago, p.monto_base, 0) + CASE WHEN p.monto_pago_es_bruto = 1 THEN 0 ELSE COALESCE(com.comision, 0) END) AS total
@@ -168,12 +178,14 @@ trait ContableConsultas
         /** @disregard P1012 */
         $paymentParams = [self::MES_MATRICULA, $from, $to];
         if ($mean !== null) $paymentParams[] = $mean;
+        if ($origin !== null) $paymentParams[] = $origin;
         $payment->execute($paymentParams);
         foreach ($payment->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $incomeCategories[(string)$row['nombre']] = (float)$row['total'];
         }
 
         $ingresanteMeanSql = $mean !== null ? ' AND id_medio_pago = ?' : '';
+        $ingresanteMeanSql .= $origin !== null ? ' AND origen = ?' : '';
         $ingresantesMatricula = $db->prepare(
             'SELECT COALESCE(SUM(monto_matricula), 0) AS total
              FROM ingresantes
@@ -183,6 +195,7 @@ trait ContableConsultas
         );
         $ingresanteParams = [$from, $to];
         if ($mean !== null) $ingresanteParams[] = $mean;
+        if ($origin !== null) $ingresanteParams[] = $origin;
         $ingresantesMatricula->execute($ingresanteParams);
         $totalIngresantesMatricula = (float)$ingresantesMatricula->fetchColumn();
         if ($totalIngresantesMatricula > 0) {
@@ -190,6 +203,7 @@ trait ContableConsultas
         }
 
         $manualMeanSql = $mean !== null ? ' AND i.id_medio_pago = ?' : '';
+        $manualMeanSql .= $origin !== null ? ' AND i.origen = ?' : '';
         $manual = $db->prepare(
             'SELECT COALESCE(c.nombre_categoria, \'OTROS INGRESOS\') AS nombre, SUM(i.importe) AS total
              FROM ingresos i
@@ -198,6 +212,7 @@ trait ContableConsultas
         );
         $manualParams = [$from, $to];
         if ($mean !== null) $manualParams[] = $mean;
+        if ($origin !== null) $manualParams[] = $origin;
         $manual->execute($manualParams);
         foreach ($manual->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $name = (string)$row['nombre'];
@@ -205,6 +220,7 @@ trait ContableConsultas
         }
 
         $expenseMeanSql = $mean !== null ? ' AND e.id_medio_pago = ?' : '';
+        $expenseMeanSql .= $origin !== null ? ' AND e.origen = ?' : '';
         $expense = $db->prepare(
             'SELECT CASE WHEN e.id_pago_origen IS NOT NULL THEN \'COMISIÓN COBRADOR\'
                         ELSE COALESCE(c.nombre_categoria, \'SIN CATEGORÍA\') END AS nombre,
@@ -215,11 +231,15 @@ trait ContableConsultas
         );
         $expenseParams = [$from, $to];
         if ($mean !== null) $expenseParams[] = $mean;
+        if ($origin !== null) $expenseParams[] = $origin;
         $expense->execute($expenseParams);
 
         $meansPaymentSql = $mean !== null ? ' AND p.id_medio_pago = ?' : '';
+        $meansPaymentSql .= $origin !== null ? ' AND p.origen = ?' : '';
         $meansManualSql = $mean !== null ? ' AND i.id_medio_pago = ?' : '';
+        $meansManualSql .= $origin !== null ? ' AND i.origen = ?' : '';
         $meansIngresanteSql = $mean !== null ? ' AND ing.id_medio_pago = ?' : '';
+        $meansIngresanteSql .= $origin !== null ? ' AND ing.origen = ?' : '';
         $means = $db->prepare(
             'SELECT nombre, SUM(total) AS total, SUM(cantidad) AS cantidad FROM (
                 SELECT COALESCE(mp.medio_pago, \'SIN INFORMAR\') AS nombre,
@@ -247,10 +267,13 @@ trait ContableConsultas
         );
         $meansParams = [$from, $to];
         if ($mean !== null) $meansParams[] = $mean;
+        if ($origin !== null) $meansParams[] = $origin;
         array_push($meansParams, $from, $to);
         if ($mean !== null) $meansParams[] = $mean;
+        if ($origin !== null) $meansParams[] = $origin;
         array_push($meansParams, $from, $to);
         if ($mean !== null) $meansParams[] = $mean;
+        if ($origin !== null) $meansParams[] = $origin;
         $means->execute($meansParams);
 
         $categoryRows = [];
@@ -271,12 +294,14 @@ trait ContableConsultas
         $search = trim((string)($query['buscar'] ?? ''));
         $category = self::idOpcional($query['categoria'] ?? null, 'categoría');
         $mean = self::idOpcional($query['medio'] ?? null, 'medio de pago');
+        $origin = self::filtroOrigen($query['origen'] ?? null);
 
         $where = ['YEAR(i.fecha) = ?'];
         $params = [$year];
         if ($month !== null) { $where[] = 'MONTH(i.fecha) = ?'; $params[] = $month; }
         if ($category !== null) { $where[] = 'i.id_cont_categoria = ?'; $params[] = $category; }
         if ($mean !== null) { $where[] = 'i.id_medio_pago = ?'; $params[] = $mean; }
+        if ($origin !== null) { $where[] = 'i.origen = ?'; $params[] = $origin; }
         if ($search !== '') {
             $where[] = "CONCAT_WS(' ', COALESCE(p.nombre_proveedor,''), COALESCE(c.nombre_categoria,''), COALESCE(d.nombre_descripcion,''), COALESCE(mp.medio_pago,'')) LIKE ?";
             $params[] = '%' . $search . '%';
@@ -323,6 +348,7 @@ trait ContableConsultas
         $search = trim((string)($query['buscar'] ?? ''));
         $category = self::idOpcional($query['categoria'] ?? null, 'categoría');
         $mean = self::idOpcional($query['medio'] ?? null, 'medio de pago');
+        $origin = self::filtroOrigen($query['origen'] ?? null);
 
         // Las comisiones automáticas creadas por Cuotas también forman parte del
         // detalle para que Egresos coincida con el Resumen. Se muestran como sólo
@@ -332,6 +358,7 @@ trait ContableConsultas
         if ($month !== null) { $where[] = 'MONTH(e.fecha) = ?'; $params[] = $month; }
         if ($category !== null) { $where[] = 'e.id_cont_categoria = ?'; $params[] = $category; }
         if ($mean !== null) { $where[] = 'e.id_medio_pago = ?'; $params[] = $mean; }
+        if ($origin !== null) { $where[] = 'e.origen = ?'; $params[] = $origin; }
         if ($search !== '') {
             $where[] = "CONCAT_WS(' ', COALESCE(p.nombre_proveedor,''), COALESCE(c.nombre_categoria,''), COALESCE(d.nombre_descripcion,''), COALESCE(mp.medio_pago,''), COALESCE(e.comprobante,''), COALESCE(a.apellido,''), COALESCE(a.nombre,'')) LIKE ?";
             $params[] = '%' . $search . '%';

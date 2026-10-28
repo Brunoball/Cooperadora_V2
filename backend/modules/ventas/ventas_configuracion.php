@@ -97,7 +97,7 @@ trait VentasConfiguracion
                     p.nombre AS producto_principal_nombre, p.precio, p.precio_anticipada, p.precio_puerta, p.stock AS producto_stock,
                     (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania = c.id_campania) AS cantidad_ordenes,
                     (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='pendiente') AS cobros_pendientes,
-                    (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='aprobada' AND o.retirado=0) AS retiros_pendientes,
+                    (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.id_campania=c.id_campania AND o.estado='aprobada' AND o.retirado=0 AND EXISTS (SELECT 1 FROM ventas_orden_items ri WHERE ri.id_orden=o.id_orden AND (ri.id_producto IS NOT NULL OR UPPER(TRIM(ri.producto_nombre)) NOT LIKE 'GANANCIA%'))) AS retiros_pendientes,
                     CASE WHEN c.estado_cierre='cerrada' THEN 'cerrada' WHEN c.fecha_fin IS NOT NULL AND c.fecha_fin<CURDATE() THEN 'finalizada' WHEN c.fecha_inicio IS NOT NULL AND c.fecha_inicio>CURDATE() THEN 'programada' WHEN c.activo=0 THEN 'pausada' ELSE 'en_curso' END AS etapa,
                     CASE WHEN c.estado_cierre = 'abierta' AND c.activo = 1 AND c.visible_menu = 1
                          AND (c.fecha_inicio IS NULL OR c.fecha_inicio <= CURDATE())

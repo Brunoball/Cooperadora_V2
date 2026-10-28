@@ -26,6 +26,7 @@ trait ContableAlumnos
     abstract protected static function filtroMes(mixed $value, bool $required = true): ?int;
     abstract protected static function filtroPeriodo(mixed $value, bool $required = true): ?int;
     abstract protected static function filtroPagina(mixed $value): int;
+    abstract protected static function filtroOrigen(mixed $value): ?string;
     abstract protected static function idOpcional(mixed $value, string $label): ?int;
     abstract protected static function nombreMes(int $month): string;
     abstract protected static function etiquetasMontoPago(PDO $db, array $payment, float $grossAmount): array;
@@ -39,6 +40,7 @@ trait ContableAlumnos
         $paymentMonth = self::filtroMes($query['mes'] ?? date('n'));
         $periodId = self::filtroPeriodo($query['periodo'] ?? null, false);
         $paymentMethodId = self::idOpcional($query['medio'] ?? null, 'medio de pago');
+        $origin = self::filtroOrigen($query['origen'] ?? null);
         $categoryId = self::idOpcional($query['categoria'] ?? null, 'categoría de alumno');
         $studentType = strtoupper(trim((string)($query['tipo'] ?? '')));
         if (!in_array($studentType, ['', 'INTERNO', 'EXTERNO', 'OTRO'], true)) {
@@ -75,6 +77,7 @@ trait ContableAlumnos
             $where[] = 'p.id_mes = ?';
             $params[] = $periodId;
         }
+        if ($origin !== null) { $where[] = 'p.origen = ?'; $params[] = $origin; }
         if ($paymentMethodId !== null) {
             $where[] = 'p.id_medio_pago = ?';
             $params[] = $paymentMethodId;
@@ -165,6 +168,7 @@ SQL;
                 'COALESCE(i.fecha_pago_matricula, i.fecha_inscripcion) < ?',
             ];
             $ingParams = [$from, $until];
+            if ($origin !== null) { $ingWhere[] = 'i.origen = ?'; $ingParams[] = $origin; }
 
             if ($paymentMethodId !== null) {
                 $ingWhere[] = 'i.id_medio_pago = ?';

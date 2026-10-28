@@ -398,7 +398,7 @@ const ReportesBotModal = ({ open, onClose }) => {
                 <div>
                   <span>Monto de pagos por WhatsApp</span>
                   <b>{formatMoneyArs(resumen.monto_pagos_bot)}</b>
-                  <small>Pagos aprobados por Mercado Pago desde el bot</small>
+                  <small>Cuotas cobradas desde WhatsApp, cualquiera sea la pasarela</small>
                 </div>
                 <div>
                   <span>Ventas escolares aprobadas</span>
@@ -453,7 +453,7 @@ const ReportesBotModal = ({ open, onClose }) => {
               <div className="wp-report-section-title">
                 <div>
                   <h3>Pagos gestionados desde WhatsApp</h3>
-                  <p>Pagos aprobados por Mercado Pago desde WhatsApp durante el período.</p>
+                  <p>Pagos registrados desde WhatsApp durante el período, por transferencia.</p>
                 </div>
               </div>
 
@@ -462,7 +462,7 @@ const ReportesBotModal = ({ open, onClose }) => {
                   icon={faUsers}
                   label="Alumnos que pagaron"
                   value={formatNumber(pagos.alumnos_pagaron)}
-                  detail={`${formatNumber(pagos.registros)} conceptos acreditados por Mercado Pago`}
+                  detail={`${formatNumber(pagos.registros)} conceptos acreditados desde WhatsApp`}
                   tone="good"
                 />
                 <MetricCard
@@ -475,14 +475,14 @@ const ReportesBotModal = ({ open, onClose }) => {
                   icon={faMoneyBillTransfer}
                   label="Monto registrado"
                   value={formatMoneyArs(pagos.monto_total)}
-                  detail="Total aprobado y registrado por Mercado Pago"
+                  detail="Total registrado desde WhatsApp"
                   tone="good"
                 />
               </div>
 
               <div className="wp-report-panel">
                 <h4>Medio utilizado</h4>
-                <DetailRow label="Mercado Pago" value={formatNumber(pagos.mercado_pago_registros)} hint="Conceptos aprobados y registrados por el bot" strong />
+                <DetailRow label="Origen WhatsApp" value={formatNumber(pagos.bot_registros ?? pagos.registros)} hint="Medio de pago: transferencia" strong />
               </div>
 
               {Array.isArray(pagos.detalle) && pagos.detalle.length ? (
@@ -525,7 +525,7 @@ const ReportesBotModal = ({ open, onClose }) => {
                   <FontAwesomeIcon icon={faCircleCheck} />
                   <div>
                     <b>Sin pagos registrados desde el bot en este período</b>
-                    <span>No hay pagos aprobados por Mercado Pago desde el bot para el mes seleccionado.</span>
+                    <span>No hay pagos registrados por el bot para el mes seleccionado.</span>
                   </div>
                 </div>
               )}

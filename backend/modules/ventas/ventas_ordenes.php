@@ -20,6 +20,8 @@ trait VentasOrdenes
     abstract private static function nullablePositiveId(mixed $value): ?int;
     abstract private static function pagination(): array;
     abstract private static function product(PDO $db, int $id, bool $forUpdate = false): array;
+    abstract private static function transferenciaPaymentId(PDO $db): ?int;
+    abstract private static function botPaymentIds(PDO $db): array;
 
     // El padrón manda; ventas_personas.origen no identifica docentes.
     // Prioridad alumnos, luego docentes, luego terceros (también DNI aún no cargado).
@@ -263,6 +265,7 @@ trait VentasOrdenes
         $unreconciled = self::fetchOne($db,
             "SELECT id_orden FROM ventas_ordenes
               WHERE codigo_orden LIKE 'V2V-%'
+                AND origen = 'manual'
                 AND estado IN ('aprobada', 'pendiente')
                 AND stock_reservado = 0
               LIMIT 1"
@@ -296,7 +299,9 @@ trait VentasOrdenes
 
     private static function isStockManagedOrder(?array $order): bool
     {
-        return $order !== null && str_starts_with((string)($order['codigo_orden'] ?? ''), 'V2V-');
+        return $order !== null
+            && (string)($order['origen'] ?? '') === 'manual'
+            && str_starts_with((string)($order['codigo_orden'] ?? ''), 'V2V-');
     }
 
     private static function approvedTimestampForDate(string $date, ?string $existing = null): string
@@ -632,15 +637,15 @@ trait VentasOrdenes
         if ($incomeId !== null) {
             $db->prepare(
                 'UPDATE ingresos
-                    SET fecha = ?, id_cont_categoria = ?, id_cont_proveedor = ?, id_cont_descripcion = ?, id_medio_pago = ?, importe = ?
+                    SET fecha = ?, id_cont_categoria = ?, id_cont_proveedor = ?, id_cont_descripcion = ?, id_medio_pago = ?, importe = ?, origen = ?
                   WHERE id_ingreso = ?'
-            )->execute([$date, $categoryId, $providerId, $descriptionId, (int)$order['id_medio_pago'], $order['total'], $incomeId]);
+            )->execute([$date, $categoryId, $providerId, $descriptionId, (int)$order['id_medio_pago'], $order['total'], (string)$order['origen'], $incomeId]);
         } else {
             $db->prepare(
                 'INSERT INTO ingresos
-                    (fecha, id_cont_categoria, id_cont_proveedor, id_cont_descripcion, id_medio_pago, importe)
-                 VALUES (?, ?, ?, ?, ?, ?)'
-            )->execute([$date, $categoryId, $providerId, $descriptionId, (int)$order['id_medio_pago'], $order['total']]);
+                    (fecha, id_cont_categoria, id_cont_proveedor, id_cont_descripcion, id_medio_pago, importe, origen)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$date, $categoryId, $providerId, $descriptionId, (int)$order['id_medio_pago'], $order['total'], (string)$order['origen']]);
             $incomeId = (int)$db->lastInsertId();
         }
         $db->prepare('UPDATE ventas_ordenes SET id_ingreso = ? WHERE id_orden = ?')->execute([$incomeId, $orderId]);
@@ -689,11 +694,11 @@ trait VentasOrdenes
                 $params[] = $state;
             }
             if ($retreat === 'pendiente') {
-                $where[] = "o.estado = 'aprobada' AND o.retirado = 0";
+                $where[] = "o.estado = 'aprobada' AND o.retirado = 0 AND EXISTS (SELECT 1 FROM ventas_orden_items ri WHERE ri.id_orden=o.id_orden AND (ri.id_producto IS NOT NULL OR UPPER(TRIM(ri.producto_nombre)) NOT LIKE 'GANANCIA%'))";
             } elseif ($retreat === 'retirado') {
-                $where[] = "o.estado = 'aprobada' AND o.retirado = 1";
+                $where[] = "o.estado = 'aprobada' AND o.retirado = 1 AND EXISTS (SELECT 1 FROM ventas_orden_items ri WHERE ri.id_orden=o.id_orden AND (ri.id_producto IS NOT NULL OR UPPER(TRIM(ri.producto_nombre)) NOT LIKE 'GANANCIA%'))";
             }
-            if ($origin !== '' && !in_array($origin, ['manual', 'bot_whatsapp', 'importado'], true)) {
+            if ($origin !== '' && !in_array($origin, ['manual', 'bot_whatsapp'], true)) {
                 api_error('Filtro de origen inválido.', 'VALIDATION_ERROR');
             }
             if ($origin !== '') {
@@ -708,8 +713,8 @@ trait VentasOrdenes
                 if ($paymentMethod === null) {
                     api_error('Filtro de medio de pago inválido.', 'VALIDATION_ERROR');
                 }
-                // Transferencia incluye las órdenes históricas cuyo medio se
-                // había registrado como BOT; no afecta al filtro de Origen.
+                // Compatibilidad con órdenes previas a la migración;
+                // el medio y el origen son filtros independientes.
                 $legacyBotIds = $paymentMethod === self::transferenciaPaymentId($db)
                     ? self::botPaymentIds($db) : [];
                 if ($legacyBotIds !== []) {
@@ -926,7 +931,7 @@ trait VentasOrdenes
             }
             $payment=self::fetchOne($db,'SELECT id_medio_pago, medio_pago FROM medio_pago WHERE id_medio_pago=? LIMIT 1',[$paymentId]);
             if(!$payment)api_error('El medio de pago no existe.','VALIDATION_ERROR');
-            if (strtoupper(trim((string)$payment['medio_pago'])) === 'BOT') {
+            if (in_array(strtoupper(trim((string)$payment['medio_pago'])), ['BOT', 'MERCADO PAGO', 'MERCADO LIBRE'], true)) {
                 api_error('Seleccioná Transferencia u otro medio de pago válido.', 'VALIDATION_ERROR');
             }
             $before=$id?self::order($db,$id,true):null;
@@ -1041,8 +1046,8 @@ trait VentasOrdenes
             $cancelledAt=$state==='cancelada' ? date('Y-m-d H:i:s') : null;
             if($id){
                 $keepRetreat=$nowApproved && $before && $before['estado']==='aprobada';
-                $retired=$keepRetreat ? (int)$before['retirado'] : 0;
-                $retiredAt=$keepRetreat && $retired ? $before['retirado_en'] : null;
+                $retired=($keepRetreat && $items !== []) ? (int)$before['retirado'] : 0;
+                $retiredAt=$retired ? $before['retirado_en'] : null;
                 $db->prepare('UPDATE ventas_ordenes SET id_campania=?,id_venta_persona=?,estado=?,total=?,ganancia_objetivo=?,cantidad_ganancias=?,id_medio_pago=?,referencia_pago=?,observacion=?,fecha_venta=?,aprobado_en=?,cancelado_en=?,retirado=?,retirado_en=?,stock_reservado=? WHERE id_orden=?')
                     ->execute([$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$retired,$retiredAt,$stockReserved,$id]);
                 $db->prepare('DELETE FROM ventas_orden_items WHERE id_orden=?')->execute([$id]);
@@ -1052,12 +1057,6 @@ trait VentasOrdenes
                 $db->prepare('INSERT INTO ventas_ordenes (codigo_orden,id_campania,id_venta_persona,estado,total,ganancia_objetivo,cantidad_ganancias,id_medio_pago,origen,referencia_pago,observacion,fecha_venta,aprobado_en,cancelado_en,stock_reservado) VALUES (?,?,?,?,?,?,?,?,\'manual\',?,?,?,?,?,?)')
                     ->execute([$code,$campaignId,$personId,$state,$total,$objectiveGainDb,$quantityToStore,$paymentId,$reference,$observation,$saleDate,$approvedAt,$cancelledAt,$stockReserved]);
                 $orderId=(int)$db->lastInsertId();
-                // Un cobro solo de ganancia no tiene productos para retirar,
-                // incluso cuando se registra antes del cierre de campaña.
-                if ($gainOnly) {
-                    $db->prepare('UPDATE ventas_ordenes SET retirado=1,retirado_en=? WHERE id_orden=?')
-                        ->execute([$approvedAt,$orderId]);
-                }
             }
             $insert=$db->prepare('INSERT INTO ventas_orden_items (id_orden,id_producto,producto_nombre,cantidad,precio_unitario,subtotal,tipo_precio) VALUES (?,?,?,?,?,?,?)');
             foreach($items as $item)$insert->execute([$orderId,$item['id_producto'],$item['producto_nombre'],$item['cantidad'],$item['precio_unitario'],$item['subtotal'],$item['tipo_precio']]);
@@ -1114,7 +1113,9 @@ trait VentasOrdenes
             $campaign=self::campaign($db,(int)$reference['id_campania'],true);
             if($campaign['estado_cierre']==='cerrada') api_error('El historial está cerrado.', 'VENTA_CAMPANIA_CERRADA',409);
             $before=self::order($db,$id,true);
-            if($before['estado']!=='aprobada')api_error('Solo una venta pagada puede marcarse como retirada.','VENTA_ESTADO_INVALIDO',409);$db->prepare('UPDATE ventas_ordenes SET retirado=?,retirado_en=? WHERE id_orden=?')->execute([$retired,$retired?date('Y-m-d H:i:s'):null,$id]);$after=self::order($db,$id);audit_change($db,$auth,'VENTAS',$retired?'MARCAR_RETIRO':'REVERTIR_RETIRO','ventas_ordenes',$id,'Estado de retiro.',$before,$after);});
+            if($before['estado']!=='aprobada')api_error('Solo una venta pagada puede marcarse como retirada.','VENTA_ESTADO_INVALIDO',409);
+            $hasProducts = self::fetchOne($db, "SELECT id_item FROM ventas_orden_items WHERE id_orden=? AND (id_producto IS NOT NULL OR UPPER(TRIM(producto_nombre)) NOT LIKE 'GANANCIA%') LIMIT 1", [$id]);
+            if (!$hasProducts) api_error('Los pagos de ganancias sin productos no tienen retiro.', 'VENTA_RETIRO_NO_APLICA', 409);$db->prepare('UPDATE ventas_ordenes SET retirado=?,retirado_en=? WHERE id_orden=?')->execute([$retired,$retired?date('Y-m-d H:i:s'):null,$id]);$after=self::order($db,$id);audit_change($db,$auth,'VENTAS',$retired?'MARCAR_RETIRO':'REVERTIR_RETIRO','ventas_ordenes',$id,'Estado de retiro.',$before,$after);});
         api_success([], $retired?'Venta marcada como retirada.':'Retiro revertido.');
     }
 

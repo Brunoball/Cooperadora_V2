@@ -42,7 +42,7 @@ function ensure_cuotas_schema(PDO $db): void
         'pagos' => [
             'id_pago', 'id_alumno', 'id_mes', 'anio_aplicado', 'fecha_pago',
             'estado', 'monto_base', 'monto_pago', 'monto_pago_es_bruto', 'id_medio_pago', 'tipo_pago',
-            'porcentaje_descuento_familiar',
+            'porcentaje_descuento_familiar', 'origen',
         ],
         'medio_pago' => ['id_medio_pago', 'medio_pago'],
         'contable_descripcion' => [
@@ -50,7 +50,7 @@ function ensure_cuotas_schema(PDO $db): void
         ],
         'egresos' => [
             'id_egreso', 'fecha', 'id_cont_descripcion', 'id_medio_pago',
-            'importe', 'id_pago_origen', 'id_alumno_origen',
+            'importe', 'id_pago_origen', 'id_alumno_origen', 'origen',
         ],
     ];
 

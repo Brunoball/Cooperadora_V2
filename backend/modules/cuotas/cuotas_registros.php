@@ -137,7 +137,7 @@ abstract class CuotasRegistros extends CuotasConsultas
         $condone = $forceCondone || !empty($body['condonar']);
         $paymentMediumId = $condone ? null : positive_id($body['id_medio_pago'] ?? null, 'medio de pago');
         if ($paymentMediumId !== null) {
-            $medium = $db->prepare('SELECT COUNT(*) FROM medio_pago WHERE id_medio_pago = ?');
+            $medium = $db->prepare("SELECT COUNT(*) FROM medio_pago WHERE id_medio_pago = ? AND UPPER(TRIM(medio_pago)) NOT IN ('BOT','MERCADO PAGO','MERCADO LIBRE')");
             $medium->execute([$paymentMediumId]);
             if ((int)$medium->fetchColumn() !== 1) {
                 api_error('El medio de pago seleccionado no existe.', 'MEDIO_PAGO_INVALIDO', 422);

@@ -121,7 +121,7 @@ final class Ingresantes
 
         $paymentStmt = $db->prepare(
             'SELECT p.id_pago, p.fecha_pago, p.estado, p.monto_base, p.monto_pago, p.monto_pago_es_bruto,
-                    p.id_medio_pago, COALESCE(ec.comision, 0) AS comision
+                    p.id_medio_pago, p.origen, COALESCE(ec.comision, 0) AS comision
              FROM pagos p
              LEFT JOIN (SELECT id_pago_origen, SUM(importe) AS comision FROM egresos
                         WHERE id_pago_origen IS NOT NULL GROUP BY id_pago_origen) ec ON ec.id_pago_origen = p.id_pago
@@ -162,10 +162,10 @@ final class Ingresantes
             } else {
                 $insert = $db->prepare(
                     "INSERT INTO pagos
-                     (id_alumno, id_mes, anio_aplicado, fecha_pago, estado, monto_base, monto_pago, monto_pago_es_bruto, id_medio_pago, tipo_pago, creado_en)
-                     VALUES (?, 14, ?, ?, 'pagado', ?, ?, 1, ?, 'NORMAL', NOW())"
+                     (id_alumno, id_mes, anio_aplicado, fecha_pago, estado, monto_base, monto_pago, monto_pago_es_bruto, id_medio_pago, tipo_pago, origen, creado_en)
+                     VALUES (?, 14, ?, ?, 'pagado', ?, ?, 1, ?, 'NORMAL', ?, NOW())"
                 );
-                $insert->execute([$idAlumno, $cicloLectivo, $fechaPago, $amount, $amount, $medioIngresante]);
+                $insert->execute([$idAlumno, $cicloLectivo, $fechaPago, $amount, $amount, $medioIngresante, (string)$before['origen']]);
                 $matriculaMigrada = 1;
             }
         } elseif ($existingPayment && strtolower((string)$existingPayment['estado']) === 'pagado') {
@@ -173,12 +173,13 @@ final class Ingresantes
             // la preinscripción, reconciliamos el historial del ingresante con ese pago.
             $db->prepare(
                 'UPDATE ingresantes
-                 SET matricula_pagada = 1, monto_matricula = ?, id_medio_pago = ?, fecha_pago_matricula = ?, actualizado_en = NOW()
+                 SET matricula_pagada = 1, monto_matricula = ?, id_medio_pago = ?, origen = ?, fecha_pago_matricula = ?, actualizado_en = NOW()
                  WHERE id_ingresante = ?'
             )->execute([
                 (float)($existingPayment['monto_pago'] ?? $existingPayment['monto_base'] ?? 0)
                     + ((int)($existingPayment['monto_pago_es_bruto'] ?? 0) === 1 ? 0.0 : (float)$existingPayment['comision']),
                 $existingPayment['id_medio_pago'] !== null ? (int)$existingPayment['id_medio_pago'] : null,
+                (string)$existingPayment['origen'],
                 (string)$existingPayment['fecha_pago'],
                 (int)$before['id_ingresante'],
             ]);
@@ -213,6 +214,9 @@ final class Ingresantes
     {
         $where = ['1=1'];
         $params = [];
+        $origenFiltro = trim((string)($filters['origen'] ?? ''));
+        if ($origenFiltro !== '' && !in_array($origenFiltro, ['manual', 'bot_whatsapp'], true)) api_error('Origen inválido.', 'VALIDATION_ERROR', 422);
+        if ($origenFiltro !== '') { $where[] = 'i.origen = ?'; $params[] = $origenFiltro; }
 
         $buscar = trim((string)($filters['buscar'] ?? ''));
         if ($buscar !== '') {
@@ -276,6 +280,7 @@ final class Ingresantes
         // Los contadores acompañan búsqueda/ciclo/año, pero no la pestaña seleccionada.
         $summaryWhere = ['1=1'];
         $summaryParams = [];
+        if ($origenFiltro !== '') { $summaryWhere[] = 'i.origen = ?'; $summaryParams[] = $origenFiltro; }
         if ($buscar !== '') {
             $summaryWhere[] = '(i.apellido LIKE ? OR i.nombre LIKE ? OR i.num_documento LIKE ? OR i.telefono LIKE ?)';
             $like = '%' . $buscar . '%';
@@ -302,7 +307,7 @@ final class Ingresantes
         $summaryStmt->execute($summaryParams);
         $summary = $summaryStmt->fetch() ?: [];
 
-        $medios = $db->query('SELECT id_medio_pago, medio_pago FROM medio_pago ORDER BY id_medio_pago')->fetchAll();
+        $medios = $db->query('SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) NOT IN (\'BOT\',\'MERCADO PAGO\',\'MERCADO LIBRE\') ORDER BY id_medio_pago')->fetchAll();
         $matricula = $db->query('SELECT monto FROM meses WHERE id_mes = 14 LIMIT 1')->fetchColumn();
         $ciclos = array_map(
             'intval',
@@ -373,7 +378,7 @@ final class Ingresantes
             if ($amount === false || $amount <= 0) api_error('El importe de matrícula debe ser mayor a cero.', 'VALIDATION_ERROR', 422);
             if (isset($body['id_medio_pago']) && trim((string)$body['id_medio_pago']) !== '') {
                 $medio = positive_id($body['id_medio_pago'], 'medio de pago');
-                $check = $db->prepare('SELECT COUNT(*) FROM medio_pago WHERE id_medio_pago = ?');
+                $check = $db->prepare("SELECT COUNT(*) FROM medio_pago WHERE id_medio_pago = ? AND UPPER(TRIM(medio_pago)) NOT IN ('BOT','MERCADO PAGO','MERCADO LIBRE')");
                 $check->execute([$medio]);
                 if (!(bool)$check->fetchColumn()) api_error('El medio de pago seleccionado no existe.', 'VALIDATION_ERROR', 422);
             }

@@ -21,7 +21,8 @@ final class Contable
         $year = self::filtroAnio($_GET['anio'] ?? null);
         $month = self::filtroMes($_GET['mes'] ?? date('n'));
         $mean = self::idOpcional($_GET['medio'] ?? null, 'medio de pago');
-        api_success(['resumen' => self::resumenDatos($auth['db'], $year, $month, $mean)]);
+        $origin = self::filtroOrigen($_GET['origen'] ?? null);
+        api_success(['resumen' => self::resumenDatos($auth['db'], $year, $month, $mean, $origin)]);
     }
 
     public static function catalogos(): never

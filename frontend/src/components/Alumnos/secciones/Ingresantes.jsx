@@ -104,6 +104,7 @@ export default function Ingresantes() {
   const [cycle, setCycle] = useState(String(suggestedCycle()));
   const [year, setYear] = useState("");
   const [status, setStatus] = useState("PENDIENTE");
+  const [origin, setOrigin] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -118,9 +119,10 @@ export default function Ingresantes() {
     ciclo_lectivo: cycle,
     id_anio_destino: year,
     estado: status,
+    origen: origin,
     pagina: page,
     por_pagina: 50,
-  }), [search, cycle, year, status, page]);
+  }), [search, cycle, year, status, origin, page]);
 
   const cargar = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -290,6 +292,7 @@ export default function Ingresantes() {
     { key: "buscar", type: "search", label: "Buscar", value: search, onChange: changeFilter(setSearch), placeholder: "Apellido, nombre, DNI o teléfono...", className: "ingresantes-searchFilter" },
     { key: "ciclo", type: "select", label: "Ciclo", value: cycle, onChange: changeFilter(setCycle), includeEmptyOption: false, className: "ingresantes-cycleFilter", options: (catalogos.ciclos || [suggestedCycle()]).map((value) => ({ value, label: String(value) })) },
     { key: "anio", type: "select", label: "Ingresa a", value: year, onChange: changeFilter(setYear), placeholder: "TODOS", className: "ingresantes-yearFilter", options: (catalogos.anios || []).map((item) => ({ value: item.id_anio, label: item.nombre_anio })) },
+    { key: "origen", type: "select", label: "Origen", value: origin, onChange: changeFilter(setOrigin), placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "BOT" }] },
   ];
 
   return (

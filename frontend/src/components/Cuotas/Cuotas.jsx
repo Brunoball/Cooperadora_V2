@@ -175,6 +175,7 @@ export default function Cuotas() {
   const [division, setDivision] = useState("");
   const [cobrador, setCobrador] = useState("");
   const [medioPago, setMedioPago] = useState("");
+  const [origin, setOrigin] = useState("");
   const [pagina, setPagina] = useState(1);
   const [totales, setTotales] = useState({ DEUDORES: 0, PAGADOS: 0, CONDONADOS: 0 });
   const [feedback, setFeedback] = useState(null);
@@ -199,10 +200,11 @@ export default function Cuotas() {
       division,
       cobrador,
       medio_pago: estado === "PAGADOS" ? medioPago : "",
+      origen: estado === "PAGADOS" ? origin : "",
       pagina,
       por_pagina: PAGE_SIZE,
     }),
-    [estado, anio, mes, buscarAplicado, categoria, anioLectivo, division, cobrador, medioPago, pagina],
+    [estado, anio, mes, buscarAplicado, categoria, anioLectivo, division, cobrador, medioPago, origin, pagina],
   );
 
   const { items, catalogos, paginacion, loading, hasLoaded, error, cargar } = useCuotas(filtros);
@@ -555,6 +557,7 @@ export default function Cuotas() {
       onChange: changeFilter(setMedioPago),
       className: "cuotas-medium-filter",
     });
+    filters.push({ type: "select", key: "origen", label: "Origen", value: origin, placeholder: "TODOS", options: [{ value: "manual", label: "MANUAL" }, { value: "bot_whatsapp", label: "BOT" }], onChange: changeFilter(setOrigin) });
   }
 
   const columns = [

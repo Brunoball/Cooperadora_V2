@@ -14,6 +14,7 @@ trait VentasPlanillas
     abstract private static function fetchOne(PDO $db, string $sql, array $params = []): ?array;
     abstract private static function nullablePositiveId(mixed $value): ?int;
     abstract private static function objectiveForSold(array $campaign, int $sold): array;
+    abstract private static function campaignForCategory(array $campaign, string $category): array;
 
     // Resumen y consultas generales
     public static function resumen(): never
@@ -26,7 +27,7 @@ trait VentasPlanillas
                 (SELECT COUNT(*) FROM ventas_productos WHERE activo = 1) AS productos_activos,
                 (SELECT COUNT(*) FROM ventas_ordenes WHERE estado = 'aprobada') AS ventas_aprobadas,
                 (SELECT COALESCE(SUM(total),0) FROM ventas_ordenes WHERE estado = 'aprobada') AS total_aprobado,
-                (SELECT COUNT(*) FROM ventas_ordenes WHERE estado = 'aprobada' AND retirado = 0) AS retiros_pendientes,
+                (SELECT COUNT(*) FROM ventas_ordenes o WHERE o.estado = 'aprobada' AND o.retirado = 0 AND EXISTS (SELECT 1 FROM ventas_orden_items ri WHERE ri.id_orden=o.id_orden AND (ri.id_producto IS NOT NULL OR UPPER(TRIM(ri.producto_nombre)) NOT LIKE 'GANANCIA%'))) AS retiros_pendientes,
                 (SELECT COUNT(*) FROM ventas_ordenes WHERE estado = 'aprobada' AND origen = 'bot_whatsapp') AS ventas_bot"
         )->fetch(PDO::FETCH_ASSOC) ?: [];
         api_success(['resumen' => $row], 'Resumen de ventas cargado.');
@@ -35,7 +36,7 @@ trait VentasPlanillas
     public static function mediosPago(): never
     {
         $db = self::db();
-        $items = $db->query("SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) <> 'BOT' ORDER BY medio_pago")->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $items = $db->query("SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) NOT IN ('BOT','MERCADO PAGO','MERCADO LIBRE') ORDER BY medio_pago")->fetchAll(PDO::FETCH_ASSOC) ?: [];
         api_success(['items' => $items], 'Medios de pago cargados.');
     }
 
@@ -52,7 +53,7 @@ trait VentasPlanillas
                                  FROM ventas_campanias c
                                  LEFT JOIN ventas_productos p ON p.id_producto=c.id_producto_principal
                                 ORDER BY c.activo DESC,c.id_campania DESC")->fetchAll(PDO::FETCH_ASSOC)?:[];
-        $payment=$db->query("SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) <> 'BOT' ORDER BY medio_pago")->fetchAll(PDO::FETCH_ASSOC)?:[];
+        $payment=$db->query("SELECT id_medio_pago, medio_pago FROM medio_pago WHERE UPPER(TRIM(medio_pago)) NOT IN ('BOT','MERCADO PAGO','MERCADO LIBRE') ORDER BY medio_pago")->fetchAll(PDO::FETCH_ASSOC)?:[];
         $months=$db->query("SELECT DISTINCT DATE_FORMAT(COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en),'%Y-%m') AS mes
                               FROM ventas_ordenes o
                              WHERE COALESCE(o.fecha_venta,o.aprobado_en,o.creado_en) IS NOT NULL

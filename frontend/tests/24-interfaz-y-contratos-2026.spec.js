@@ -95,15 +95,23 @@ test("Ventas registradas: selector único venta (mes/año), origen y exportació
   expect(source).toContain('obtainAllExportSections');
   expect(source).toContain('ganancia_objetivo');
   expect(source).not.toContain('label: "Mes de ventas"');
-  // Tabla de Ventas 2026: el medio y el origen son columnas distintas;
+  // Tabla de Ventas 2026: Origen se filtra pero no figura como columna visible;
   // los pedidos pendientes figuran como ENCARGADAS Xn sin sumar ganancias a stock.
-  expect(source).toContain('bot_whatsapp: "BOT"');
+  // El origen ahora se representa mediante el selector MANUAL/BOT, no un objeto legacy.
+  expect(source).toContain('origin === "bot_whatsapp" ? "BOT"');
+  expect(source).toContain('value: "manual", label: "MANUAL"');
+  expect(source).toContain('value: "bot_whatsapp", label: "BOT"');
+  expect(source).not.toContain('value: "importado"');
   expect(source).toContain('ENCARGADAS');
   expect(source).toContain('GANANCIA X');
   expect(source).toContain('ventas-payment-select');
   expect(source).toContain('ventasApi.estadoPagoOrden(');
   expect(source).toContain('{ label: "Pago", align: "center" }');
-  expect(source).toContain('{ label: "Medio", align: "center" }');
+  // El medio de pago queda en el Excel/PDF y en el filtro, no ocupa una
+  // columna de la tabla compacta. Origen solo se muestra como selector.
+  expect(source).toContain('{ label: "Medio", key: "medio" }');
+  expect(source).not.toContain('{ label: "Medio", align: "center" }');
+  expect(source).not.toContain('{ label: "Origen", align: "center" }');
   expect(source).not.toContain('label: "WHATSAPP"');
 });
 

@@ -22,11 +22,8 @@ const dateText = (value) => {
   return year && month && day ? `${day}/${month}/${year}` : raw || "—";
 };
 
-const originText = (origin) => ({
-  bot_whatsapp: "BOT",
-  manual: "MANUAL",
-  importado: "IMPORTADO",
-}[origin] || "—");
+// Solo hay dos orígenes de movimientos: el bot y las cargas manuales.
+const originText = (origin) => origin === "bot_whatsapp" ? "BOT" : (origin ? "MANUAL" : "—");
 
 const isBotOrder = (row) => row?.origen === "bot_whatsapp";
 
@@ -50,6 +47,10 @@ const conceptList = (row) => {
     })
     .filter(Boolean);
 };
+
+// El retiro aplica exclusivamente a órdenes con productos físicos.
+// Las ganancias por objetivo, con o sin conceptos históricos, no son entregas.
+const hasDeliverableProducts = (row) => conceptList(row).some((item) => item.esProducto && item.cantidad > 0);
 
 /* Presentación uniforme de ventas y ganancias. El backend mantiene los
    nombres originales para trazabilidad (incluidos registros históricos como
@@ -78,6 +79,7 @@ const orderSummary = (row) => {
    retiro se sigue gestionando desde Acciones, el filtro y la exportación. */
 // eslint-disable-next-line no-unused-vars
 const retreatPill = (row) => {
+  if (!hasDeliverableProducts(row)) return { className: "neutral", label: "NO APLICA" };
   if (row.estado === "aprobada") {
     return yes(row.retirado)
       ? { className: "success", label: "RETIRADO" }
@@ -108,8 +110,8 @@ const paymentLockReason = (row, writable) => {
   if (!["aprobada", "pendiente"].includes(row.estado)) return stateLabel(row.estado);
   if (isBotOrder(row)) return "Las ventas de WhatsApp ya están pagadas";
   if (row.origen !== "manual") return "Solo se pueden cambiar pagos de ventas manuales";
-  if (yes(row.retirado)) return "No se puede cambiar el pago de una venta retirada";
   if (Number(row.ganancia_objetivo || 0) > 0 || Number(row.cantidad_ganancias || 0) > 0) return "Incluye ganancias cobradas";
+  if (yes(row.retirado) && hasDeliverableProducts(row)) return "No se puede cambiar el pago de una venta retirada";
   return "";
 };
 
@@ -122,8 +124,7 @@ const exportRecord = (row) => ({
   ganancia: Number(row.ganancia_objetivo || 0),
   total: Number(row.total || 0),
   estado: stateLabel(row.estado),
-  retiro: row.estado === "aprobada" ? (yes(row.retirado) ? "RETIRADO" : "PENDIENTE") : "—",
-  origen: originText(row.origen),
+  retiro: !hasDeliverableProducts(row) ? "NO APLICA" : row.estado === "aprobada" ? (yes(row.retirado) ? "RETIRADO" : "PENDIENTE") : "—",
   fecha: dateText(row.fecha_venta || row.aprobado_en || row.creado_en),
   observacion: [row.estado === "pendiente" ? "ENCARGO · PAGO PENDIENTE" : "", upper(row.observacion || "", 3000)].filter(Boolean).join(" · "),
 });
@@ -155,7 +156,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       const data = await ventasApi.catalogos();
       // BOT sigue siendo un origen, pero ya no se ofrece como medio de pago.
       setCatalogs({ ...data, medios_pago: (data.medios_pago || []).filter(
-        (medio) => upper(medio.medio_pago, 120).trim() !== "BOT"
+        (medio) => !["BOT", "MERCADO PAGO", "MERCADO LIBRE"].includes(upper(medio.medio_pago, 120).trim())
       ) });
       if (!catalogInitialized) {
         const sorted = ordenarCampanias(data.campanias || []);
@@ -275,7 +276,6 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       { label: "Total", key: "total" },
       { label: "Estado de pago", key: "estado" },
       { label: "Retiro", key: "retiro" },
-      { label: "Origen", key: "origen" },
       { label: "Fecha", key: "fecha" },
       { label: "Observaciones", key: "observacion" },
     ],
@@ -406,7 +406,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
                   />
                 ) : null}
                 {row.comprobante_url ? <ActionButton icon={faEye} title="Ver comprobante" onClick={() => openPdf(row)} /> : null}
-                {writable && row.estado === "aprobada" && row.estado_cierre !== "cerrada" ? (
+                {writable && row.estado === "aprobada" && row.estado_cierre !== "cerrada" && hasDeliverableProducts(row) ? (
                   <ActionButton icon={yes(row.retirado) ? faRotateLeft : faCheckCircle} title={yes(row.retirado) ? "Quitar retiro" : "Marcar como retirado"} onClick={() => setRetreatConfirm(row)} />
                 ) : null}
                 {writable && row.estado_cierre !== "cerrada" ? (

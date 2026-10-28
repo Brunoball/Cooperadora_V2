@@ -128,6 +128,11 @@ test("Ventas registradas: XLSX y PDF desde botón contienen una venta manual rea
   const catalogs = await ok(request, "ventas_catalogos", { token: t });
   const medio = (catalogs.medios_pago || [])[0];
   expect(medio?.id_medio_pago, "Se requiere medio de pago de ventas").toBeTruthy();
+  // Origen es un filtro interno y no una columna exportada. Verificamos el
+  // medio real de la venta para detectar exports vacíos o desactualizados.
+  const nombreMedio = String(medio.medio_pago || "").trim().toLocaleUpperCase("es-AR");
+  expect(nombreMedio).toBeTruthy();
+  expect(["BOT", "MERCADO PAGO", "MERCADO LIBRE"]).not.toContain(nombreMedio);
   await ok(request, "ventas_orden_guardar", { token: t, method: "POST", data: {
     id_campania: campaign.id_campania, id_medio_pago: medio.id_medio_pago,
     estado: "aprobada", fecha_venta: today(), dni,
@@ -138,6 +143,6 @@ test("Ventas registradas: XLSX y PDF desde botón contienen una venta manual rea
   } });
   await authenticatePage(page);
   for (const formato of ["excel", "pdf"]) {
-    await exportarReal(page, { url: "/ventas/registradas", formato, expected: [dni, "MANUAL"] });
+    await exportarReal(page, { url: "/ventas/registradas", formato, expected: [dni, nombreMedio] });
   }
 });

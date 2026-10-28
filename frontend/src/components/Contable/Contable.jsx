@@ -452,6 +452,7 @@ export default function ContableModule({ view = "summary" }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [mean, setMean] = useState("");
+  const [origin, setOrigin] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], resumen: {} });
   const [summary, setSummary] = useState(null);
@@ -494,6 +495,7 @@ export default function ContableModule({ view = "summary" }) {
     pendingWindowScrollRef.current = null;
     setCategory("");
     setMean("");
+    setOrigin("");
     setSearch("");
     setStudentSearch("");
     setStudentCategory("");
@@ -508,11 +510,11 @@ export default function ContableModule({ view = "summary" }) {
     pendingTableScrollRef.current = null;
     pendingWindowScrollRef.current = null;
     setPage(1);
-  }, [year, month, feePeriod, search, category, mean]);
+  }, [year, month, feePeriod, search, category, mean, origin]);
 
   useEffect(() => {
     setStudentPage(1);
-  }, [year, month, feePeriod, mean, studentSearch, studentCategory]);
+  }, [year, month, feePeriod, mean, origin, studentSearch, studentCategory]);
 
   const loadData = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -523,6 +525,7 @@ export default function ContableModule({ view = "summary" }) {
           anio: year,
           mes: month,
           medio: mean,
+          origen: origin,
         });
         if (requestId.current === currentRequest)
           setSummary(response.resumen || null);
@@ -533,6 +536,7 @@ export default function ContableModule({ view = "summary" }) {
           buscar: search,
           categoria: category,
           medio: mean,
+          origen: origin,
         };
         let response;
         if (view === "income" && isStudentIncomeTab) {
@@ -541,6 +545,7 @@ export default function ContableModule({ view = "summary" }) {
             mes: month,
             periodo: feePeriod,
             medio: mean,
+          origen: origin,
             buscar: studentSearch,
             categoria: studentCategory,
             pagina: studentPage,
@@ -578,6 +583,7 @@ export default function ContableModule({ view = "summary" }) {
     search,
     category,
     mean,
+    origin,
   ]);
 
   const refreshKeepingTableScroll = useCallback(async () => {
@@ -1002,6 +1008,19 @@ export default function ContableModule({ view = "summary" }) {
       label: item.nombre,
     })),
   };
+  const originFilter = {
+    key: "origen",
+    label: "Origen",
+    type: "select",
+    className: "contable-filter--origin",
+    placeholder: "TODOS",
+    value: origin,
+    onChange: setOrigin,
+    options: [
+      { value: "manual", label: "MANUAL" },
+      { value: "bot_whatsapp", label: "BOT" },
+    ],
+  };
   const detailFilters = [
     {
       key: "buscar",
@@ -1029,6 +1048,7 @@ export default function ContableModule({ view = "summary" }) {
       })),
     },
     paymentMethodFilter,
+    originFilter,
   ];
   const pageFilters =
     view === "summary"
@@ -1046,6 +1066,7 @@ export default function ContableModule({ view = "summary" }) {
           },
           periodFilters[0],
           paymentMethodFilter,
+          originFilter,
           ...(summaryMode === "monthly" ? [periodFilters[1]] : []),
         ]
       : view === "income"
@@ -1076,6 +1097,7 @@ export default function ContableModule({ view = "summary" }) {
                   periodFilters[1],
                   feePeriodFilter,
                   paymentMethodFilter,
+                  originFilter,
                   {
                     key: "categoria-alumno",
                     label: "Categoría del alumno",

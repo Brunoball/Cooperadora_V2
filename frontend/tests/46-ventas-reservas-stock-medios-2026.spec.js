@@ -48,15 +48,19 @@ test("contratos: BOT sigue identificando origen, no se ofrece como medio manual"
   const modal = front("modales/VentaModal.jsx");
   expect(base).toContain("private static function transferenciaPaymentId(PDO $db)");
   expect(base).toContain("private static function botPaymentIds(PDO $db)");
-  expect(config).toContain("UPPER(TRIM(medio_pago)) <> 'BOT'");
+  expect(config).toContain("MERCADO LIBRE");
   expect(orders).toContain("o.id_medio_pago IN (?,{$placeholders})");
   expect(orders).toContain("$item['medio_pago'] = 'TRANSFERENCIA'");
   expect(orders).toContain("$row['medio_pago'] = 'TRANSFERENCIA'");
-  expect(orders).toContain("if (strtoupper(trim((string)$payment['medio_pago'])) === 'BOT')");
-  expect(table).toContain('bot_whatsapp: "BOT"');
+  expect(orders).toContain("MERCADO PAGO");
+  // BOT identifica origen del movimiento; ya no existe la representación anterior.
+  expect(table).toContain('origin === "bot_whatsapp" ? "BOT"');
+  expect(table).toContain('value: "manual", label: "MANUAL"');
+  expect(table).toContain('value: "bot_whatsapp", label: "BOT"');
+  expect(table).not.toContain('value: "importado"');
   expect(table).toContain('label: "Origen"');
   expect(table).toContain('label: "Medio"');
-  expect(modal).toContain('upper(medio.medio_pago, 120).trim() !== "BOT"');
+  expect(modal).toContain('["BOT", "MERCADO PAGO", "MERCADO LIBRE"]');
 });
 
 test.beforeEach(() => {

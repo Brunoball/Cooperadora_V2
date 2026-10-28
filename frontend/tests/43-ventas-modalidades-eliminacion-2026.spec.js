@@ -132,18 +132,28 @@ test("productos + ganancia: cobra una sola vez 2 combos y una ganancia exacta de
   expect(Number(after.objetivo.ganancia_pendiente)).toBe(3000);
 });
 
-test("solo ganancia: registra 0 productos, marcado retirado automáticamente, sin tocar stock", async ({ request }) => {
+test("solo ganancia: registra 0 productos, sin retiro aplicable ni consumo de stock", async ({ request }) => {
   const f = await fixture(request);
   const sale = await sell(request, f, { quantity: 0, incluir_ganancia: true });
   expect(Number(sale.total)).toBe(10000);
   expect(Number(sale.ganancia_objetivo)).toBe(10000);
-  expect(Number(sale.retirado)).toBe(1);
+  expect(Number(sale.retirado)).toBe(0);
   expect(Number(sale.id_ingreso)).toBeGreaterThan(0);
   expect(sale.items).toHaveLength(0);
   expect(await stock(request, f)).toBe(20);
   const listing = await orders(request, f, { estado: "aprobada", retiro: "retirado" });
-  expect(listing.items.some((r) => Number(r.id_orden) === Number(sale.id_orden))).toBe(true);
-  expect(Number(listing.totales.cantidades_vendidas)).toBe(0);
+  // Un cobro solo de ganancia no representa un producto que pueda entregarse.
+  // No debe aparecer como "retirado" en los filtros ni generar unidades vendidas.
+  expect(listing.items.some((r) => Number(r.id_orden) === Number(sale.id_orden))).toBe(false);
+  const all = await orders(request, f, { estado: "aprobada" });
+  expect(all.items.some((r) => Number(r.id_orden) === Number(sale.id_orden))).toBe(true);
+  expect(Number(all.totales.cantidades_vendidas)).toBe(0);
+  // El contador de retiros pendientes de la campaña también debe excluir
+  // operaciones sin productos (antes contaba indebidamente esta ganancia).
+  const campaigns = await ok(request, "ventas_campanias_listar", { token: f.t });
+  const current = campaigns.items.find((c) => Number(c.id_campania) === Number(f.campaign.id_campania));
+  expect(current).toBeTruthy();
+  expect(Number(current.retiros_pendientes)).toBe(0);
 });
 
 test("cantidad 0 en un concepto se normaliza como ganancia única, no stock ni producto", async ({ request }) => {
@@ -151,7 +161,7 @@ test("cantidad 0 en un concepto se normaliza como ganancia única, no stock ni p
   const sale = await sell(request, f, { items: [item(f, 0)], incluir_ganancia: true });
   expect(Number(sale.total)).toBe(10000);
   expect(sale.items).toHaveLength(0);
-  expect(Number(sale.retirado)).toBe(1);
+  expect(Number(sale.retirado)).toBe(0);
   expect(await stock(request, f)).toBe(20);
 });
 

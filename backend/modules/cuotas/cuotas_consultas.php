@@ -236,6 +236,8 @@ abstract class CuotasConsultas extends CuotasSoporte
         $period = self::periodo($db, $filters['mes'] ?? $filters['id_mes'] ?? $filters['id_periodo'] ?? ((int)date('n') >= 3 ? (int)date('n') : 3));
         $periodId = (int)$period['id_mes'];
         $paymentMediumId = self::idOpcional($filters['medio_pago'] ?? $filters['id_medio_pago'] ?? null, 'medio de pago');
+        $origen = trim((string)($filters['origen'] ?? ''));
+        if ($origen !== '' && !in_array($origen, ['manual', 'bot_whatsapp'], true)) api_error('Origen inválido.', 'VALIDATION_ERROR', 422);
 
         // Los filtros simples se aplican en SQL para no traer todo el padrón.
         $students = self::alumnosBase($db, $filters);
@@ -271,6 +273,7 @@ abstract class CuotasConsultas extends CuotasSoporte
                 if ($resolvedState !== 'condonado') continue;
             }
 
+            if ($origen !== '' && (!$payment || (string)($payment['origen'] ?? 'manual') !== $origen)) continue;
             if ($paymentMediumId !== null) {
                 if (!$payment || (int)($payment['id_medio_pago'] ?? 0) !== $paymentMediumId) continue;
             }
@@ -676,7 +679,7 @@ abstract class CuotasConsultas extends CuotasSoporte
         // Una sola lectura del padrón + una sola lectura de pagos para calcular
         // los tres badges. Antes se repetía el trabajo completo tres veces.
         $baseFilters = $filters;
-        unset($baseFilters['estado'], $baseFilters['medio_pago'], $baseFilters['id_medio_pago']);
+        unset($baseFilters['estado'], $baseFilters['medio_pago'], $baseFilters['id_medio_pago'], $baseFilters['origen']);
         $students = self::alumnosBase($db, $baseFilters);
         $totals = ['DEUDORES' => 0, 'PAGADOS' => 0, 'CONDONADOS' => 0];
         if ($students === []) return ['totales' => $totals] + $totals;
@@ -721,7 +724,7 @@ abstract class CuotasConsultas extends CuotasSoporte
         )->fetchAll(PDO::FETCH_ASSOC);
         $media = $db->query(
             'SELECT id_medio_pago, medio_pago AS nombre
-             FROM medio_pago ORDER BY medio_pago'
+             FROM medio_pago WHERE UPPER(TRIM(medio_pago)) NOT IN (\'BOT\',\'MERCADO PAGO\',\'MERCADO LIBRE\') ORDER BY medio_pago'
         )->fetchAll(PDO::FETCH_ASSOC);
         $schoolYears = $db->query(
             'SELECT id_anio, nombre_anio AS nombre FROM anio ORDER BY id_anio'
