@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheckCircle, faCircleInfo, faClock, faEye, faMoneyBillWave, faPen, faPlus, faReceipt, faRotateLeft, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import { ModulePage } from "../../Global/ModulePage";
@@ -89,8 +89,7 @@ const retreatPill = (row) => {
   return { className: "neutral", label: "—" };
 };
 
-/* Opciones únicas del filtro Origen: las usan el selector superior
-   (escritorio) y el del pie (pantallas menores). */
+/* Opciones del filtro Origen, siempre disponible arriba de la tabla. */
 const ORIGIN_OPTIONS = [
   { value: "manual", label: "MANUAL" },
   { value: "bot_whatsapp", label: "BOT" },
@@ -115,6 +114,45 @@ const paymentLockReason = (row, writable) => {
   return "";
 };
 
+// Se suman solo ganancias de órdenes pagadas, nunca encargos ni ventas anuladas.
+// El conteo usa todas las páginas filtradas, no únicamente las 20 filas visibles.
+const gananciasEnOrden = (row) => {
+  if (row.estado !== "aprobada") return 0;
+  const items = conceptList(row);
+  const quantity = Number(row.cantidad_ganancias || 0);
+  if (quantity > 0) return quantity;
+  return items.filter((item) => !item.esProducto).reduce((sum, item) => sum + Math.max(0, item.cantidad), 0);
+};
+
+// Si hay importes históricos sin una cantidad verificable, no inventar unidades.
+const totalGananciasEnOrdenes = (orders) => {
+  let count = 0;
+  for (const order of orders) {
+    const gainCount = gananciasEnOrden(order);
+    if (order.estado === "aprobada" && Number(order.ganancia_objetivo || 0) > 0 && gainCount === 0) return null;
+    count += gainCount;
+  }
+  return count;
+};
+
+const cantidadTexto = (value) => value == null ? "—" : Number(value).toLocaleString("es-AR");
+
+// Cantidad y dinero en una única línea, diferenciados y sin añadir subtítulos.
+const valorConImporte = (quantity, amount, quantityLabel, amountLabel) => {
+  const amountText = money(amount);
+  return (
+    <span
+      className="ventas-orders-summary__pair"
+      role="text"
+      aria-label={`${quantity == null ? "Cantidad no disponible" : `${cantidadTexto(quantity)} ${quantityLabel}`} · ${amountText} ${amountLabel}`}
+    >
+      <span className="ventas-orders-summary__quantity" title={quantityLabel} aria-hidden="true">{cantidadTexto(quantity)}</span>
+      <span className="ventas-orders-summary__separator" aria-hidden="true">·</span>
+      <span className="ventas-orders-summary__amount" title={amountLabel} aria-hidden="true">{amountText}</span>
+    </span>
+  );
+};
+
 const exportRecord = (row) => ({
   campania: upper(row.campania_nombre, 150),
   detalle: orderSummary(row).text,
@@ -132,6 +170,10 @@ const exportRecord = (row) => ({
 export default function VentasRegistradas({ writable, showFeedback }) {
   const [rows, setRows] = useState([]);
   const [totals, setTotals] = useState({ cantidades_vendidas: 0, cantidades_encargadas: 0, recaudado: 0, ganancias_cobradas: 0 });
+  const [cantidadGanancias, setCantidadGanancias] = useState(null);
+  const loadRequestRef = useRef(0);
+  const activeGainCountKeyRef = useRef("");
+  const gainCountCacheRef = useRef(new Map());
   const [catalogs, setCatalogs] = useState({ productos: [], campanias: [], medios_pago: [], meses_ventas: [] });
   const [pagination, setPagination] = useState({ pagina: 1, total_paginas: 1, total: 0 });
   const [page, setPage] = useState(1);
@@ -182,16 +224,76 @@ export default function VentasRegistradas({ writable, showFeedback }) {
   }), [campaign, origin, paymentMethod, retreat, search, state]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
+    const requestId = ++loadRequestRef.current;
     if (!silent) setLoading(true);
     try {
       const data = await ventasApi.ordenes({ pagina: page, por_pagina: 20, ...queryFilters });
+      if (requestId !== loadRequestRef.current) return;
+
+      const nextTotals = data.totales || { cantidades_vendidas: 0, cantidades_encargadas: 0, recaudado: 0, ganancias_cobradas: 0 };
+      const nextPagination = data.paginacion || {};
       setRows(data.items || []);
-      setTotals(data.totales || { cantidades_vendidas: 0, cantidades_encargadas: 0, recaudado: 0, ganancias_cobradas: 0 });
-      setPagination(data.paginacion || {});
+      setTotals(nextTotals);
+      setPagination(nextPagination);
+
+      // Priorizar un total global cuando el backend ya lo informe. En
+      // instalaciones anteriores, calcularlo leyendo las órdenes pagadas
+      // de todas las páginas (no inferirlo dividiendo montos por precios).
+      const backendQuantity = [nextTotals.cantidades_ganancias, nextTotals.cantidad_ganancias, nextTotals.ganancias_cantidad]
+        .find((value) => value !== undefined && value !== null && Number.isFinite(Number(value)));
+      const cacheKey = JSON.stringify({
+        filters: queryFilters,
+        orders: nextPagination.total,
+        sales: nextTotals.cantidades_vendidas,
+        gains: nextTotals.ganancias_cobradas,
+      });
+      activeGainCountKeyRef.current = cacheKey;
+
+      if (backendQuantity !== undefined) {
+        setCantidadGanancias(Number(backendQuantity));
+      } else if (Number(nextTotals.ganancias_cobradas || 0) === 0) {
+        setCantidadGanancias(0);
+      } else if (Number(nextPagination.total_paginas || 1) === 1) {
+        setCantidadGanancias(totalGananciasEnOrdenes(data.items || []));
+      } else {
+        const cached = gainCountCacheRef.current.get(cacheKey);
+        if (cached && !cached.promise && Date.now() - cached.at < 60000) {
+          setCantidadGanancias(cached.value);
+        } else {
+          setCantidadGanancias(null);
+          let request = cached?.promise;
+          if (!request) {
+            request = (async () => {
+              // Buscar únicamente las pagadas: encargos no generan ganancias cobradas.
+              const paidFilters = { ...queryFilters, estado: "aprobada" };
+              const first = await ventasApi.ordenes({ pagina: 1, por_pagina: 100, ...paidFilters });
+              const allPaidOrders = [...(first.items || [])];
+              const pages = Number(first.paginacion?.total_paginas || 1);
+              for (let nextPage = 2; nextPage <= pages; nextPage += 1) {
+                const response = await ventasApi.ordenes({ pagina: nextPage, por_pagina: 100, ...paidFilters });
+                allPaidOrders.push(...(response.items || []));
+              }
+              return totalGananciasEnOrdenes(allPaidOrders);
+            })();
+            gainCountCacheRef.current.set(cacheKey, { promise: request });
+          }
+          request.then((value) => {
+            gainCountCacheRef.current.set(cacheKey, { value, at: Date.now() });
+            // Mantener acotada la caché de filtros visitados.
+            if (gainCountCacheRef.current.size > 16) {
+              gainCountCacheRef.current.delete(gainCountCacheRef.current.keys().next().value);
+            }
+            if (activeGainCountKeyRef.current === cacheKey) setCantidadGanancias(value);
+          }).catch(() => {
+            gainCountCacheRef.current.delete(cacheKey);
+            if (activeGainCountKeyRef.current === cacheKey) setCantidadGanancias(null);
+          });
+        }
+      }
     } catch (err) {
-      showFeedback("error", err.message);
+      if (requestId === loadRequestRef.current) showFeedback("error", err.message);
     } finally {
-      if (!silent) setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [page, queryFilters, showFeedback]);
 
@@ -208,6 +310,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       showFeedback("success", result.mensaje);
       const savedCampaign = String(payload?.id_campania || "");
       await loadCatalogs();
+      gainCountCacheRef.current.clear();
       if (savedCampaign && savedCampaign !== String(campaign)) {
         setPage(1);
         setCampaign(savedCampaign);
@@ -245,6 +348,9 @@ export default function VentasRegistradas({ writable, showFeedback }) {
       (item) => String(item.id_producto) === String(selectedCampaign.id_producto_principal)
     ) || null;
   }, [catalogs.campanias, catalogs.productos, campaign]);
+
+  // La recaudación del producto excluye las ganancias, que se muestran aparte.
+  const recaudacionProductos = Math.max(0, Number((Number(totals.recaudado || 0) - Number(totals.ganancias_cobradas || 0)).toFixed(2)));
 
   const stockActual = !principalProduct
     ? "—"
@@ -439,20 +545,11 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         leftContent={(
           <>
             <div className="ventas-pagination-actions" aria-label="Acciones de ventas registradas">
-              {/* Mismo filtro Origen que la cabecera: visible aquí solo debajo de 1500px. */}
-              <select
-                className="ventas-footer-action ventas-footer-action--origin ventas-footer-select"
-                aria-label="Origen"
-                title="Origen"
-                value={origin}
-                onChange={(event) => { setPage(1); setOrigin(event.target.value); }}
-              >
-                <option value="">TODOS LOS ORÍGENES</option>
-                {ORIGIN_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
               {writable && (catalogs.campanias || []).some((c) => yes(c.activo) && c.estado_cierre !== "cerrada" && (!c.fecha_inicio || c.fecha_inicio <= today()) && (!c.fecha_fin || c.fecha_fin >= today())) ? <button
                 type="button"
                 className="ventas-footer-action ventas-footer-action--new"
+                aria-label="Nueva venta"
+                title="Nueva venta"
                 onClick={() => setModal({ open: true, id: null })}
               >
                 <FontAwesomeIcon icon={faPlus} />
@@ -460,6 +557,8 @@ export default function VentasRegistradas({ writable, showFeedback }) {
               </button> : null}
               <BotonExportarGlobal
                 label="Exportar"
+                aria-label="Exportar ventas"
+                title="Exportar ventas"
                 className="ventas-footer-action ventas-footer-action--export"
                 onClick={() => setExportOpen(true)}
                 disabled={loading || Number(pagination.total || 0) <= 0}
@@ -473,27 +572,27 @@ export default function VentasRegistradas({ writable, showFeedback }) {
               items={[
                 {
                   key: "unidades",
-                  label: "Unidades vendidas",
-                  value: loading ? "—" : Number(totals.cantidades_vendidas || 0).toLocaleString("es-AR"),
+                  label: "Vendidas",
+                  value: loading ? "—" : valorConImporte(totals.cantidades_vendidas || 0, recaudacionProductos, "unidades vendidas", "recaudados por productos"),
                 },
                 {
                   key: "encargos",
-                  label: "Unidades encargadas",
-                  value: loading ? "—" : Number(totals.cantidades_encargadas || 0).toLocaleString("es-AR"),
+                  label: "Encargadas",
+                  value: loading ? "—" : cantidadTexto(totals.cantidades_encargadas || 0),
                 },
                 {
                   key: "recaudado",
-                  label: "Total cobrado",
+                  label: "Recaudación total",
                   value: loading ? "—" : money(totals.recaudado),
                 },
                 {
                   key: "ganancias",
-                  label: "Ganancias cobradas",
-                  value: loading ? "—" : money(totals.ganancias_cobradas),
+                  label: "Ganancias",
+                  value: loading ? "—" : valorConImporte(cantidadGanancias, totals.ganancias_cobradas || 0, "unidades de ganancia cobradas", "cobrados por ganancias"),
                 },
                 {
                   key: "stock",
-                  label: "Stock actual",
+                  label: "Stock",
                   value: loading ? "—" : stockActual,
                 },
               ]}
@@ -586,6 +685,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         onClose={() => setPaymentConfirm(null)}
         onConfirm={async () => {
           const result = await ventasApi.estadoPagoOrden({ id_orden: paymentConfirm.row.id_orden, estado: paymentConfirm.estado });
+          gainCountCacheRef.current.clear();
           await Promise.all([load({ silent: true }), loadCatalogs()]);
           return { mensaje: result.mensaje };
         }}
@@ -607,6 +707,7 @@ export default function VentasRegistradas({ writable, showFeedback }) {
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
           const result = await ventasApi.eliminarOrden({ id_orden: confirm.id_orden });
+          gainCountCacheRef.current.clear();
           if (rows.length === 1 && page > 1) {
             setPage((previous) => Math.max(1, previous - 1));
             await loadCatalogs();

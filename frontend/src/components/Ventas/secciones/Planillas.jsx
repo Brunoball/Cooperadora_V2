@@ -416,8 +416,7 @@ export default function Planillas({ writable, showFeedback }) {
     return `planilla_${base || "ventas"}`;
   }, [exportCampaignName, previewCampaignName]);
 
-  /* Año, Imprimir y Exportar: arriba desde 1500px; debajo de 1499px pasan
-     al pie (.ventas-pagination-actions), igual que en Ventas registradas. */
+  /* Año permanece en la cabecera; Imprimir y Exportar se adaptan al pie. */
   const yearOptions = (options.anios || []).map((item) => ({ value: String(item.id_anio), label: upper(item.nombre_anio, 80) }));
   const accionesDeshabilitadas = loading || previewLoading || !campaign;
   const abrirImpresion = () => { setPrintMode("vacia"); setPrintOpen(true); };
@@ -650,18 +649,6 @@ export default function Planillas({ writable, showFeedback }) {
             leftContent={(
               <>
                 <div className="ventas-pagination-actions" aria-label="Acciones de planillas">
-                  {type === "cursos" ? (
-                    <select
-                      className="ventas-footer-action ventas-footer-action--origin ventas-footer-select"
-                      aria-label="Año"
-                      title="Año"
-                      value={year}
-                      onChange={(event) => cambiarConsulta(setYear)(event.target.value)}
-                    >
-                      <option value="">TODOS LOS AÑOS</option>
-                      {yearOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  ) : null}
                   <button
                     type="button"
                     className="ventas-footer-action ventas-footer-action--new"

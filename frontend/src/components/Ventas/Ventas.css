@@ -1373,38 +1373,6 @@
   transform: none;
 }
 
-/* Filtro de origen: azul secundario, como las acciones auxiliares globales. */
-.ventas-footer-action--origin {
-  border-color: var(--secondary-300);
-  background: var(--secondary-50);
-  color: var(--secondary-800);
-}
-
-.ventas-footer-action--origin:hover:not(:disabled) {
-  border-color: var(--secondary-400);
-  background: var(--secondary-100);
-  color: var(--secondary-900);
-}
-
-
-/* Origen (Registradas) y Año (Planillas) en el pie: select con la misma escala compacta de 32px. El
-   padding supera al de selectSizing para que el texto no toque el borde. */
-.ventas-page .ventas-pagination-actions select.ventas-footer-select {
-  /* Ancho natural: el pie no usa el ancho compacto medido por selectSizing. */
-  width: auto !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
-  padding-left: 10px !important;
-  padding-right: 6px !important;
-  text-align: left;
-}
-
-html[data-theme="oscuro"] .ventas-page .ventas-pagination-actions .ventas-footer-select {
-  border-color: color-mix(in srgb, #6aa0e8 45%, transparent);
-  color: #a9c8f3;
-  background: color-mix(in srgb, #3b6fb6 22%, transparent);
-}
-
 /* Alta: replica el botón "Nuevo" compacto que ya usan Alumnos y Cuotas. */
 .ventas-footer-action--new {
   border-color: var(--primary-200);
@@ -1610,7 +1578,8 @@ html[data-theme="oscuro"] .ventas-page .ventas-pagination-actions .ventas-footer
 }
 
 .ventas-order-objective__grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Priorizar las tarjetas con cantidad e importe en la misma línea. */
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, .83fr) minmax(0, 1.3fr) minmax(0, 1.65fr) minmax(0, .72fr);
   gap: 7px;
 }
 
@@ -1877,10 +1846,8 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 
 @media (max-width: 1499px) {
   .ventas-page .module-card__actions .ventas-headAction--export { display: none; }
-  /* Origen (Registradas) y Año (Planillas) siguen a sus acciones: pasan al pie
-     (.ventas-pagination-actions). Imprimir usa global-tableAction--top. */
-  .ventas-page--orders .module-headFilters > .ventas-orders-filter--origen,
-  .ventas-page--planillas .module-headFilters > .ventas-planillas-filter--anio { display: none !important; }
+  /* Los filtros de Origen y Año permanecen en la cabecera a cualquier ancho.
+     Solo las acciones de exportación/impresión pasan al pie. */
   .ventas-page .ventas-pagination-actions .ventas-footer-action--export {
     min-height: 32px;
     height: 32px;
@@ -2192,6 +2159,15 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
 /* En menos espacio el bloque de título y filtros usa flex-wrap.
    Se mantienen los contenedores reales (sin display:contents)
    para evitar alineaciones inconsistentes con el panel abierto. */
+/* El filtro Origen sigue junto a los demás filtros aunque el panel lateral
+   reduzca el ancho disponible. Se permite una segunda fila en la cabecera. */
+@container (max-width: 1200px) {
+  .ventas-page--orders .module-headFilters {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+}
+
 @container (max-width: 1000px) {
   .ventas-page--orders .module-card__headLeft {
     flex-flow: row wrap;
@@ -2206,6 +2182,8 @@ html[data-theme="oscuro"] .ventas-order-objective .ventas-objective-card__rule {
     flex: 0 0 100%;
     width: 100%;
     justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px 6px;
   }
   .ventas-page--orders .module-card__actions {
     align-self: flex-start;
@@ -4294,15 +4272,28 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 /* VENTAS REGISTRADAS · Resumen minimalista en el mismo pie que las acciones
    y la paginación. Solo títulos explícitos y valores, sin subtítulos. */
 .ventas-page--orders .ventas-tableFooter {
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 8px 12px;
   padding: 9px 12px;
 }
 
 .ventas-page--orders .ventas-tableFooter .global-pagination__left {
+  flex: 1 1 auto;
   min-width: 0;
+  width: auto;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
+}
+
+.ventas-page--orders .ventas-tableFooter .global-pagination__right {
+  flex: 0 0 auto;
+  width: auto;
+  flex-direction: row;
+  margin-left: 0;
+  justify-content: flex-end;
 }
 
 .ventas-page--orders .ventas-tableFooter .global-pagination__summary {
@@ -4312,25 +4303,32 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 
 .ventas-page--orders .ventas-orders-summary.global-summaryCards--footer {
   display: block;
-  flex: 1 1 700px;
-  min-width: min(100%, 560px);
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
   max-width: 100%;
   margin: 0;
   padding: 0;
   border: none;
   border-radius: 0;
   background: transparent;
+  /* Las tarjetas se ajustan al ancho disponible, sin scroll propio. */
+  overflow: visible;
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 7px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
   position: relative;
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
@@ -4358,6 +4356,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(1) {
+  flex-grow: 1.5;
   border-color: rgba(86, 124, 232, 0.18);
   background: linear-gradient(180deg, rgba(242, 247, 255, 0.98) 0%, rgba(234, 241, 255, 0.98) 100%);
 }
@@ -4367,6 +4366,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(2) {
+  flex-grow: 0.9;
   border-color: rgba(25, 135, 84, 0.18);
   background: linear-gradient(180deg, rgba(242, 251, 246, 0.98) 0%, rgba(232, 246, 238, 0.98) 100%);
 }
@@ -4376,6 +4376,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(3) {
+  flex-grow: 1.45;
   border-color: rgba(217, 119, 6, 0.2);
   background: linear-gradient(180deg, rgba(255, 248, 238, 0.98) 0%, rgba(252, 241, 223, 0.98) 100%);
 }
@@ -4385,6 +4386,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(4) {
+  flex-grow: 1.55;
   border-color: rgba(125, 86, 214, 0.18);
   background: linear-gradient(180deg, rgba(248, 244, 255, 0.98) 0%, rgba(239, 233, 252, 0.98) 100%);
 }
@@ -4394,6 +4396,7 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
 }
 
 .ventas-page--orders .ventas-orders-summary .global-summaryCards__item:nth-child(5) {
+  flex-grow: 0.7;
   border-color: rgba(14, 129, 151, 0.2);
   background: linear-gradient(180deg, rgba(239, 252, 254, 0.98) 0%, rgba(225, 246, 250, 0.98) 100%);
 }
@@ -4424,6 +4427,29 @@ html[data-theme="oscuro"] .ventas-order-modal .ventas-order-buyer-layout > .vent
   font-weight: 720;
   line-height: 1.1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Cantidad · importe, sin agregar altura ni subtítulos a las tarjetas. */
+.ventas-page--orders .ventas-orders-summary .ventas-orders-summary__pair {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ventas-page--orders .ventas-orders-summary .ventas-orders-summary__quantity {
+  flex: 0 0 auto;
+}
+.ventas-page--orders .ventas-orders-summary .ventas-orders-summary__separator {
+  flex: 0 0 auto;
+  font-weight: 400;
+  color: var(--balto-text);
+}
+.ventas-page--orders .ventas-orders-summary .ventas-orders-summary__amount {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -4462,63 +4488,188 @@ html[data-theme="oscuro"] .ventas-page--orders .ventas-orders-summary .global-su
   color: #f5f8ff;
 }
 
-/* Si no entran paginación y tarjetas en la misma línea, usar el ancho
-   completo sin provocar scroll horizontal. */
+/* En Ventas registradas la paginación comparte siempre la línea con
+   las cinco tarjetas: ninguna consulta de ancho fuerza su salto de fila.
+   Las acciones y las tarjetas ceden espacio; la paginación no se encoge. */
+.ventas-page--orders .ventas-tableFooter .ventas-pagination-actions {
+  flex: 0 0 auto;
+  width: auto;
+  flex-wrap: nowrap;
+}
+
+.ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.ventas-page--orders .ventas-tableFooter .global-pagination__controls {
+  flex: 0 0 auto;
+  width: auto;
+  overflow: visible;
+}
+
 @container (max-width: 1060px) {
-  .ventas-page--orders .ventas-tableFooter {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ventas-page--orders .ventas-tableFooter .global-pagination__left,
-  .ventas-page--orders .ventas-tableFooter .global-pagination__right {
-    grid-column: 1;
-    width: 100%;
-  }
-
-  .ventas-page--orders .ventas-tableFooter .global-pagination__right {
-    justify-self: end;
-    justify-content: flex-end;
-  }
-
-  .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
-    min-width: 0;
-    flex-basis: 700px;
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+    font-size: 13px;
   }
 }
 
-/* Las cinco métricas siempre comparten UNA fila. En anchos reducidos
-   se desplaza solo el resumen, nunca se apilan las tarjetas. */
-@container (max-width: 780px) {
-  .ventas-page--orders .ventas-orders-summary.global-summaryCards--footer {
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
+/* En anchos reducidos, iconos compactos dan prioridad a los importes
+   sin ocultar controles ni cambiar la lógica de paginación. */
+@container (max-width: 900px) {
+  .ventas-page--orders .ventas-pagination-actions {
+    gap: 4px;
   }
 
-  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
-    min-width: 690px;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-}
-
-@container (max-width: 640px) {
-  .ventas-page--orders .ventas-tableFooter .global-pagination__left {
-    align-items: stretch;
+  .ventas-page--orders .ventas-pagination-actions .ventas-footer-action {
+    width: 32px;
+    min-width: 32px;
+    padding: 0;
+    font-size: 0;
+    gap: 0;
   }
 
-  .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
-    flex: 1 1 100%;
+  .ventas-page--orders .ventas-pagination-actions .ventas-footer-action svg {
+    font-size: 13px;
   }
 
-  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+  .ventas-page--orders .ventas-tableFooter .global-pagination__controls {
+    gap: 3px;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__controls button {
+    min-width: 28px;
+    height: 32px;
+    padding: 0 5px;
   }
 
   .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
-    padding: 4px 9px;
+    padding-inline: 6px;
   }
 
-  .ventas-page--orders .ventas-tableFooter .global-pagination__summary {
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
+    font-size: 9px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+    font-size: 11px;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__controls button:first-child,
+  .ventas-page--orders .ventas-tableFooter .global-pagination__controls button:last-child {
+    width: 30px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__controls button:first-child::after {
+    content: "‹";
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__controls button:last-child::after {
+    content: "›";
+    font-size: 19px;
+    line-height: 1;
+  }
+}
+
+/* En teléfonos no entra físicamente todo en una línea: dejamos las
+   cinco métricas juntas y situamos las acciones/páginas en una segunda
+   línea, sin scroll y sin superponer el contenido. */
+@container (max-width: 640px) {
+  .ventas-page--orders .ventas-tableFooter {
+    flex-wrap: wrap;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__left {
+    display: contents;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .ventas-orders-summary {
     flex: 1 1 100%;
+    width: 100%;
+    order: 0;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .ventas-pagination-actions {
+    order: 1;
+  }
+
+  .ventas-page--orders .ventas-tableFooter .global-pagination__right {
+    order: 2;
+    margin-left: auto;
+  }
+}
+
+/* Las cinco tarjetas continúan en una única fila. En móviles pueden
+   crecer ligeramente en alto y repartir el texto en varias líneas. */
+@container (max-width: 720px) {
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
+    gap: 4px;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
+    height: auto;
+    min-height: 44px;
+    max-height: none;
+    padding: 5px 6px;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
+    font-size: 9px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+    font-size: 11px;
+    line-height: 1.15;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .ventas-orders-summary__pair {
+    flex-wrap: wrap;
+    gap: 0 3px;
+    white-space: normal;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .ventas-orders-summary__amount {
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+}
+
+@container (max-width: 480px) {
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__list {
+    gap: 3px;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__item {
+    padding: 4px 4px 4px 6px;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__label {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .global-summaryCards__value {
+    font-size: 10px;
+  }
+
+  .ventas-page--orders .ventas-orders-summary .ventas-orders-summary__separator {
+    display: none;
   }
 }
 
